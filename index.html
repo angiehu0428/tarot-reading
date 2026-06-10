@@ -988,7 +988,8 @@ function showReading(){
       </div>`;
     callGemini(key).then(text=>{
       S.lastInterpText = text;
-      document.getElementById('interp-main').innerHTML=`<div class="interp-p">${text}</div>`;
+      const formatted=text.replace(/\*\*(.+?)\*\*/g,'$1').replace(/\*(.+?)\*/g,'$1').replace(/[*#`_~]/g,'').replace(/\n{2,}/g,'</p><p class="interp-p">').replace(/\n/g,'<br>');
+      document.getElementById('interp-main').innerHTML=`<p class="interp-p">${formatted}</p>`;
     }).catch(err=>{
       console.error(err);
       const fb = buildInterpBuiltin();
@@ -1101,7 +1102,7 @@ ${cardLines}
   const resp=await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent`,
     {method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':cleanKey},
-     body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{temperature:.85,maxOutputTokens:S.type==='five'?1200:900}})}
+     body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{temperature:.85,maxOutputTokens:S.type==='five'?1200:900},systemInstruction:{parts:[{text:'你只能用繁體中文回覆。絕對不能使用任何 markdown 語法（不能用 *、**、#、-、• 等符號）。只能輸出純文字段落。'}]}})}
   );
   if(!resp.ok){
     const errBody=await resp.json().catch(()=>({}));
