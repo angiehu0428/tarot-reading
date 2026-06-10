@@ -1106,7 +1106,7 @@ ${cardLines}
   const resp=await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent`,
     {method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':cleanKey},
-     body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{temperature:.85,maxOutputTokens:2048},systemInstruction:{parts:[{text:'你只能用繁體中文回覆。絕對不能使用任何 markdown 語法（不能用 *、**、#、-、• 等符號）。只能輸出純文字段落。'}]}})}
+     body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{temperature:.85,maxOutputTokens:8192},systemInstruction:{parts:[{text:'你只能用繁體中文回覆。絕對不能使用任何 markdown 語法（不能用 *、**、#、-、• 等符號）。只能輸出純文字段落。'}]}})}
   );
   if(!resp.ok){
     const errBody=await resp.json().catch(()=>({}));
