@@ -1214,7 +1214,7 @@ async function sendChat(){
        body:JSON.stringify({
          systemInstruction:{parts:[{text:context}]},
          contents:[...history,{role:'user',parts:[{text:q}]}],
-         generationConfig:{temperature:.85,maxOutputTokens:1024}
+         generationConfig:{temperature:.85,maxOutputTokens:8192}
        })});
     const data=await resp.json();
     const ans=data.candidates?.[0]?.content?.parts?.[0]?.text||'無法取得回應';
