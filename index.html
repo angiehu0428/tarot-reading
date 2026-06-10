@@ -1233,7 +1233,7 @@ async function testApiKey(){
       {method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':k},
        body:JSON.stringify({contents:[{parts:[{text:'hi'}]}]})});
     const d=await r.json();
-    if(r.ok) toast('✦ API Key 正常！');
+    if(r.ok){const reason=d?.candidates?.[0]?.finishReason; toast('✦ 正常！finishReason:'+reason);}
     else toast('失敗：'+r.status+' '+( d?.error?.message||'').slice(0,60));
   }catch(e){toast('錯誤：'+e.message.slice(0,80));}
 }
