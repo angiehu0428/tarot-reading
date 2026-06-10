@@ -140,6 +140,15 @@ textarea.inp{resize:vertical;min-height:90px}
 }
 
 .interp-box{border:1px solid rgba(212,175,55,.25);background:rgba(42,22,96,.18);padding:28px 26px;margin-top:8px;text-align:left}
+.chat-box{border:1px solid rgba(212,175,55,.25);background:rgba(42,22,96,.18);margin-top:18px;overflow:hidden}
+.chat-msgs{padding:20px 24px;max-height:420px;overflow-y:auto;display:flex;flex-direction:column;gap:14px}
+.chat-msg-user{align-self:flex-end;background:rgba(212,175,55,.15);border:1px solid rgba(212,175,55,.3);color:var(--white);padding:10px 16px;border-radius:16px 16px 4px 16px;font-size:.88rem;line-height:1.7;max-width:80%}
+.chat-msg-ai{align-self:flex-start;color:var(--muted);font-size:.88rem;line-height:1.8;max-width:92%}
+.chat-input-row{display:flex;gap:0;border-top:1px solid rgba(212,175,55,.2)}
+.chat-input{flex:1;background:transparent;border:none;color:var(--white);font-family:'Noto Serif TC',serif;font-size:.88rem;padding:14px 18px;outline:none}
+.chat-input::placeholder{color:rgba(255,255,255,.3)}
+.chat-send{background:transparent;border:none;border-left:1px solid rgba(212,175,55,.2);color:var(--gold);font-family:'Cinzel',serif;font-size:.78rem;letter-spacing:.12em;padding:14px 20px;cursor:pointer;transition:background .2s}
+.chat-send:hover{background:rgba(212,175,55,.1)}
 .interp-h{font-family:'Cinzel',serif;color:var(--gold);font-size:.95rem;letter-spacing:.15em;margin-bottom:14px}
 .interp-p{color:var(--muted);font-size:.93rem;line-height:2;white-space:pre-wrap}
 .card-block{border-top:1px solid rgba(212,175,55,.18);padding-top:18px;margin-top:18px}
@@ -459,6 +468,16 @@ textarea.inp{resize:vertical;min-height:90px}
     <div class="interp-box">
       <div class="interp-h">✦ 整體解讀</div>
       <div id="interp-main"></div>
+    </div>
+    <div id="chat-area" style="display:none">
+      <div class="chat-box">
+        <div class="interp-h" style="padding:20px 24px 0;margin-bottom:0">✦ 繼續提問</div>
+        <div class="chat-msgs" id="chat-msgs"></div>
+        <div class="chat-input-row">
+          <input class="chat-input" id="chat-input" placeholder="針對這次解牌繼續提問..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat()}">
+          <button class="chat-send" onclick="sendChat()">送出</button>
+        </div>
+      </div>
     </div>
     <div class="interp-box" id="card-details-box" style="margin-top:18px">
       <div class="interp-h">✦ 單牌解析</div>
@@ -926,7 +945,9 @@ function cardFaceHTML(card,rev){
 //  READING
 // ══════════════════════════════════════════
 function showReading(){
-  S.lastInterpText = '';
+  S.lastInterpText = ''; S.chatHistory=[];
+  document.getElementById('chat-area').style.display='none';
+  document.getElementById('chat-msgs').innerHTML='';
   go('s-reading');
   updateProjectBanners();
   document.getElementById('r-q-disp').textContent=`「${S.q}」`;
@@ -988,9 +1009,10 @@ function showReading(){
       </div>`;
     callGemini(key).then(text=>{
       S.lastInterpText = text;
-      console.log('AI response length:',text.length,'chars, preview:',text.slice(-80));
+      S.chatHistory = [];
       const formatted=text.replace(/\*\*(.+?)\*\*/g,'$1').replace(/\*(.+?)\*/g,'$1').replace(/[*#`_~]/g,'').replace(/\n{2,}/g,'</p><p class="interp-p">').replace(/\n/g,'<br>');
       document.getElementById('interp-main').innerHTML=`<p class="interp-p">${formatted}</p>`;
+      document.getElementById('chat-area').style.display='block';
     }).catch(err=>{
       console.error(err);
       const fb = buildInterpBuiltin();
@@ -1166,6 +1188,51 @@ function buildDetails(){
       </div>
     </div>`;
   }).join('');
+}
+async function sendChat(){
+  const input=document.getElementById('chat-input');
+  const q=input.value.trim();
+  if(!q)return;
+  const key=getApiKey();
+  if(!key){toast('請先設定 API Key');return;}
+  input.value='';
+  if(!S.chatHistory) S.chatHistory=[];
+  S.chatHistory.push({role:'user',text:q});
+  renderChat();
+  const msgsEl=document.getElementById('chat-msgs');
+  const loadingEl=document.createElement('div');
+  loadingEl.className='chat-msg-ai';
+  loadingEl.innerHTML='<div class="ai-dots"><div class="ai-dot"></div><div class="ai-dot"></div><div class="ai-dot"></div></div>';
+  msgsEl.appendChild(loadingEl);
+  msgsEl.scrollTop=msgsEl.scrollHeight;
+  try{
+    const context=`你是一位精通塔羅的占卜師。以下是剛才的占卜結果：\n問題：「${S.q}」\n解讀：${S.lastInterpText}\n\n請根據以上解讀回答問卜者的追問。全程用繁體中文，禁止使用 markdown 符號，輸出純文字。`;
+    const history=S.chatHistory.slice(0,-1).map(m=>({role:m.role==='user'?'user':'model',parts:[{text:m.text}]}));
+    const cleanKey=key.split('').filter(c=>c.charCodeAt(0)>=32&&c.charCodeAt(0)<=126).join('');
+    const resp=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent',
+      {method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':cleanKey},
+       body:JSON.stringify({
+         systemInstruction:{parts:[{text:context}]},
+         contents:[...history,{role:'user',parts:[{text:q}]}],
+         generationConfig:{temperature:.85,maxOutputTokens:1024}
+       })});
+    const data=await resp.json();
+    const ans=data.candidates?.[0]?.content?.parts?.[0]?.text||'無法取得回應';
+    const clean=ans.replace(/\*\*(.+?)\*\*/g,'$1').replace(/\*(.+?)\*/g,'$1').replace(/[*#`_~]/g,'');
+    S.chatHistory.push({role:'ai',text:clean});
+  }catch(e){
+    S.chatHistory.push({role:'ai',text:'抱歉，發生錯誤：'+e.message});
+  }
+  renderChat();
+}
+function renderChat(){
+  const el=document.getElementById('chat-msgs');
+  el.innerHTML=S.chatHistory.map(m=>
+    m.role==='user'
+      ?`<div class="chat-msg-user">${m.text}</div>`
+      :`<div class="chat-msg-ai">${m.text.replace(/\n/g,'<br>')}</div>`
+  ).join('');
+  el.scrollTop=el.scrollHeight;
 }
 function toggleLore(id,btn){
   const panel=document.getElementById(id);
