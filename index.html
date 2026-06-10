@@ -1206,7 +1206,7 @@ async function sendChat(){
   msgsEl.appendChild(loadingEl);
   msgsEl.scrollTop=msgsEl.scrollHeight;
   try{
-    const context=`你是一位精通塔羅的占卜師。以下是剛才的占卜結果：\n問題：「${S.q}」\n解讀：${S.lastInterpText}\n\n請根據以上解讀回答問卜者的追問。全程用繁體中文，禁止使用 markdown 符號，輸出純文字。`;
+    const context=`你是一位精通塔羅的占卜師。以下是剛才的占卜結果：\n問題：「${S.q}」\n解讀：${S.lastInterpText}\n\n請根據以上解讀回答問卜者的追問。回答必須完整，不能中途停止。全程用繁體中文，禁止使用 markdown 符號，輸出純文字段落。`;
     const history=S.chatHistory.slice(0,-1).map(m=>({role:m.role==='user'?'user':'model',parts:[{text:m.text}]}));
     const cleanKey=key.split('').filter(c=>c.charCodeAt(0)>=32&&c.charCodeAt(0)<=126).join('');
     const resp=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent',
