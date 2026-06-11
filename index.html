@@ -1269,8 +1269,15 @@ function showReading(){
       console.error(err);
       const fb = buildInterpBuiltin();
       S.lastInterpText = fb;
-      document.getElementById('interp-main').innerHTML=`<div class="interp-p">${fb}</div>
-        <div style="font-size:.75rem;color:var(--red);margin-top:10px">AI 解讀失敗：${err.message}。請確認 API Key 是否正確。</div>`;
+      const unlockCTA = UNLOCK_HASH ? `
+        <div style="margin-top:22px;padding:16px;background:rgba(212,175,55,.07);border:1px solid rgba(212,175,55,.25);border-radius:12px;text-align:center">
+          <div style="font-family:'Cinzel',serif;font-size:.78rem;color:var(--gold);letter-spacing:.1em;margin-bottom:8px">✦ 解鎖 AI 深度解牌</div>
+          <p class="hint" style="margin:0 0 12px;font-size:.8rem">獲得針對「${S.q}」的個人化深度解析、感情連結牌組判讀，以及無限追問對話。</p>
+          <button class="btn btn-sm" onclick="openSettings()" style="margin-right:8px">輸入解鎖碼</button>
+          <a href="${KOFI_URL}" target="_blank" class="btn btn-sm btn-ghost" style="text-decoration:none">☕ 前往贊助</a>
+        </div>` : '';
+      document.getElementById('interp-main').innerHTML=`<div class="interp-p">${fb}</div>${unlockCTA}
+        <div style="font-size:.72rem;color:var(--red);margin-top:10px;opacity:.7">（AI 暫時無法連線：${err.message}）</div>`;
     });
   } else {
     const fb = buildInterpBuiltin();
@@ -1415,19 +1422,23 @@ function buildInterpBuiltin(){
   const allKw = [];
   let revCount = 0;
   const cardNames = [];
-  S.picked.forEach((di)=>{
+  const cardSummaries = [];
+  S.picked.forEach((di,i)=>{
     const {cid,rev}=S.deck[di]; const card=C[cid]; const data=rev?card.r:card.u;
     allKw.push(...data.kw.slice(0,2));
     if(rev) revCount++;
     cardNames.push(card.zh+(rev?'（逆）':''));
+    cardSummaries.push(`${S.pos[i]}的${card.zh}（${rev?'逆位':'正位'}）帶出「${data.kw.slice(0,3).join('、')}」的能量`);
   });
   const dominantKw = [...new Set(allKw)].slice(0,6).join('、');
   const tone = revCount > S.picked.length/2 ? 'reflective' : 'positive';
+  const revRatio = revCount === 0 ? '全數正位' : revCount === S.picked.length ? '全數逆位' : `${revCount} 張逆位`;
   let html = `針對你的問題「${S.q}」，這次牌組帶出了 ${cardNames.join('、')} 的組合能量。`;
+  html += `\n\n從牌陣整體來看（${revRatio}），${cardSummaries.join('；')}。`;
   html += tone==='positive'
-    ? `\n\n整體能量流向積極，牌組共同指向「${dominantKw}」的核心主題。此刻你擁有推動改變所需的力量與清明，宇宙鼓勵你信任自己的方向，勇敢採取行動。`
-    : `\n\n牌組整體帶著反思與審視的能量，核心主題圍繞「${dominantKw}」。這是一個向內沉澱的時機，重新評估方向、放下舊有包袱，才能為下一步創造空間。`;
-  html += `\n\n若想獲得更深入的 AI 個人化解牌，請在設定中輸入 Gemini API Key，讓塔羅智慧更貼近你的問題。`;
+    ? `\n\n整體能量流向積極，核心主題聚焦於「${dominantKw}」。這些牌共同傳遞出一種向前推進的訊息：你已具備面對這個問題所需的資源與意志，宇宙正在鼓勵你採取具體行動，不必等待所有條件都完美才出發。`
+    : `\n\n牌組整體帶著內省與調整的能量，核心主題圍繞「${dominantKw}」。逆位牌的出現提示你，此刻更適合停下來審視內在的阻力，而非強行推進——放下對結果的執著，先處理內心的課題，轉機往往就藏在這個過程裡。`;
+  html += `\n\n值得注意的是，塔羅牌的解讀需要結合問題的具體脈絡與當下的直覺感受。以上是基於牌義的初步梳理；若你想獲得更貼近你個人處境、結合排陣邏輯與感情連結判讀的深度分析，可以解鎖 AI 解牌功能。`;
   return html;
 }
 
