@@ -565,6 +565,7 @@ function fisherYates(arr) {
 // ══════════════════════════════════════════
 const IMG_BASE = 'https://commons.wikimedia.org/w/index.php?title=Special:Redirect/file/';
 const CARD_IMG_FILES = [
+  // Major Arcana 0-21
   'RWS_Tarot_00_Fool.jpg','RWS_Tarot_01_Magician.jpg','RWS_Tarot_02_High_Priestess.jpg',
   'RWS_Tarot_03_Empress.jpg','RWS_Tarot_04_Emperor.jpg','RWS_Tarot_05_Hierophant.jpg',
   'RWS_Tarot_06_Lovers.jpg','RWS_Tarot_07_Chariot.jpg','RWS_Tarot_08_Strength.jpg',
@@ -572,9 +573,26 @@ const CARD_IMG_FILES = [
   'RWS_Tarot_12_Hanged_Man.jpg','RWS_Tarot_13_Death.jpg','RWS_Tarot_14_Temperance.jpg',
   'RWS_Tarot_15_Devil.jpg','RWS_Tarot_16_Tower.jpg','RWS_Tarot_17_Star.jpg',
   'RWS_Tarot_18_Moon.jpg','RWS_Tarot_19_Sun.jpg','RWS_Tarot_20_Judgement.jpg',
-  'RWS_Tarot_21_World.jpg'
+  'RWS_Tarot_21_World.jpg',
+  // Wands 22-35
+  'Wands01.jpg','Wands02.jpg','Wands03.jpg','Wands04.jpg','Wands05.jpg','Wands06.jpg',
+  'Wands07.jpg','Wands08.jpg','Wands09.jpg','Wands10.jpg','Wands11.jpg','Wands12.jpg',
+  'Wands13.jpg','Wands14.jpg',
+  // Cups 36-49
+  'Cups01.jpg','Cups02.jpg','Cups03.jpg','Cups04.jpg','Cups05.jpg','Cups06.jpg',
+  'Cups07.jpg','Cups08.jpg','Cups09.jpg','Cups10.jpg','Cups11.jpg','Cups12.jpg',
+  'Cups13.jpg','Cups14.jpg',
+  // Swords 50-63
+  'Swords01.jpg','Swords02.jpg','Swords03.jpg','Swords04.jpg','Swords05.jpg','Swords06.jpg',
+  'Swords07.jpg','Swords08.jpg','Swords09.jpg','Swords10.jpg','Swords11.jpg','Swords12.jpg',
+  'Swords13.jpg','Swords14.jpg',
+  // Pentacles 64-77
+  'Pents01.jpg','Pents02.jpg','Pents03.jpg','Pents04.jpg','Pents05.jpg','Pents06.jpg',
+  'Pents07.jpg','Pents08.jpg','Pents09.jpg','Pents10.jpg','Pents11.jpg','Pents12.jpg',
+  'Pents13.jpg','Pents14.jpg'
 ];
 const CARD_COLORS = [
+  // Major Arcana 0-21
   ['#c8a96e','#e8c97e'],['#c0392b','#e74c3c'],['#1a3a7e','#2e86c1'],
   ['#1e8449','#27ae60'],['#922b21','#c0392b'],['#6c3483','#9b59b6'],
   ['#c0392b','#e74c3c'],['#1a3a6e','#2e4a8e'],['#d35400','#f39c12'],
@@ -582,9 +600,40 @@ const CARD_COLORS = [
   ['#1e8449','#148f77'],['#17202a','#2c3e50'],['#148f77','#1abc9c'],
   ['#7b241c','#1a0a2e'],['#a93226','#e74c3c'],['#1a6fa5','#85c1e9'],
   ['#2c3e50','#6c3483'],['#d4ac0d','#f39c12'],['#7d3c98','#c0392b'],
-  ['#1e8449','#2471a3']
+  ['#1e8449','#2471a3'],
+  // Wands 22-35 (fire: oranges/reds)
+  ['#c0392b','#e67e22'],['#a93226','#d35400'],['#922b21','#e67e22'],['#d35400','#f39c12'],
+  ['#c0392b','#a93226'],['#e67e22','#f39c12'],['#922b21','#c0392b'],['#d35400','#e74c3c'],
+  ['#a93226','#e67e22'],['#7b241c','#c0392b'],['#e67e22','#d35400'],['#c0392b','#f39c12'],
+  ['#a04000','#d35400'],['#922b21','#e74c3c'],
+  // Cups 36-49 (water: blues/teals)
+  ['#1a5276','#2e86c1'],['#1a3a7e','#2471a3'],['#148f77','#1abc9c'],['#1a5276','#5dade2'],
+  ['#2471a3','#1abc9c'],['#1a3a7e','#148f77'],['#1f618d','#2980b9'],['#17618d','#2e86c1'],
+  ['#1a5276','#148f77'],['#2e86c1','#5dade2'],['#1a3a7e','#2471a3'],['#148f77','#1f618d'],
+  ['#1a5276','#1abc9c'],['#1a3a7e','#2e86c1'],
+  // Swords 50-63 (air: grays/silvers)
+  ['#5d6d7e','#2c3e50'],['#7f8c8d','#5d6d7e'],['#6c757d','#495057'],['#5d6d7e','#adb5bd'],
+  ['#6c757d','#2c3e50'],['#7f8c8d','#4a5568'],['#5d6d7e','#6c757d'],['#495057','#2c3e50'],
+  ['#6c757d','#7f8c8d'],['#2c3e50','#5d6d7e'],['#7f8c8d','#6c757d'],['#5d6d7e','#495057'],
+  ['#6c757d','#2c3e50'],['#5d6d7e','#7f8c8d'],
+  // Pentacles 64-77 (earth: greens/browns)
+  ['#1e8449','#27ae60'],['#196f3d','#1e8449'],['#1a5c3a','#27ae60'],['#1e8449','#2ecc71'],
+  ['#145a32','#196f3d'],['#1e8449','#52be80'],['#196f3d','#27ae60'],['#1a5c3a','#1e8449'],
+  ['#27ae60','#2ecc71'],['#145a32','#1e8449'],['#196f3d','#52be80'],['#1e8449','#27ae60'],
+  ['#1a5c3a','#196f3d'],['#145a32','#27ae60']
 ];
-const CARD_SYMS = ['○','∞','☽','♀','♂','✝','♡','⚔','∞','☯','☸','⚖','⊕','✦','△','⛧','⚡','★','☾','☀','☿','◎'];
+const CARD_SYMS = [
+  // Major Arcana 0-21
+  '○','∞','☽','♀','♂','✝','♡','⚔','∞','☯','☸','⚖','⊕','✦','△','⛧','⚡','★','☾','☀','☿','◎',
+  // Wands 22-35
+  '✦','✦','✦','✦','✦','✦','✦','✦','✦','✦','✦','✦','✦','✦',
+  // Cups 36-49
+  '♡','♡','♡','♡','♡','♡','♡','♡','♡','♡','♡','♡','♡','♡',
+  // Swords 50-63
+  '⚔','⚔','⚔','⚔','⚔','⚔','⚔','⚔','⚔','⚔','⚔','⚔','⚔','⚔',
+  // Pentacles 64-77
+  '◈','◈','◈','◈','◈','◈','◈','◈','◈','◈','◈','◈','◈','◈'
+];
 
 const C = [
   {id:0,zh:'愚者',en:'The Fool',pl:'天王星',u:{kw:['新開始','冒險','純真','自由','無限可能'],m:'愚者象徵踏上全新旅程的勇氣，你正站在一個嶄新的起點，帶著開放的心靈迎接未知的冒險。感情上，這張牌預示一段充滿新鮮感的相遇，或在現有感情中重新燃起赤子之心的勇氣，不帶任何前提地愛。事業上，象徵大膽嘗試新方向、跨出舒適圈，可能是創業、換跑道或接受一個看似瘋狂卻充滿潛力的機遇。放下對結果的執著，相信宇宙的引導，每一步都是靈魂的學習。'},r:{kw:['魯莽','輕率','不顧後果','天真過頭','逃避責任'],m:'逆位的愚者提醒你，勇敢與魯莽之間有一線之隔。感情上可能意味著不成熟的表現、逃避承諾，或在感情中過於衝動而造成傷害。事業上，警惕草率決策、缺乏計畫就貿然行動的風險。在行動之前，請更謹慎地評估風險，衝動可能帶來不必要的困境。'}},
@@ -1126,21 +1175,15 @@ function doPick(idx,el){
 // ══════════════════════════════════════════
 //  CARD FACE HTML
 // ══════════════════════════════════════════
-// suit-based fallback palette for minor arcana
-const SUIT_COLORS=[['#c0392b','#e67e22'],['#2e86c1','#1a5276'],['#1e8449','#27ae60'],['#5d6d7e','#2c3e50']];
-const SUIT_SYMS=['🔥','♥','◈','⚔'];
 function cardFaceHTML(card,rev){
-  const imgFile=CARD_IMG_FILES[card.id];
-  const imgUrl=imgFile?IMG_BASE+imgFile+'&width=300':'';
-  const suitIdx=card.id<22?-1:Math.floor((card.id-22)/14);
-  const colors=CARD_COLORS[card.id]||(SUIT_COLORS[suitIdx]||['#2a165e','#4a2080']);
-  const sym=CARD_SYMS[card.id]||(SUIT_SYMS[suitIdx]||'✦');
+  const imgUrl=IMG_BASE+CARD_IMG_FILES[card.id]+'&width=300';
+  const colors=CARD_COLORS[card.id];
   const g=`linear-gradient(135deg,${colors[0]},${colors[1]})`;
   return `<div class="cf${rev?' cf-rev':''}">
-    ${imgUrl?`<img src="${imgUrl}" alt="${card.zh}" loading="lazy"
-      onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`:''}
-    <div class="cf-fallback" style="${imgUrl?'display:none;':'display:flex;'}background:${g}">
-      <div class="cf-fallback-sym">${sym}</div>
+    <img src="${imgUrl}" alt="${card.zh}" loading="lazy"
+      onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+    <div class="cf-fallback" style="display:none;background:${g}">
+      <div class="cf-fallback-sym">${CARD_SYMS[card.id]}</div>
       <div style="color:#fff;font-weight:700;font-size:.9rem">${card.zh}</div>
     </div>
     <div class="cf-label">
