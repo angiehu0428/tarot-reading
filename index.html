@@ -1501,16 +1501,30 @@ function buildInterpBuiltin(){
     </div>`;
   }).join('');
 
+  // 牌義吉凶判斷：正位≠吉，要看牌義本身（如寶劍十、權杖五正位仍是辛苦牌）
+  const NEG_STEMS = ['衝突','競爭','混亂','重擔','過度','負荷','痛苦','背叛','低谷','失去','失落','悲傷','哀慟','焦慮','恐懼','停滯','欺','束縛','災','毀','崩','壓力','孤獨','匱乏','拖延','逃避','犧牲','挫','失敗','損失','分離','終結','破裂','困','病','憂','背刺','倦怠','掙扎'];
+  const toneKw = keyKw.length ? keyKw : allKw;
+  const negHits = toneKw.filter(k=>NEG_STEMS.some(s=>k.includes(s))).length;
+  const isHeavy = negHits >= 2 || negHits >= Math.ceil(toneKw.length/3);
+
   let conclusionText = '';
   if(keyCards.length){
-    conclusionText = keyRev
-      ? `重點牌（${keyCards.join('、')}）以逆位出現，定義了此次牌陣的核心訊息：「${dominantKw}」。這提示你在關於「${S.q}」這件事上，有需要停下來重新審視的能量或阻力。`
-      : `重點牌（${keyCards.join('、')}）以正位出現，定義了此次牌陣的核心訊息：「${dominantKw}」。這是推動你前進的主要能量，宇宙在此指引你信任這股動力。`;
+    if(keyRev){
+      conclusionText = `重點牌（${keyCards.join('、')}）以逆位出現，定義了此次牌陣的核心訊息：「${dominantKw}」。這提示你在關於「${S.q}」這件事上，有需要停下來重新審視的能量或阻力。`;
+    } else if(isHeavy){
+      conclusionText = `重點牌（${keyCards.join('、')}）以正位出現，核心訊息是「${dominantKw}」。正位代表這些能量正在檯面上如實發生——但牌義本身偏向辛苦與考驗，表示關於「${S.q}」，你正處在需要正面迎接挑戰的階段。困難不是暗流，而是清楚可見的課題，這也意味著你能直接面對與處理它。`;
+    } else {
+      conclusionText = `重點牌（${keyCards.join('、')}）以正位出現，定義了此次牌陣的核心訊息：「${dominantKw}」。這是推動你前進的主要能量，宇宙在此指引你信任這股動力。`;
+    }
     if(supCards.length) conclusionText += `輔助牌（${supCards.join('、')}）補充了「${supportKw}」的背景脈絡，作為重點牌能量的延伸與細節說明。`;
   } else {
-    conclusionText = keyRev
-      ? `牌組全數逆位，帶著整體反思與調整的能量，核心圍繞「${dominantKw}」。此刻更適合向內審視、重新評估方向，而非強行推進。`
-      : `牌組整體能量積極，核心聚焦於「${dominantKw}」。你已具備面對這個問題所需的資源與意志，宇宙鼓勵你信任自己的方向。`;
+    if(keyRev){
+      conclusionText = `牌組全數逆位，帶著整體反思與調整的能量，核心圍繞「${dominantKw}」。此刻更適合向內審視、重新評估方向，而非強行推進。`;
+    } else if(isHeavy){
+      conclusionText = `牌組全數正位，能量直接而明確地展現，核心圍繞「${dominantKw}」。不過要注意：正位代表事情如實發生，而非保證順利——這組牌的牌義偏向辛苦、消耗與考驗，表示關於「${S.q}」，你正面對實實在在的壓力與課題。好消息是這些挑戰都攤在檯面上，沒有隱藏的暗流，正面應對就是此刻最好的策略。`;
+    } else {
+      conclusionText = `牌組整體能量積極，核心聚焦於「${dominantKw}」。你已具備面對這個問題所需的資源與意志，宇宙鼓勵你信任自己的方向。`;
+    }
   }
 
   const html = `
