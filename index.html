@@ -283,20 +283,27 @@ textarea.inp{resize:vertical;min-height:90px}
       </div>
     </div>
 
-    <!-- ② 自備 API Key（進階） -->
-    <details style="margin-bottom:4px">
-      <summary style="font-family:'Cinzel',serif;font-size:.75rem;color:var(--muted);letter-spacing:.08em;cursor:pointer;padding:6px 0">自備 Gemini API Key（進階）</summary>
-      <div style="margin-top:12px">
-        <p class="hint" style="margin:0 0 10px">免費申請：<a href="https://aistudio.google.com" target="_blank" style="color:var(--gold)">aistudio.google.com</a> → Get API Key</p>
-        <label class="lbl">Gemini API Key</label>
-        <input class="inp" type="password" id="api-key-input" placeholder="貼上 API Key...">
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
-          <button class="btn btn-sm" onclick="saveApiKey()">儲存</button>
-          <button class="btn btn-sm btn-ghost" onclick="clearApiKey()">清除</button>
-          <button class="btn btn-sm btn-ghost" onclick="testApiKey()">測試</button>
+    <!-- ② 自備 API Key -->
+    <div style="margin-top:4px;border-top:1px solid rgba(212,175,55,.12);padding-top:14px">
+      <div style="font-family:'Cinzel',serif;font-size:.8rem;color:var(--gold);letter-spacing:.1em;margin-bottom:8px">✦ 使用自己的 API Key</div>
+      <div style="background:rgba(255,255,255,.04);border-radius:10px;padding:12px;margin-bottom:12px;font-size:.78rem;color:var(--silver);line-height:1.7">
+        <strong style="color:var(--gold);display:block;margin-bottom:6px">為什麼在這裡用自己的 Key，比直接貼給 AI 更好？</strong>
+        ✦ 本站已針對塔羅深度調教 AI 提示詞，包含無視論解牌法、重點牌 vs 輔助牌邏輯、元素分析架構<br>
+        ✦ 内建 78 張牌的感情、事業、逆位細節，以及感情連結牌組、數字象徵等專業解讀資料庫<br>
+        ✦ 自動整合你的占卜脈絡，支援多輪追問對話<br>
+        ✦ 你只要有 Key，其餘全部幫你設定好了
+        <div style="margin-top:8px;padding:8px;background:rgba(212,175,55,.06);border-radius:6px;font-size:.74rem;color:var(--muted)">
+          免費申請 Key：<a href="https://aistudio.google.com" target="_blank" style="color:var(--gold)">aistudio.google.com</a> → Get API Key → Create API Key（免費，有用量上限）
         </div>
       </div>
-    </details>
+      <label class="lbl">貼上你的 Gemini API Key</label>
+      <input class="inp" type="password" id="api-key-input" placeholder="AIza...">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+        <button class="btn btn-sm" onclick="saveApiKey()">儲存並啟用</button>
+        <button class="btn btn-sm btn-ghost" onclick="clearApiKey()">清除</button>
+        <button class="btn btn-sm btn-ghost" onclick="testApiKey()">測試連線</button>
+      </div>
+    </div>
 
     <hr class="divider-line" style="margin-top:20px">
     <h3 style="margin-top:16px">✦ 關於抽牌公平性</h3>
@@ -530,9 +537,9 @@ textarea.inp{resize:vertical;min-height:90px}
 // ══════════════════════════════════════════
 //  付費解鎖設定（網站管理員填入）
 // ══════════════════════════════════════════
-const KOFI_URL = 'https://ko-fi.com/'; // ← 填入你的 Ko-fi 連結
-const UNLOCK_HASH = '';                 // ← 解鎖碼的 SHA-256 hash（見下方說明）
-const OWNER_KEY_ENC = '';              // ← 用解鎖碼 XOR 加密過的 Gemini API Key（base64）
+const KOFI_URL = 'https://ko-fi.com/angiehu';
+const UNLOCK_HASH = '66668bb8aebc079218bdf8eba7d7ed6d1753a48bb4edc56803a22a250a37d322'; // TAROTSTAR88
+const OWNER_KEY_ENC = 'FRB8DjZrBg9kclALABY7P2oeOT5TUGYCa3cyJwxwa1N9MRc5IxkRAi0qe34QACA+YiAtcjU=';
 // 產生方式：在瀏覽器 console 輸入 btoa(xorStr('你的API_KEY','解鎖碼')) 複製結果貼這裡
 // UNLOCK_HASH 產生方式：crypto.subtle.digest('SHA-256', new TextEncoder().encode('解鎖碼'))
 //   .then(b=>console.log([...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')))
