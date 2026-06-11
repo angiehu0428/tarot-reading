@@ -1531,10 +1531,20 @@ function buildDetails(){
     const lore=LORE[cid];
     const pid=`lore-${i}`;
     const posDesc = spread && spread.posDesc ? spread.posDesc[i] : '';
+    const imgUrl=IMG_BASE+CARD_IMG_FILES[cid]+'&width=300';
     return `<div class="card-block">
-      <div class="card-block-title">${S.pos[i]}：${card.zh}${rev?` <span style="color:var(--red);font-size:.75rem">(逆位)</span>`:''}
-        <span style="color:var(--muted);font-size:.72rem;margin-left:6px">${card.pl}</span></div>
-      <div class="kw-list">${data.kw.map(k=>`<span class="kw">${k}</span>`).join('')}</div>
+      <div style="display:flex;gap:14px;align-items:flex-start;margin-bottom:12px">
+        <div style="flex-shrink:0;width:72px">
+          <img src="${imgUrl}" alt="${card.zh}" loading="lazy"
+            style="width:72px;border-radius:6px;display:block;box-shadow:0 2px 12px rgba(0,0,0,.5);${rev?'transform:rotate(180deg)':''}"
+            onerror="this.style.display='none'">
+        </div>
+        <div style="flex:1;min-width:0">
+          <div class="card-block-title" style="margin-bottom:6px">${S.pos[i]}：${card.zh}${rev?` <span style="color:var(--red);font-size:.75rem">(逆位)</span>`:''}
+            <span style="color:var(--muted);font-size:.72rem;margin-left:6px">${card.pl}</span></div>
+          <div class="kw-list" style="margin-bottom:8px">${data.kw.map(k=>`<span class="kw">${k}</span>`).join('')}</div>
+        </div>
+      </div>
       <div class="interp-p">${data.m}</div>
       <div class="lore-toggle" onclick="toggleLore('${pid}',this)"><i class="lore-arr">›</i> 牌面學習：圖像元素 &amp; 星象解析</div>
       <div class="lore-panel" id="${pid}">
