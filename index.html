@@ -1418,27 +1418,52 @@ ${refCtx}
 //  BUILT-IN INTERPRETATION
 // ══════════════════════════════════════════
 function buildInterpBuiltin(){
-  // Collect all card energies for holistic summary
-  const allKw = [];
-  let revCount = 0;
+  const n = S.picked.length;
+  const revCount = S.picked.filter(di=>S.deck[di].rev).length;
+  const uprCount = n - revCount;
+
+  // 無視論：少數牌 = 重點牌，定整體方向
+  const keyIsRev = n > 1 && revCount < uprCount;
+  const keyIsUpr = n > 1 && uprCount < revCount;
+  // tie (e.g. 1-card draw) or equal: treat all as supporting, direction from majority
+  const keyRev = keyIsRev ? true : keyIsUpr ? false : (revCount >= uprCount);
+
   const cardNames = [];
   const cardSummaries = [];
+  const keyKw = [], supKw = [];
+  const keyCards = [], supCards = [];
+
   S.picked.forEach((di,i)=>{
     const {cid,rev}=S.deck[di]; const card=C[cid]; const data=rev?card.r:card.u;
-    allKw.push(...data.kw.slice(0,2));
-    if(rev) revCount++;
     cardNames.push(card.zh+(rev?'（逆）':''));
-    cardSummaries.push(`${S.pos[i]}的${card.zh}（${rev?'逆位':'正位'}）帶出「${data.kw.slice(0,3).join('、')}」的能量`);
+    const isKey = n===1 ? true : (keyIsRev ? rev : keyIsUpr ? !rev : false);
+    const role = isKey ? '重點' : '輔助';
+    cardSummaries.push(`【${role}】${S.pos[i]}的${card.zh}（${rev?'逆位':'正位'}）：「${data.kw.slice(0,3).join('、')}」`);
+    if(isKey){ keyKw.push(...data.kw.slice(0,3)); keyCards.push(card.zh+(rev?'（逆）':'')); }
+    else { supKw.push(...data.kw.slice(0,2)); supCards.push(card.zh); }
   });
-  const dominantKw = [...new Set(allKw)].slice(0,6).join('、');
-  const tone = revCount > S.picked.length/2 ? 'reflective' : 'positive';
-  const revRatio = revCount === 0 ? '全數正位' : revCount === S.picked.length ? '全數逆位' : `${revCount} 張逆位`;
+
+  const dominantKw = [...new Set(keyKw)].slice(0,4).join('、');
+  const supportKw = [...new Set(supKw)].slice(0,4).join('、');
+  const revRatio = revCount===0?'全數正位':revCount===n?'全數逆位':`${revCount} 逆 ${uprCount} 正`;
+
   let html = `針對你的問題「${S.q}」，這次牌組帶出了 ${cardNames.join('、')} 的組合能量。`;
-  html += `\n\n從牌陣整體來看（${revRatio}），${cardSummaries.join('；')}。`;
-  html += tone==='positive'
-    ? `\n\n整體能量流向積極，核心主題聚焦於「${dominantKw}」。這些牌共同傳遞出一種向前推進的訊息：你已具備面對這個問題所需的資源與意志，宇宙正在鼓勵你採取具體行動，不必等待所有條件都完美才出發。`
-    : `\n\n牌組整體帶著內省與調整的能量，核心主題圍繞「${dominantKw}」。逆位牌的出現提示你，此刻更適合停下來審視內在的阻力，而非強行推進——放下對結果的執著，先處理內心的課題，轉機往往就藏在這個過程裡。`;
-  html += `\n\n值得注意的是，塔羅牌的解讀需要結合問題的具體脈絡與當下的直覺感受。以上是基於牌義的初步梳理；若你想獲得更貼近你個人處境、結合排陣邏輯與感情連結判讀的深度分析，可以解鎖 AI 解牌功能。`;
+  html += `\n\n【無視論分析】（${revRatio}）\n${cardSummaries.join('\n')}`;
+
+  if(keyCards.length){
+    html += keyRev
+      ? `\n\n重點牌（${keyCards.join('、')}）以逆位出現，定義了此次牌陣的核心訊息：「${dominantKw}」。這提示你在關於「${S.q}」這件事上，有需要停下來重新審視的能量或阻力。`
+      : `\n\n重點牌（${keyCards.join('、')}）以正位出現，定義了此次牌陣的核心訊息：「${dominantKw}」。這是推動你前進的主要能量，宇宙在此指引你信任這股動力。`;
+    if(supCards.length){
+      html += `輔助牌（${supCards.join('、')}）補充了「${supportKw}」的背景脈絡，作為重點牌能量的延伸與細節說明。`;
+    }
+  } else {
+    html += keyRev
+      ? `\n\n牌組整體帶著反思與調整的能量，核心圍繞「${dominantKw}」。此刻更適合向內審視而非強行推進。`
+      : `\n\n牌組整體能量積極，核心聚焦於「${dominantKw}」。你已具備面對這個問題所需的資源與意志。`;
+  }
+
+  html += `\n\n以上是依照無視論邏輯所做的初步梳理。若想獲得結合感情連結牌組、數字象徵與個人問題脈絡的深度 AI 解析，可以解鎖 AI 解牌功能。`;
   return html;
 }
 
