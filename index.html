@@ -259,18 +259,45 @@ textarea.inp{resize:vertical;min-height:90px}
 <div class="modal-overlay" id="settings-modal" onclick="if(event.target===this)closeSettings()">
   <div class="modal">
     <button class="modal-close" onclick="closeSettings()">✕</button>
-    <h3>✦ AI 解牌設定</h3>
-    <p class="hint" style="margin:10px 0 18px">使用 Google Gemini API 可獲得針對你問題的深度個人化解牌。<br>
-    免費申請：<a href="https://aistudio.google.com" target="_blank">aistudio.google.com</a> → Get API Key</p>
-    <div id="api-status-bar"></div>
-    <label class="lbl">Gemini API Key</label>
-    <input class="inp" type="password" id="api-key-input" placeholder="貼上 API Key...">
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn btn-sm" onclick="saveApiKey()">儲存</button>
-      <button class="btn btn-sm btn-ghost" onclick="clearApiKey()">清除</button>
-      <button class="btn btn-sm btn-ghost" onclick="testApiKey()">測試</button>
+    <h3>✦ AI 深度解牌</h3>
+
+    <!-- 狀態列 -->
+    <div id="api-status-bar" style="margin:10px 0"></div>
+
+    <!-- ① 贊助解鎖區 -->
+    <div style="background:rgba(212,175,55,.07);border:1px solid rgba(212,175,55,.25);border-radius:12px;padding:16px;margin-bottom:16px">
+      <div style="font-family:'Cinzel',serif;font-size:.8rem;color:var(--gold);letter-spacing:.1em;margin-bottom:8px">✦ 贊助解鎖 · 支持創作</div>
+      <p class="hint" style="margin:0 0 12px">贊助後即可解鎖 AI 深度解牌功能，獲得針對你問題的個人化塔羅分析、感情連結牌組解讀與追問對話。</p>
+      <a id="kofi-btn" href="https://ko-fi.com/" target="_blank"
+        style="display:inline-flex;align-items:center;gap:8px;background:#FF5E5B;color:#fff;padding:10px 20px;border-radius:50px;font-size:.85rem;font-weight:600;text-decoration:none;margin-bottom:14px;transition:opacity .2s"
+        onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
+        ☕ 在 Ko-fi 贊助我
+      </a>
+      <div style="font-size:.75rem;color:var(--muted);margin-bottom:10px">支援信用卡 · Apple Pay · 贊助後請輸入解鎖碼</div>
+      <div id="unlock-status-bar" style="margin-bottom:10px;display:none"></div>
+      <label class="lbl">解鎖碼</label>
+      <input class="inp" type="password" id="unlock-input" placeholder="贊助後輸入解鎖碼..." autocomplete="off">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+        <button class="btn btn-sm" onclick="saveUnlockCode()">解鎖</button>
+        <button class="btn btn-sm btn-ghost" onclick="clearUnlockCode()">清除解鎖</button>
+      </div>
     </div>
-    <p class="hint" style="margin-top:14px">若未設定，使用內建牌義解讀。兩種方式都能完整使用占卜功能。</p>
+
+    <!-- ② 自備 API Key（進階） -->
+    <details style="margin-bottom:4px">
+      <summary style="font-family:'Cinzel',serif;font-size:.75rem;color:var(--muted);letter-spacing:.08em;cursor:pointer;padding:6px 0">自備 Gemini API Key（進階）</summary>
+      <div style="margin-top:12px">
+        <p class="hint" style="margin:0 0 10px">免費申請：<a href="https://aistudio.google.com" target="_blank" style="color:var(--gold)">aistudio.google.com</a> → Get API Key</p>
+        <label class="lbl">Gemini API Key</label>
+        <input class="inp" type="password" id="api-key-input" placeholder="貼上 API Key...">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+          <button class="btn btn-sm" onclick="saveApiKey()">儲存</button>
+          <button class="btn btn-sm btn-ghost" onclick="clearApiKey()">清除</button>
+          <button class="btn btn-sm btn-ghost" onclick="testApiKey()">測試</button>
+        </div>
+      </div>
+    </details>
+
     <hr class="divider-line" style="margin-top:20px">
     <h3 style="margin-top:16px">✦ 關於抽牌公平性</h3>
     <p class="hint" style="margin-top:10px">
@@ -500,6 +527,16 @@ textarea.inp{resize:vertical;min-height:90px}
 </div>
 
 <script>
+// ══════════════════════════════════════════
+//  付費解鎖設定（網站管理員填入）
+// ══════════════════════════════════════════
+const KOFI_URL = 'https://ko-fi.com/'; // ← 填入你的 Ko-fi 連結
+const UNLOCK_HASH = '';                 // ← 解鎖碼的 SHA-256 hash（見下方說明）
+const OWNER_KEY_ENC = '';              // ← 用解鎖碼 XOR 加密過的 Gemini API Key（base64）
+// 產生方式：在瀏覽器 console 輸入 btoa(xorStr('你的API_KEY','解鎖碼')) 複製結果貼這裡
+// UNLOCK_HASH 產生方式：crypto.subtle.digest('SHA-256', new TextEncoder().encode('解鎖碼'))
+//   .then(b=>console.log([...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')))
+
 // ══════════════════════════════════════════
 //  CRYPTO RANDOM — zero memory, zero bias
 // ══════════════════════════════════════════
@@ -1181,7 +1218,14 @@ function showReading(){
   } else {
     const fb = buildInterpBuiltin();
     S.lastInterpText = fb;
-    document.getElementById('interp-main').innerHTML=`<div class="interp-p">${fb}</div>`;
+    const unlockCTA = UNLOCK_HASH ? `
+      <div style="margin-top:22px;padding:16px;background:rgba(212,175,55,.07);border:1px solid rgba(212,175,55,.25);border-radius:12px;text-align:center">
+        <div style="font-family:'Cinzel',serif;font-size:.78rem;color:var(--gold);letter-spacing:.1em;margin-bottom:8px">✦ 解鎖 AI 深度解牌</div>
+        <p class="hint" style="margin:0 0 12px;font-size:.8rem">獲得針對「${S.q}」的個人化深度解析、感情連結牌組判讀，以及無限追問對話。</p>
+        <button class="btn btn-sm" onclick="openSettings()" style="margin-right:8px">輸入解鎖碼</button>
+        <a href="${KOFI_URL}" target="_blank" class="btn btn-sm btn-ghost" style="text-decoration:none">☕ 前往贊助</a>
+      </div>` : '';
+    document.getElementById('interp-main').innerHTML=`<div class="interp-p">${fb}</div>${unlockCTA}`;
   }
 }
 
@@ -1467,7 +1511,48 @@ function showHistory(){
 // ══════════════════════════════════════════
 //  API KEY / SETTINGS
 // ══════════════════════════════════════════
-function getApiKey(){return (localStorage.getItem('gemini_key')||'').replace(/[^\x20-\x7E]/g,'')}
+// XOR cipher helper（用於解密 owner key）
+function xorStr(str,key){return str.split('').map((c,i)=>String.fromCharCode(c.charCodeAt(0)^key.charCodeAt(i%key.length))).join('')}
+
+// 產生字串的 SHA-256 hex（用於驗證解鎖碼）
+async function sha256hex(str){
+  const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(str));
+  return [...new Uint8Array(buf)].map(x=>x.toString(16).padStart(2,'0')).join('');
+}
+
+// 解鎖碼相關
+async function saveUnlockCode(){
+  const code=document.getElementById('unlock-input').value.trim();
+  if(!code){toast('請輸入解鎖碼');return;}
+  const hash=await sha256hex(code);
+  if(UNLOCK_HASH && hash!==UNLOCK_HASH){
+    toast('解鎖碼不正確，請確認後再試');
+    document.getElementById('unlock-status-bar').style.display='block';
+    document.getElementById('unlock-status-bar').className='api-status api-none';
+    document.getElementById('unlock-status-bar').textContent='✗ 解鎖碼錯誤';
+    return;
+  }
+  if(!UNLOCK_HASH){toast('⚠ 管理員尚未設定解鎖碼');return;}
+  localStorage.setItem('tr_unlock',code);
+  updateApiStatus(); toast('✦ 已解鎖 AI 解牌！'); closeSettings();
+}
+function clearUnlockCode(){
+  localStorage.removeItem('tr_unlock');
+  document.getElementById('unlock-input').value='';
+  updateApiStatus(); toast('已清除解鎖碼');
+}
+function getUnlockedKey(){
+  const code=localStorage.getItem('tr_unlock');
+  if(!code||!OWNER_KEY_ENC)return '';
+  try{return xorStr(atob(OWNER_KEY_ENC),code).replace(/[^\x20-\x7E]/g,'');}catch{return '';}
+}
+function isUnlocked(){return !!localStorage.getItem('tr_unlock')&&!!OWNER_KEY_ENC&&!!UNLOCK_HASH;}
+
+function getApiKey(){
+  const unlocked=getUnlockedKey();
+  if(unlocked)return unlocked;
+  return (localStorage.getItem('gemini_key')||'').replace(/[^\x20-\x7E]/g,'');
+}
 function saveApiKey(){
   const k=document.getElementById('api-key-input').value.trim().replace(/[^\x20-\x7E]/g,'');
   if(!k){toast('請輸入 API Key');return;}
@@ -1494,13 +1579,27 @@ function clearApiKey(){
 }
 function updateApiStatus(){
   const bar=document.getElementById('api-status-bar');
-  const k=getApiKey();
-  bar.className='api-status '+(k?'api-ok':'api-none');
-  bar.textContent=k?'✓ 已設定 Gemini API Key（AI 解牌啟用）':'尚未設定 API Key（使用內建解牌）';
-  bar.style.display='block';
+  const ubar=document.getElementById('unlock-status-bar');
+  if(isUnlocked()){
+    bar.className='api-status api-ok';
+    bar.textContent='✦ 已解鎖 AI 深度解牌';
+    bar.style.display='block';
+    if(ubar){ubar.style.display='block';ubar.className='api-status api-ok';ubar.textContent='✓ 解鎖碼有效';}
+  } else if(getApiKey()){
+    bar.className='api-status api-ok';
+    bar.textContent='✓ 自備 API Key（AI 解牌啟用）';
+    bar.style.display='block';
+  } else {
+    bar.className='api-status api-none';
+    bar.textContent='尚未解鎖 · 使用內建牌義解讀';
+    bar.style.display='block';
+  }
 }
 function openSettings(){
-  document.getElementById('api-key-input').value=getApiKey();
+  const ownKey=localStorage.getItem('gemini_key')||'';
+  document.getElementById('api-key-input').value=ownKey;
+  document.getElementById('unlock-input').value=localStorage.getItem('tr_unlock')||'';
+  if(KOFI_URL) document.getElementById('kofi-btn').href=KOFI_URL;
   updateApiStatus();
   document.getElementById('settings-modal').classList.add('on');
 }
