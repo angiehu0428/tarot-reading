@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>✦ 塔羅神諭 ✦</title>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Noto+Serif+TC:wght@300;400;700&display=swap" rel="stylesheet">
+<script src="https://gumroad.com/js/gumroad.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -264,22 +265,22 @@ textarea.inp{resize:vertical;min-height:90px}
     <!-- 狀態列 -->
     <div id="api-status-bar" style="margin:10px 0"></div>
 
-    <!-- ① 贊助解鎖區 -->
+    <!-- ① Gumroad 購買解鎖區 -->
     <div style="background:rgba(212,175,55,.07);border:1px solid rgba(212,175,55,.25);border-radius:12px;padding:16px;margin-bottom:16px">
-      <div style="font-family:'Cinzel',serif;font-size:.8rem;color:var(--gold);letter-spacing:.1em;margin-bottom:8px">✦ 贊助解鎖 · 支持創作</div>
-      <p class="hint" style="margin:0 0 12px">贊助後即可解鎖 AI 深度解牌功能，獲得針對你問題的個人化塔羅分析、感情連結牌組解讀與追問對話。</p>
-      <a id="kofi-btn" href="https://ko-fi.com/" target="_blank"
-        style="display:inline-flex;align-items:center;gap:8px;background:#FF5E5B;color:#fff;padding:10px 20px;border-radius:50px;font-size:.85rem;font-weight:600;text-decoration:none;margin-bottom:14px;transition:opacity .2s"
+      <div style="font-family:'Cinzel',serif;font-size:.8rem;color:var(--gold);letter-spacing:.1em;margin-bottom:8px">✦ 購買解鎖 · 支持創作</div>
+      <p class="hint" style="margin:0 0 12px">購買後即可解鎖 AI 深度解牌功能，獲得針對你問題的個人化塔羅分析、感情連結牌組解讀與追問對話。</p>
+      <a href="https://huisangie.gumroad.com/l/tarotreading?wanted=true" data-gumroad-overlay-checkout="true"
+        style="display:inline-flex;align-items:center;gap:8px;background:var(--gold);color:#1a0a2e;padding:10px 20px;border-radius:50px;font-size:.85rem;font-weight:700;text-decoration:none;margin-bottom:14px;transition:opacity .2s"
         onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
-        ☕ 在 Ko-fi 贊助我
+        ✦ 前往購買解鎖
       </a>
-      <div style="font-size:.75rem;color:var(--muted);margin-bottom:10px">支援信用卡 · Apple Pay · 贊助後請輸入解鎖碼</div>
+      <div style="font-size:.75rem;color:var(--muted);margin-bottom:12px">支援信用卡 · PayPal · 購買後以購買時填寫的 email 驗證</div>
       <div id="unlock-status-bar" style="margin-bottom:10px;display:none"></div>
-      <label class="lbl">解鎖碼</label>
-      <input class="inp" type="password" id="unlock-input" placeholder="贊助後輸入解鎖碼..." autocomplete="off">
+      <label class="lbl">已購買？輸入購買時的 Email 驗證</label>
+      <input class="inp" type="email" id="unlock-input" placeholder="your@email.com" autocomplete="email">
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
-        <button class="btn btn-sm" onclick="saveUnlockCode()">解鎖</button>
-        <button class="btn btn-sm btn-ghost" onclick="clearUnlockCode()">清除解鎖</button>
+        <button class="btn btn-sm" onclick="verifyEmail()">驗證解鎖</button>
+        <button class="btn btn-sm btn-ghost" onclick="clearVerifiedEmail()">清除驗證</button>
       </div>
     </div>
 
@@ -344,18 +345,24 @@ textarea.inp{resize:vertical;min-height:90px}
         未設定時也可正常使用，以內建牌義解讀。
       </p>
       <div style="border-left:2px solid rgba(212,175,55,.35);padding-left:14px;margin-bottom:16px">
-        <p style="font-family:'Cinzel',serif;font-size:.72rem;color:var(--gold);letter-spacing:.1em;margin-bottom:10px">設定步驟</p>
+        <p style="font-family:'Cinzel',serif;font-size:.72rem;color:var(--gold);letter-spacing:.1em;margin-bottom:10px">方法一：購買解鎖（推薦）</p>
         <p style="font-size:.8rem;color:var(--muted);line-height:2.1">
-          1. 前往 <a href="https://aistudio.google.com" target="_blank" style="color:var(--gold);text-decoration:none;border-bottom:1px solid rgba(212,175,55,.4)">aistudio.google.com</a> 免費註冊<br>
-          2. 點擊「<strong style="color:var(--silver)">Get API Key</strong>」→「Create API Key」<br>
-          3. 複製 API Key<br>
-          4. 回到本頁，點右上角 <strong style="color:var(--silver)">⚙</strong> → 貼上 API Key → 儲存
+          1. 點右上角 <strong style="color:var(--silver)">⚙</strong> → 點「前往購買解鎖」<br>
+          2. 在彈出視窗中完成購買<br>
+          3. 輸入購買時填寫的 Email → 點「驗證解鎖」
+        </p>
+      </div>
+      <div style="border-left:2px solid rgba(212,175,55,.15);padding-left:14px;margin-bottom:16px">
+        <p style="font-family:'Cinzel',serif;font-size:.72rem;color:var(--gold);letter-spacing:.1em;margin-bottom:10px">方法二：自備 Gemini API Key</p>
+        <p style="font-size:.8rem;color:var(--muted);line-height:2.1">
+          1. 前往 <a href="https://aistudio.google.com" target="_blank" style="color:var(--gold);text-decoration:none;border-bottom:1px solid rgba(212,175,55,.4)">aistudio.google.com</a> 免費取得 Key<br>
+          2. 點右上角 <strong style="color:var(--silver)">⚙</strong> → 貼上 API Key → 儲存
         </p>
       </div>
       <p style="font-size:.75rem;color:rgba(154,141,181,.55);line-height:1.8">
-        ✦ 完全免費，每分鐘可解牌 15 次<br>
-        ✦ API Key 只儲存在你自己的瀏覽器，不會被任何人看到<br>
-        ✦ 每位使用者需自行申請，各自使用各自的額度
+        ✦ 購買一次，永久解鎖本裝置<br>
+        ✦ 自備 Key 完全免費，每分鐘可解牌 15 次<br>
+        ✦ 兩種方式皆不會對外傳送個人資料
       </p>
     </div>
   </div>
@@ -537,12 +544,8 @@ textarea.inp{resize:vertical;min-height:90px}
 // ══════════════════════════════════════════
 //  付費解鎖設定（網站管理員填入）
 // ══════════════════════════════════════════
-const KOFI_URL = 'https://ko-fi.com/angiehu';
-const UNLOCK_HASH = '66668bb8aebc079218bdf8eba7d7ed6d1753a48bb4edc56803a22a250a37d322'; // TAROTSTAR88
-const OWNER_KEY_ENC = 'FRB8DjZrBg9kclALABY7P2oeOT5TUGYCa3cyJwxwa1N9MRc5IxkRAi0qe34QACA+YiAtcjU=';
-// 產生方式：在瀏覽器 console 輸入 btoa(xorStr('你的API_KEY','解鎖碼')) 複製結果貼這裡
-// UNLOCK_HASH 產生方式：crypto.subtle.digest('SHA-256', new TextEncoder().encode('解鎖碼'))
-//   .then(b=>console.log([...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')))
+const GUMROAD_URL = 'https://huisangie.gumroad.com/l/tarotreading';
+const WORKER_URL = ''; // 部署 Cloudflare Worker 後填入，例如 https://tarot-worker.yourname.workers.dev
 
 // ══════════════════════════════════════════
 //  CRYPTO RANDOM — zero memory, zero bias
@@ -1253,13 +1256,14 @@ function showReading(){
 
   document.getElementById('card-details').innerHTML=buildDetails();
   const key=getApiKey();
-  if(key){
+  const verified=isVerified();
+  if(key||verified){
     document.getElementById('interp-main').innerHTML=`
       <div class="ai-loading">
         <div class="ai-dots"><div class="ai-dot"></div><div class="ai-dot"></div><div class="ai-dot"></div></div>
         <div style="font-size:.85rem;color:var(--muted);letter-spacing:.1em">AI 正在${getActiveProject()?'結合過去脈絡':''}解讀牌陣...</div>
       </div>`;
-    callGemini(key).then(text=>{
+    callGemini(key,verified?getVerifiedEmail():null).then(text=>{
       S.lastInterpText = text;
       S.chatHistory = [];
       const formatted=text.replace(/\*\*(.+?)\*\*/g,'$1').replace(/\*(.+?)\*/g,'$1').replace(/[*#`_~]/g,'').replace(/\n{2,}/g,'</p><p class="interp-p">').replace(/\n/g,'<br>');
@@ -1269,20 +1273,20 @@ function showReading(){
       console.error(err);
       const fb = buildInterpBuiltin();
       S.lastInterpText = fb.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();
-      const unlockCTA = UNLOCK_HASH ? `
+      const unlockCTA = GUMROAD_URL ? `
         <div style="margin-top:22px;padding:16px;background:rgba(212,175,55,.07);border:1px solid rgba(212,175,55,.25);border-radius:12px;text-align:center">
           <div style="font-family:'Cinzel',serif;font-size:.78rem;color:var(--gold);letter-spacing:.1em;margin-bottom:8px">✦ 解鎖 AI 深度解牌</div>
           <p class="hint" style="margin:0 0 10px;font-size:.82rem">獲得針對「${S.q}」的個人化深度解析、感情連結牌組判讀，以及無限追問對話。</p>
           <div style="display:flex;justify-content:center;gap:18px;font-size:.76rem;color:var(--muted);margin-bottom:14px;flex-wrap:wrap">
-            <span>① 點下方按鈕贊助</span>
+            <span>① 點下方按鈕購買</span>
             <span style="color:rgba(212,175,55,.35)">→</span>
-            <span>② 贊助後請私訊我</span>
+            <span>② 購買完成後</span>
             <span style="color:rgba(212,175,55,.35)">→</span>
-            <span>③ 收到解鎖碼後點左方按鈕輸入</span>
+            <span>③ 點左方按鈕輸入購買 email 驗證</span>
           </div>
           <div style="display:flex;justify-content:center;gap:10px;flex-wrap:wrap">
-            <button class="btn btn-sm" onclick="openSettings()">已有解鎖碼？點此輸入</button>
-            <a href="${KOFI_URL}" target="_blank" class="btn btn-sm btn-ghost" style="text-decoration:none">☕ 前往贊助解鎖</a>
+            <button class="btn btn-sm" onclick="openSettings()">已購買？點此驗證 Email</button>
+            <a href="${GUMROAD_URL}?wanted=true" data-gumroad-overlay-checkout="true" class="btn btn-sm btn-ghost" style="text-decoration:none">✦ 前往購買解鎖</a>
           </div>
         </div>` : '';
       document.getElementById('interp-main').innerHTML=`${fb}${unlockCTA}
@@ -1291,20 +1295,20 @@ function showReading(){
   } else {
     const fb = buildInterpBuiltin();
     S.lastInterpText = fb.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();
-    const unlockCTA = UNLOCK_HASH ? `
+    const unlockCTA = GUMROAD_URL ? `
       <div style="margin-top:22px;padding:16px;background:rgba(212,175,55,.07);border:1px solid rgba(212,175,55,.25);border-radius:12px;text-align:center">
         <div style="font-family:'Cinzel',serif;font-size:.78rem;color:var(--gold);letter-spacing:.1em;margin-bottom:8px">✦ 解鎖 AI 深度解牌</div>
         <p class="hint" style="margin:0 0 10px;font-size:.82rem">獲得針對「${S.q}」的個人化深度解析、感情連結牌組判讀，以及無限追問對話。</p>
         <div style="display:flex;justify-content:center;gap:18px;font-size:.76rem;color:var(--muted);margin-bottom:14px;flex-wrap:wrap">
-          <span>① 點下方按鈕贊助</span>
+          <span>① 點下方按鈕購買</span>
           <span style="color:rgba(212,175,55,.35)">→</span>
-          <span>② 贊助後請私訊我</span>
+          <span>② 購買完成後</span>
           <span style="color:rgba(212,175,55,.35)">→</span>
-          <span>③ 收到解鎖碼後點左方按鈕輸入</span>
+          <span>③ 點左方按鈕輸入購買 email 驗證</span>
         </div>
         <div style="display:flex;justify-content:center;gap:10px;flex-wrap:wrap">
-          <button class="btn btn-sm" onclick="openSettings()">已有解鎖碼？點此輸入</button>
-          <a href="${KOFI_URL}" target="_blank" class="btn btn-sm btn-ghost" style="text-decoration:none">☕ 前往贊助解鎖</a>
+          <button class="btn btn-sm" onclick="openSettings()">已購買？點此驗證 Email</button>
+          <a href="${GUMROAD_URL}?wanted=true" data-gumroad-overlay-checkout="true" class="btn btn-sm btn-ghost" style="text-decoration:none">✦ 前往購買解鎖</a>
         </div>
       </div>` : '';
     document.getElementById('interp-main').innerHTML=`${fb}${unlockCTA}`;
@@ -1314,7 +1318,7 @@ function showReading(){
 // ══════════════════════════════════════════
 //  GEMINI API — project-aware
 // ══════════════════════════════════════════
-async function callGemini(key){
+async function callGemini(key, proxyEmail=null){
   const spreadName=S.type==='custom'?'自訂牌陣':SPREADS[S.type].name;
 
   // 建立背景知識：數字象徵 + 感情連結牌組
@@ -1417,18 +1421,31 @@ ${refCtx}
 約 400-500 字。請直接開始寫文章，不需要自我介紹。`;
   }
 
-  const cleanKey=key.split('').filter(c=>c.charCodeAt(0)>=32&&c.charCodeAt(0)<=126).join('');
-  const resp=await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent`,
-    {method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':cleanKey},
-     body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{temperature:.85,maxOutputTokens:8192},systemInstruction:{parts:[{text:'你只能用繁體中文回覆。絕對不能使用任何 markdown 語法（不能用 *、**、#、-、• 等符號）。只能輸出純文字段落。'}]}})}
-  );
-  if(!resp.ok){
-    const errBody=await resp.json().catch(()=>({}));
-    throw new Error(`API ${resp.status}: ${errBody?.error?.message||resp.statusText}`);
+  const geminiBody = {
+    contents:[{parts:[{text:prompt}]}],
+    generationConfig:{temperature:.85,maxOutputTokens:8192},
+    systemInstruction:{parts:[{text:'你只能用繁體中文回覆。絕對不能使用任何 markdown 語法（不能用 *、**、#、-、• 等符號）。只能輸出純文字段落。'}]}
+  };
+
+  let resp, data;
+  if(proxyEmail && WORKER_URL){
+    resp=await fetch(WORKER_URL+'/gemini',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({email:proxyEmail,body:geminiBody})
+    });
+    data=await resp.json();
+    if(!resp.ok)throw new Error(data.error||`Worker ${resp.status}`);
+  } else {
+    const cleanKey=key.split('').filter(c=>c.charCodeAt(0)>=32&&c.charCodeAt(0)<=126).join('');
+    resp=await fetch(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent',
+      {method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':cleanKey},
+       body:JSON.stringify(geminiBody)}
+    );
+    if(!resp.ok){const e=await resp.json().catch(()=>({}));throw new Error(`API ${resp.status}: ${e?.error?.message||resp.statusText}`);}
+    data=await resp.json();
   }
-  const data=await resp.json();
-  if(data.error)throw new Error(data.error.message);
+  if(data.error)throw new Error(data.error.message||data.error);
   return data.candidates?.[0]?.content?.parts?.[0]?.text||'無法取得回應';
 }
 
@@ -1538,7 +1555,8 @@ async function sendChat(){
   const q=input.value.trim();
   if(!q)return;
   const key=getApiKey();
-  if(!key){toast('請先設定 API Key');return;}
+  const proxyEmail=isVerified()?getVerifiedEmail():null;
+  if(!key&&!proxyEmail){toast('請先設定 API Key 或驗證購買 Email');return;}
   input.value='';
   if(!S.chatHistory) S.chatHistory=[];
   S.chatHistory.push({role:'user',text:q});
@@ -1552,18 +1570,24 @@ async function sendChat(){
   try{
     const context=`你是一位精通塔羅的占卜師。以下是剛才的占卜結果：\n問題：「${S.q}」\n解讀：${S.lastInterpText}\n\n請根據以上解讀回答問卜者的追問。回答必須完整，不能中途停止。全程用繁體中文，禁止使用 markdown 符號，輸出純文字段落。`;
     const history=S.chatHistory.slice(0,-1).map(m=>({role:m.role==='user'?'user':'model',parts:[{text:m.text}]}));
-    const cleanKey=key.split('').filter(c=>c.charCodeAt(0)>=32&&c.charCodeAt(0)<=126).join('');
-    const resp=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent',
-      {method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':cleanKey},
-       body:JSON.stringify({
-         systemInstruction:{parts:[{text:context}]},
-         contents:[...history,{role:'user',parts:[{text:q}]}],
-         generationConfig:{temperature:.85,maxOutputTokens:8192}
-       })});
-    const data=await resp.json();
+    const geminiBody={
+      systemInstruction:{parts:[{text:context}]},
+      contents:[...history,{role:'user',parts:[{text:q}]}],
+      generationConfig:{temperature:.85,maxOutputTokens:8192}
+    };
+    let data;
+    if(proxyEmail&&WORKER_URL){
+      const r=await fetch(WORKER_URL+'/gemini',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:proxyEmail,body:geminiBody})});
+      data=await r.json();
+      if(!r.ok)throw new Error(data.error||`Worker ${r.status}`);
+    } else {
+      const cleanKey=key.split('').filter(c=>c.charCodeAt(0)>=32&&c.charCodeAt(0)<=126).join('');
+      const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent',
+        {method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':cleanKey},body:JSON.stringify(geminiBody)});
+      data=await r.json();
+    }
     const ans=data.candidates?.[0]?.content?.parts?.[0]?.text||'無法取得回應';
-    const clean=ans.replace(/\*\*(.+?)\*\*/g,'$1').replace(/\*(.+?)\*/g,'$1').replace(/[*#`_~]/g,'');
-    S.chatHistory.push({role:'ai',text:clean});
+    S.chatHistory.push({role:'ai',text:ans.replace(/\*\*(.+?)\*\*/g,'$1').replace(/\*(.+?)\*/g,'$1').replace(/[*#`_~]/g,'')});
   }catch(e){
     S.chatHistory.push({role:'ai',text:'抱歉，發生錯誤：'+e.message});
   }
@@ -1644,53 +1668,42 @@ function showHistory(){
 // ══════════════════════════════════════════
 //  API KEY / SETTINGS
 // ══════════════════════════════════════════
-// XOR cipher helper（用於解密 owner key）
-function xorStr(str,key){return str.split('').map((c,i)=>String.fromCharCode(c.charCodeAt(0)^key.charCodeAt(i%key.length))).join('')}
 
-// 產生字串的 SHA-256 hex（用於驗證解鎖碼）
-async function sha256hex(str){
-  const buf=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(str));
-  return [...new Uint8Array(buf)].map(x=>x.toString(16).padStart(2,'0')).join('');
+// Email verification via Cloudflare Worker
+async function verifyEmail(){
+  const email=document.getElementById('unlock-input').value.trim().toLowerCase();
+  if(!email){toast('請輸入 Email');return;}
+  if(!WORKER_URL){toast('⚠ 管理員尚未設定 Worker URL');return;}
+  const ubar=document.getElementById('unlock-status-bar');
+  ubar.style.display='block';ubar.className='api-status api-none';ubar.textContent='驗證中...';
+  try{
+    const r=await fetch(WORKER_URL+'/check',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});
+    const d=await r.json();
+    if(d.verified){
+      localStorage.setItem('tr_verified_email',email);
+      ubar.className='api-status api-ok';ubar.textContent='✓ 驗證成功！已解鎖 AI 解牌';
+      updateApiStatus();toast('✦ 驗證成功！AI 解牌已解鎖');closeSettings();
+    } else {
+      ubar.textContent='✗ 此 Email 尚未有購買記錄，請確認使用 Gumroad 購買時填寫的 Email';
+    }
+  }catch(e){ubar.textContent='✗ 無法連線，請稍後再試：'+e.message.slice(0,60);}
 }
-
-// 解鎖碼相關
-async function saveUnlockCode(){
-  const code=document.getElementById('unlock-input').value.trim();
-  if(!code){toast('請輸入解鎖碼');return;}
-  const hash=await sha256hex(code);
-  if(UNLOCK_HASH && hash!==UNLOCK_HASH){
-    toast('解鎖碼不正確，請確認後再試');
-    document.getElementById('unlock-status-bar').style.display='block';
-    document.getElementById('unlock-status-bar').className='api-status api-none';
-    document.getElementById('unlock-status-bar').textContent='✗ 解鎖碼錯誤';
-    return;
-  }
-  if(!UNLOCK_HASH){toast('⚠ 管理員尚未設定解鎖碼');return;}
-  localStorage.setItem('tr_unlock',code);
-  updateApiStatus(); toast('✦ 已解鎖 AI 解牌！'); closeSettings();
-}
-function clearUnlockCode(){
-  localStorage.removeItem('tr_unlock');
+function clearVerifiedEmail(){
+  localStorage.removeItem('tr_verified_email');
   document.getElementById('unlock-input').value='';
-  updateApiStatus(); toast('已清除解鎖碼');
+  updateApiStatus();toast('已清除驗證');
 }
-function getUnlockedKey(){
-  const code=localStorage.getItem('tr_unlock');
-  if(!code||!OWNER_KEY_ENC)return '';
-  try{return xorStr(atob(OWNER_KEY_ENC),code).replace(/[^\x20-\x7E]/g,'');}catch{return '';}
-}
-function isUnlocked(){return !!localStorage.getItem('tr_unlock')&&!!OWNER_KEY_ENC&&!!UNLOCK_HASH;}
+function isVerified(){return !!localStorage.getItem('tr_verified_email')&&!!WORKER_URL;}
+function getVerifiedEmail(){return localStorage.getItem('tr_verified_email')||'';}
 
 function getApiKey(){
-  const unlocked=getUnlockedKey();
-  if(unlocked)return unlocked;
   return (localStorage.getItem('gemini_key')||'').replace(/[^\x20-\x7E]/g,'');
 }
 function saveApiKey(){
   const k=document.getElementById('api-key-input').value.trim().replace(/[^\x20-\x7E]/g,'');
   if(!k){toast('請輸入 API Key');return;}
   localStorage.setItem('gemini_key',k);
-  updateApiStatus(); toast('✦ API Key 已儲存'); closeSettings();
+  updateApiStatus();toast('✦ API Key 已儲存');closeSettings();
 }
 async function testApiKey(){
   const k=(document.getElementById('api-key-input').value.trim()||getApiKey()).split('').filter(c=>c.charCodeAt(0)>=32&&c.charCodeAt(0)<=126).join('');
@@ -1701,38 +1714,32 @@ async function testApiKey(){
       {method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':k},
        body:JSON.stringify({contents:[{parts:[{text:'hi'}]}]})});
     const d=await r.json();
-    if(r.ok){const reason=d?.candidates?.[0]?.finishReason; toast('✦ 正常！finishReason:'+reason);}
-    else toast('失敗：'+r.status+' '+( d?.error?.message||'').slice(0,60));
+    if(r.ok){toast('✦ 正常！finishReason:'+d?.candidates?.[0]?.finishReason);}
+    else toast('失敗：'+r.status+' '+(d?.error?.message||'').slice(0,60));
   }catch(e){toast('錯誤：'+e.message.slice(0,80));}
 }
 function clearApiKey(){
   localStorage.removeItem('gemini_key');
   document.getElementById('api-key-input').value='';
-  updateApiStatus(); toast('已清除 API Key');
+  updateApiStatus();toast('已清除 API Key');
 }
 function updateApiStatus(){
   const bar=document.getElementById('api-status-bar');
   const ubar=document.getElementById('unlock-status-bar');
-  if(isUnlocked()){
-    bar.className='api-status api-ok';
-    bar.textContent='✦ 已解鎖 AI 深度解牌';
-    bar.style.display='block';
-    if(ubar){ubar.style.display='block';ubar.className='api-status api-ok';ubar.textContent='✓ 解鎖碼有效';}
+  if(isVerified()){
+    bar.className='api-status api-ok';bar.textContent='✦ 已解鎖 AI 深度解牌（'+getVerifiedEmail()+'）';bar.style.display='block';
+    if(ubar){ubar.style.display='block';ubar.className='api-status api-ok';ubar.textContent='✓ Email 驗證有效';}
   } else if(getApiKey()){
-    bar.className='api-status api-ok';
-    bar.textContent='✓ 自備 API Key（AI 解牌啟用）';
-    bar.style.display='block';
+    bar.className='api-status api-ok';bar.textContent='✓ 自備 API Key（AI 解牌啟用）';bar.style.display='block';
+    if(ubar)ubar.style.display='none';
   } else {
-    bar.className='api-status api-none';
-    bar.textContent='尚未解鎖 · 使用內建牌義解讀';
-    bar.style.display='block';
+    bar.className='api-status api-none';bar.textContent='尚未解鎖 · 使用內建牌義解讀';bar.style.display='block';
+    if(ubar)ubar.style.display='none';
   }
 }
 function openSettings(){
-  const ownKey=localStorage.getItem('gemini_key')||'';
-  document.getElementById('api-key-input').value=ownKey;
-  document.getElementById('unlock-input').value=localStorage.getItem('tr_unlock')||'';
-  if(KOFI_URL) document.getElementById('kofi-btn').href=KOFI_URL;
+  document.getElementById('api-key-input').value=localStorage.getItem('gemini_key')||'';
+  document.getElementById('unlock-input').value=getVerifiedEmail();
   updateApiStatus();
   document.getElementById('settings-modal').classList.add('on');
 }
@@ -1756,8 +1763,11 @@ function toggleAiInfo(){
 }
 
 // ── INIT ──
-// Clean any corrupt API key on startup
-(()=>{const k=localStorage.getItem('gemini_key');if(k){const clean=k.split('').filter(c=>c.charCodeAt(0)>=32&&c.charCodeAt(0)<=126).join('');if(clean!==k)localStorage.setItem('gemini_key',clean);}})();
+(()=>{
+  const k=localStorage.getItem('gemini_key');
+  if(k){const clean=k.split('').filter(c=>c.charCodeAt(0)>=32&&c.charCodeAt(0)<=126).join('');if(clean!==k)localStorage.setItem('gemini_key',clean);}
+  localStorage.removeItem('tr_unlock'); // migrate: old code-based unlock no longer used
+})();
 go('s-welcome');
 </script>
 </body>
