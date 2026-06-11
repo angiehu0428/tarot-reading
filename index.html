@@ -1423,27 +1423,31 @@ function buildInterpBuiltin(){
   const uprCount = n - revCount;
 
   // 無視論：少數牌 = 重點牌，定整體方向
-  const keyIsRev = n > 1 && revCount < uprCount;
-  const keyIsUpr = n > 1 && uprCount < revCount;
-  // tie (e.g. 1-card draw) or equal: treat all as supporting, direction from majority
-  const keyRev = keyIsRev ? true : keyIsUpr ? false : (revCount >= uprCount);
+  // 只有在有明確少數時才區分重點/輔助
+  const hasMinority = n > 1 && revCount !== uprCount && revCount > 0 && uprCount > 0;
+  const keyIsRev = hasMinority && revCount < uprCount;  // 逆位是少數 → 逆位是重點
+  const keyIsUpr = hasMinority && uprCount < revCount;  // 正位是少數 → 正位是重點
+  // 整體基調：有重點牌 → 跟重點牌走；無重點牌（全同或平手）→ 跟多數走
+  const keyRev = keyIsRev ? true : keyIsUpr ? false : revCount >= uprCount;
 
   const cardNames = [];
   const cardSummaries = [];
+  const allKw = [];
   const keyKw = [], supKw = [];
   const keyCards = [], supCards = [];
 
   S.picked.forEach((di,i)=>{
     const {cid,rev}=S.deck[di]; const card=C[cid]; const data=rev?card.r:card.u;
     cardNames.push(card.zh+(rev?'（逆）':''));
-    const isKey = n===1 ? true : (keyIsRev ? rev : keyIsUpr ? !rev : false);
-    const role = isKey ? '重點' : '輔助';
+    allKw.push(...data.kw.slice(0,2));
+    const isKey = n===1 || (!hasMinority) ? null : (keyIsRev ? rev : !rev);
+    const role = isKey===null ? '牌' : isKey ? '重點' : '輔助';
     cardSummaries.push(`【${role}】${S.pos[i]}的${card.zh}（${rev?'逆位':'正位'}）：「${data.kw.slice(0,3).join('、')}」`);
-    if(isKey){ keyKw.push(...data.kw.slice(0,3)); keyCards.push(card.zh+(rev?'（逆）':'')); }
+    if(isKey===null||isKey){ keyKw.push(...data.kw.slice(0,3)); if(isKey!==null) keyCards.push(card.zh+(rev?'（逆）':'')); }
     else { supKw.push(...data.kw.slice(0,2)); supCards.push(card.zh); }
   });
 
-  const dominantKw = [...new Set(keyKw)].slice(0,4).join('、');
+  const dominantKw = [...new Set(keyKw.length ? keyKw : allKw)].slice(0,4).join('、');
   const supportKw = [...new Set(supKw)].slice(0,4).join('、');
   const revRatio = revCount===0?'全數正位':revCount===n?'全數逆位':`${revCount} 逆 ${uprCount} 正`;
 
@@ -1458,9 +1462,10 @@ function buildInterpBuiltin(){
       html += `輔助牌（${supCards.join('、')}）補充了「${supportKw}」的背景脈絡，作為重點牌能量的延伸與細節說明。`;
     }
   } else {
+    // 無明確重點牌（全正、全逆或平手）
     html += keyRev
-      ? `\n\n牌組整體帶著反思與調整的能量，核心圍繞「${dominantKw}」。此刻更適合向內審視而非強行推進。`
-      : `\n\n牌組整體能量積極，核心聚焦於「${dominantKw}」。你已具備面對這個問題所需的資源與意志。`;
+      ? `\n\n牌組全數逆位，帶著整體反思與調整的能量，核心圍繞「${dominantKw}」。此刻更適合向內審視、重新評估方向，而非強行推進。`
+      : `\n\n牌組整體能量積極，核心聚焦於「${dominantKw}」。你已具備面對這個問題所需的資源與意志，宇宙鼓勵你信任自己的方向。`;
   }
 
   html += `\n\n以上是依照無視論邏輯所做的初步梳理。若想獲得結合感情連結牌組、數字象徵與個人問題脈絡的深度 AI 解析，可以解鎖 AI 解牌功能。`;
