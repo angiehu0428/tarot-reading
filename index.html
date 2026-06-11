@@ -467,7 +467,7 @@ textarea.inp{resize:vertical;min-height:90px}
   <div class="med-q" id="med-q-disp"></div>
   <div class="med-ring"><div class="breath-ball"></div></div>
   <div class="breath-word" id="breath-word">吸氣...</div>
-  <div class="timer-num" id="timer-num">30</div>
+  <div class="timer-num" id="timer-num">15</div>
   <p class="t-muted" style="margin-bottom:20px;letter-spacing:.1em">請專注於問題，讓答案從心中自然升起</p>
   <button class="btn" id="btn-shuffle" onclick="beginShuffle()" disabled>✦ 開始洗牌 ✦</button>
   <button class="btn btn-ghost btn-sm" onclick="skipMeditation()" style="margin-top:8px;opacity:.5;font-size:.75rem;letter-spacing:.1em;border-color:transparent">跳過冥想</button>
@@ -1114,7 +1114,7 @@ function beginMeditation(){
   const wordEl=document.getElementById('breath-word');
   const btn=document.getElementById('btn-shuffle');
   btn.disabled=true;btn.classList.remove('btn-glow');
-  let t=30,bi=0;
+  let t=15,bi=0;
   const bw=['吸氣...','屏息...','呼氣...','屏息...'];
   timerEl.textContent=t;
   const biv=setInterval(()=>{wordEl.textContent=bw[bi%4];bi++;},2000);
