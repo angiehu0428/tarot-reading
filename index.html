@@ -1272,9 +1272,18 @@ function showReading(){
       const unlockCTA = UNLOCK_HASH ? `
         <div style="margin-top:22px;padding:16px;background:rgba(212,175,55,.07);border:1px solid rgba(212,175,55,.25);border-radius:12px;text-align:center">
           <div style="font-family:'Cinzel',serif;font-size:.78rem;color:var(--gold);letter-spacing:.1em;margin-bottom:8px">✦ 解鎖 AI 深度解牌</div>
-          <p class="hint" style="margin:0 0 12px;font-size:.8rem">獲得針對「${S.q}」的個人化深度解析、感情連結牌組判讀，以及無限追問對話。</p>
-          <button class="btn btn-sm" onclick="openSettings()" style="margin-right:8px">輸入解鎖碼</button>
-          <a href="${KOFI_URL}" target="_blank" class="btn btn-sm btn-ghost" style="text-decoration:none">☕ 前往贊助</a>
+          <p class="hint" style="margin:0 0 10px;font-size:.82rem">獲得針對「${S.q}」的個人化深度解析、感情連結牌組判讀，以及無限追問對話。</p>
+          <div style="display:flex;justify-content:center;gap:18px;font-size:.76rem;color:var(--muted);margin-bottom:14px;flex-wrap:wrap">
+            <span>① 點下方按鈕贊助</span>
+            <span style="color:rgba(212,175,55,.35)">→</span>
+            <span>② 贊助後請私訊我</span>
+            <span style="color:rgba(212,175,55,.35)">→</span>
+            <span>③ 收到解鎖碼後點左方按鈕輸入</span>
+          </div>
+          <div style="display:flex;justify-content:center;gap:10px;flex-wrap:wrap">
+            <button class="btn btn-sm" onclick="openSettings()">已有解鎖碼？點此輸入</button>
+            <a href="${KOFI_URL}" target="_blank" class="btn btn-sm btn-ghost" style="text-decoration:none">☕ 前往贊助解鎖</a>
+          </div>
         </div>` : '';
       document.getElementById('interp-main').innerHTML=`${fb}${unlockCTA}
         <div style="font-size:.72rem;color:var(--red);margin-top:10px;opacity:.7">（AI 暫時無法連線：${err.message}）</div>`;
@@ -1285,9 +1294,18 @@ function showReading(){
     const unlockCTA = UNLOCK_HASH ? `
       <div style="margin-top:22px;padding:16px;background:rgba(212,175,55,.07);border:1px solid rgba(212,175,55,.25);border-radius:12px;text-align:center">
         <div style="font-family:'Cinzel',serif;font-size:.78rem;color:var(--gold);letter-spacing:.1em;margin-bottom:8px">✦ 解鎖 AI 深度解牌</div>
-        <p class="hint" style="margin:0 0 12px;font-size:.8rem">獲得針對「${S.q}」的個人化深度解析、感情連結牌組判讀，以及無限追問對話。</p>
-        <button class="btn btn-sm" onclick="openSettings()" style="margin-right:8px">輸入解鎖碼</button>
-        <a href="${KOFI_URL}" target="_blank" class="btn btn-sm btn-ghost" style="text-decoration:none">☕ 前往贊助</a>
+        <p class="hint" style="margin:0 0 10px;font-size:.82rem">獲得針對「${S.q}」的個人化深度解析、感情連結牌組判讀，以及無限追問對話。</p>
+        <div style="display:flex;justify-content:center;gap:18px;font-size:.76rem;color:var(--muted);margin-bottom:14px;flex-wrap:wrap">
+          <span>① 點下方按鈕贊助</span>
+          <span style="color:rgba(212,175,55,.35)">→</span>
+          <span>② 贊助後請私訊我</span>
+          <span style="color:rgba(212,175,55,.35)">→</span>
+          <span>③ 收到解鎖碼後點左方按鈕輸入</span>
+        </div>
+        <div style="display:flex;justify-content:center;gap:10px;flex-wrap:wrap">
+          <button class="btn btn-sm" onclick="openSettings()">已有解鎖碼？點此輸入</button>
+          <a href="${KOFI_URL}" target="_blank" class="btn btn-sm btn-ghost" style="text-decoration:none">☕ 前往贊助解鎖</a>
+        </div>
       </div>` : '';
     document.getElementById('interp-main').innerHTML=`${fb}${unlockCTA}`;
   }
