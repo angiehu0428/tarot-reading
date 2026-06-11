@@ -1268,7 +1268,7 @@ function showReading(){
     }).catch(err=>{
       console.error(err);
       const fb = buildInterpBuiltin();
-      S.lastInterpText = fb;
+      S.lastInterpText = fb.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();
       const unlockCTA = UNLOCK_HASH ? `
         <div style="margin-top:22px;padding:16px;background:rgba(212,175,55,.07);border:1px solid rgba(212,175,55,.25);border-radius:12px;text-align:center">
           <div style="font-family:'Cinzel',serif;font-size:.78rem;color:var(--gold);letter-spacing:.1em;margin-bottom:8px">✦ 解鎖 AI 深度解牌</div>
@@ -1276,12 +1276,12 @@ function showReading(){
           <button class="btn btn-sm" onclick="openSettings()" style="margin-right:8px">輸入解鎖碼</button>
           <a href="${KOFI_URL}" target="_blank" class="btn btn-sm btn-ghost" style="text-decoration:none">☕ 前往贊助</a>
         </div>` : '';
-      document.getElementById('interp-main').innerHTML=`<div class="interp-p">${fb}</div>${unlockCTA}
+      document.getElementById('interp-main').innerHTML=`${fb}${unlockCTA}
         <div style="font-size:.72rem;color:var(--red);margin-top:10px;opacity:.7">（AI 暫時無法連線：${err.message}）</div>`;
     });
   } else {
     const fb = buildInterpBuiltin();
-    S.lastInterpText = fb;
+    S.lastInterpText = fb.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();
     const unlockCTA = UNLOCK_HASH ? `
       <div style="margin-top:22px;padding:16px;background:rgba(212,175,55,.07);border:1px solid rgba(212,175,55,.25);border-radius:12px;text-align:center">
         <div style="font-family:'Cinzel',serif;font-size:.78rem;color:var(--gold);letter-spacing:.1em;margin-bottom:8px">✦ 解鎖 AI 深度解牌</div>
@@ -1289,7 +1289,7 @@ function showReading(){
         <button class="btn btn-sm" onclick="openSettings()" style="margin-right:8px">輸入解鎖碼</button>
         <a href="${KOFI_URL}" target="_blank" class="btn btn-sm btn-ghost" style="text-decoration:none">☕ 前往贊助</a>
       </div>` : '';
-    document.getElementById('interp-main').innerHTML=`<div class="interp-p">${fb}</div>${unlockCTA}`;
+    document.getElementById('interp-main').innerHTML=`${fb}${unlockCTA}`;
   }
 }
 
@@ -1451,24 +1451,41 @@ function buildInterpBuiltin(){
   const supportKw = [...new Set(supKw)].slice(0,4).join('、');
   const revRatio = revCount===0?'全數正位':revCount===n?'全數逆位':`${revCount} 逆 ${uprCount} 正`;
 
-  let html = `針對你的問題「${S.q}」，這次牌組帶出了 ${cardNames.join('、')} 的組合能量。`;
-  html += `\n\n【無視論分析】（${revRatio}）\n${cardSummaries.join('\n')}`;
+  // Build card summary rows with styled badges
+  const rowsHtml = S.picked.map((di,i)=>{
+    const {cid,rev}=S.deck[di]; const card=C[cid]; const data=rev?card.r:card.u;
+    const isKey = n===1||(!hasMinority) ? null : (keyIsRev ? rev : !rev);
+    const badge = isKey===null ? '' : isKey
+      ? `<span class="wuxi-badge key" style="margin-right:6px;vertical-align:middle">重點</span>`
+      : `<span class="wuxi-badge sup" style="margin-right:6px;vertical-align:middle">輔助</span>`;
+    const revSpan = rev ? `<span style="color:var(--red);font-size:.75rem">逆</span>` : `<span style="color:var(--muted);font-size:.75rem">正</span>`;
+    return `<div style="display:flex;align-items:baseline;gap:4px;padding:4px 0;border-bottom:1px solid rgba(212,175,55,.08)">
+      ${badge}<span style="color:var(--muted);font-size:.8rem;min-width:28px">${S.pos[i]}</span>
+      <span style="font-size:.88rem;color:var(--white)">${card.zh}</span>${revSpan}
+      <span style="color:var(--gold);font-size:.78rem;margin-left:4px">「${data.kw.slice(0,3).join('、')}」</span>
+    </div>`;
+  }).join('');
 
+  let conclusionText = '';
   if(keyCards.length){
-    html += keyRev
-      ? `\n\n重點牌（${keyCards.join('、')}）以逆位出現，定義了此次牌陣的核心訊息：「${dominantKw}」。這提示你在關於「${S.q}」這件事上，有需要停下來重新審視的能量或阻力。`
-      : `\n\n重點牌（${keyCards.join('、')}）以正位出現，定義了此次牌陣的核心訊息：「${dominantKw}」。這是推動你前進的主要能量，宇宙在此指引你信任這股動力。`;
-    if(supCards.length){
-      html += `輔助牌（${supCards.join('、')}）補充了「${supportKw}」的背景脈絡，作為重點牌能量的延伸與細節說明。`;
-    }
+    conclusionText = keyRev
+      ? `重點牌（${keyCards.join('、')}）以逆位出現，定義了此次牌陣的核心訊息：「${dominantKw}」。這提示你在關於「${S.q}」這件事上，有需要停下來重新審視的能量或阻力。`
+      : `重點牌（${keyCards.join('、')}）以正位出現，定義了此次牌陣的核心訊息：「${dominantKw}」。這是推動你前進的主要能量，宇宙在此指引你信任這股動力。`;
+    if(supCards.length) conclusionText += `輔助牌（${supCards.join('、')}）補充了「${supportKw}」的背景脈絡，作為重點牌能量的延伸與細節說明。`;
   } else {
-    // 無明確重點牌（全正、全逆或平手）
-    html += keyRev
-      ? `\n\n牌組全數逆位，帶著整體反思與調整的能量，核心圍繞「${dominantKw}」。此刻更適合向內審視、重新評估方向，而非強行推進。`
-      : `\n\n牌組整體能量積極，核心聚焦於「${dominantKw}」。你已具備面對這個問題所需的資源與意志，宇宙鼓勵你信任自己的方向。`;
+    conclusionText = keyRev
+      ? `牌組全數逆位，帶著整體反思與調整的能量，核心圍繞「${dominantKw}」。此刻更適合向內審視、重新評估方向，而非強行推進。`
+      : `牌組整體能量積極，核心聚焦於「${dominantKw}」。你已具備面對這個問題所需的資源與意志，宇宙鼓勵你信任自己的方向。`;
   }
 
-  html += `\n\n以上是依照無視論邏輯所做的初步梳理。若想獲得結合感情連結牌組、數字象徵與個人問題脈絡的深度 AI 解析，可以解鎖 AI 解牌功能。`;
+  const html = `
+    <p class="interp-p">針對你的問題「${S.q}」，這次牌組帶出了 ${cardNames.join('、')} 的組合能量。</p>
+    <div style="margin:14px 0 10px;padding:12px 14px;background:rgba(42,22,96,.25);border-radius:8px;border:1px solid rgba(212,175,55,.12)">
+      <div style="font-family:'Cinzel',serif;font-size:.72rem;color:rgba(212,175,55,.6);letter-spacing:.12em;margin-bottom:8px">無視論分析 · ${revRatio}</div>
+      ${rowsHtml}
+    </div>
+    <p class="interp-p">${conclusionText}</p>
+    <p class="interp-p" style="font-size:.82rem;color:rgba(212,175,55,.55);margin-top:6px">以上是依照無視論邏輯所做的初步梳理。若想獲得結合感情連結牌組、數字象徵與個人問題脈絡的深度 AI 解析，可以解鎖 AI 解牌功能。</p>`;
   return html;
 }
 
