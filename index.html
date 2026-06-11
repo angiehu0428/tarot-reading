@@ -1126,14 +1126,21 @@ function doPick(idx,el){
 // ══════════════════════════════════════════
 //  CARD FACE HTML
 // ══════════════════════════════════════════
+// suit-based fallback palette for minor arcana
+const SUIT_COLORS=[['#c0392b','#e67e22'],['#2e86c1','#1a5276'],['#1e8449','#27ae60'],['#5d6d7e','#2c3e50']];
+const SUIT_SYMS=['🔥','♥','◈','⚔'];
 function cardFaceHTML(card,rev){
-  const imgUrl=IMG_BASE+CARD_IMG_FILES[card.id]+'&width=300';
-  const g=`linear-gradient(135deg,${CARD_COLORS[card.id][0]},${CARD_COLORS[card.id][1]})`;
+  const imgFile=CARD_IMG_FILES[card.id];
+  const imgUrl=imgFile?IMG_BASE+imgFile+'&width=300':'';
+  const suitIdx=card.id<22?-1:Math.floor((card.id-22)/14);
+  const colors=CARD_COLORS[card.id]||(SUIT_COLORS[suitIdx]||['#2a165e','#4a2080']);
+  const sym=CARD_SYMS[card.id]||(SUIT_SYMS[suitIdx]||'✦');
+  const g=`linear-gradient(135deg,${colors[0]},${colors[1]})`;
   return `<div class="cf${rev?' cf-rev':''}">
-    <img src="${imgUrl}" alt="${card.zh}" loading="lazy"
-      onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
-    <div class="cf-fallback" style="display:none;background:${g}">
-      <div class="cf-fallback-sym">${CARD_SYMS[card.id]}</div>
+    ${imgUrl?`<img src="${imgUrl}" alt="${card.zh}" loading="lazy"
+      onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`:''}
+    <div class="cf-fallback" style="${imgUrl?'display:none;':'display:flex;'}background:${g}">
+      <div class="cf-fallback-sym">${sym}</div>
       <div style="color:#fff;font-weight:700;font-size:.9rem">${card.zh}</div>
     </div>
     <div class="cf-label">
