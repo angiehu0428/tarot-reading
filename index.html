@@ -294,11 +294,13 @@ textarea.inp{resize:vertical;min-height:90px}
         ✦ 自動整合你的占卜脈絡，支援多輪追問對話<br>
         ✦ 你只要有 Key，其餘全部幫你設定好了
         <div style="margin-top:8px;padding:8px;background:rgba(212,175,55,.06);border-radius:6px;font-size:.74rem;color:var(--muted)">
-          免費申請 Key：<a href="https://aistudio.google.com" target="_blank" style="color:var(--gold)">aistudio.google.com</a> → Get API Key → Create API Key（免費，有用量上限）
+          支援兩種 Key（自動辨識）：<br>
+          ✦ Gemini（免費）：<a href="https://aistudio.google.com" target="_blank" style="color:var(--gold)">aistudio.google.com</a> → Get API Key → Create API Key<br>
+          ✦ OpenAI（付費）：<a href="https://platform.openai.com/api-keys" target="_blank" style="color:var(--gold)">platform.openai.com/api-keys</a> → Create new secret key
         </div>
       </div>
-      <label class="lbl">貼上你的 Gemini API Key</label>
-      <input class="inp" type="password" id="api-key-input" placeholder="AIza...">
+      <label class="lbl">貼上你的 Gemini 或 OpenAI API Key</label>
+      <input class="inp" type="password" id="api-key-input" placeholder="AIza...（Gemini）或 sk-...（OpenAI）">
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
         <button class="btn btn-sm" onclick="saveApiKey()">儲存並啟用</button>
         <button class="btn btn-sm btn-ghost" onclick="clearApiKey()">清除</button>
@@ -353,10 +355,10 @@ textarea.inp{resize:vertical;min-height:90px}
         </p>
       </div>
       <div style="border-left:2px solid rgba(212,175,55,.15);padding-left:14px;margin-bottom:16px">
-        <p style="font-family:'Cinzel',serif;font-size:.72rem;color:var(--gold);letter-spacing:.1em;margin-bottom:10px">方法二：自備 Gemini API Key</p>
+        <p style="font-family:'Cinzel',serif;font-size:.72rem;color:var(--gold);letter-spacing:.1em;margin-bottom:10px">方法二：自備 API Key（支援 Gemini / OpenAI）</p>
         <p style="font-size:.8rem;color:var(--muted);line-height:2.1">
-          1. 前往 <a href="https://aistudio.google.com" target="_blank" style="color:var(--gold);text-decoration:none;border-bottom:1px solid rgba(212,175,55,.4)">aistudio.google.com</a> 免費取得 Key<br>
-          2. 點右上角 <strong style="color:var(--silver)">⚙</strong> → 貼上 API Key → 儲存
+          1. Gemini 免費取得：<a href="https://aistudio.google.com" target="_blank" style="color:var(--gold);text-decoration:none;border-bottom:1px solid rgba(212,175,55,.4)">aistudio.google.com</a>，或 OpenAI：<a href="https://platform.openai.com/api-keys" target="_blank" style="color:var(--gold);text-decoration:none;border-bottom:1px solid rgba(212,175,55,.4)">platform.openai.com</a><br>
+          2. 點右上角 <strong style="color:var(--silver)">⚙</strong> → 貼上 API Key → 儲存（自動辨識種類）
         </p>
       </div>
       <p style="font-size:.75rem;color:rgba(154,141,181,.55);line-height:1.8">
@@ -1437,6 +1439,9 @@ ${refCtx}
     if(!resp.ok)throw new Error(data.error||`Worker ${resp.status}`);
   } else {
     const cleanKey=key.split('').filter(c=>c.charCodeAt(0)>=32&&c.charCodeAt(0)<=126).join('');
+    if(apiProvider(cleanKey)==='openai'){
+      return callOpenAI(cleanKey, AI_SYS_TEXT, [{role:'user',content:prompt}]);
+    }
     resp=await fetch(
       'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent',
       {method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':cleanKey},
@@ -1447,6 +1452,25 @@ ${refCtx}
   }
   if(data.error)throw new Error(data.error.message||data.error);
   return data.candidates?.[0]?.content?.parts?.[0]?.text||'無法取得回應';
+}
+
+// ── OpenAI 支援：自備 sk- 開頭的 Key 時改走 OpenAI ──
+const AI_SYS_TEXT='你只能用繁體中文回覆。絕對不能使用任何 markdown 語法（不能用 *、**、#、-、• 等符號）。只能輸出純文字段落。';
+function apiProvider(key){return key&&key.startsWith('sk-')?'openai':'gemini';}
+async function callOpenAI(key, sysText, messages){
+  const resp=await fetch('https://api.openai.com/v1/chat/completions',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
+    body:JSON.stringify({
+      model:'gpt-4o-mini',
+      temperature:.85,
+      max_completion_tokens:8192,
+      messages:[{role:'system',content:sysText},...messages]
+    })
+  });
+  const d=await resp.json().catch(()=>({}));
+  if(!resp.ok)throw new Error(`OpenAI ${resp.status}: ${d?.error?.message||resp.statusText}`);
+  return d.choices?.[0]?.message?.content||'無法取得回應';
 }
 
 // ══════════════════════════════════════════
@@ -1669,18 +1693,24 @@ async function sendChat(){
       contents:[...history,{role:'user',parts:[{text:q}]}],
       generationConfig:{temperature:.85,maxOutputTokens:8192}
     };
-    let data;
+    let ans;
     if(proxyEmail&&WORKER_URL){
       const r=await fetch(WORKER_URL+'/gemini',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:proxyEmail,body:geminiBody})});
-      data=await r.json();
+      const data=await r.json();
       if(!r.ok)throw new Error(data.error||`Worker ${r.status}`);
+      ans=data.candidates?.[0]?.content?.parts?.[0]?.text||'無法取得回應';
     } else {
       const cleanKey=key.split('').filter(c=>c.charCodeAt(0)>=32&&c.charCodeAt(0)<=126).join('');
-      const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent',
-        {method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':cleanKey},body:JSON.stringify(geminiBody)});
-      data=await r.json();
+      if(apiProvider(cleanKey)==='openai'){
+        const oaMsgs=S.chatHistory.slice(0,-1).map(m=>({role:m.role==='user'?'user':'assistant',content:m.text}));
+        ans=await callOpenAI(cleanKey, context, [...oaMsgs,{role:'user',content:q}]);
+      } else {
+        const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent',
+          {method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':cleanKey},body:JSON.stringify(geminiBody)});
+        const data=await r.json();
+        ans=data.candidates?.[0]?.content?.parts?.[0]?.text||'無法取得回應';
+      }
     }
-    const ans=data.candidates?.[0]?.content?.parts?.[0]?.text||'無法取得回應';
     S.chatHistory.push({role:'ai',text:ans.replace(/\*\*(.+?)\*\*/g,'$1').replace(/\*(.+?)\*/g,'$1').replace(/[*#`_~]/g,'')});
   }catch(e){
     S.chatHistory.push({role:'ai',text:'抱歉，發生錯誤：'+e.message});
@@ -1806,11 +1836,16 @@ async function testApiKey(){
   if(!k){toast('請先輸入 API Key');return;}
   toast('測試中...');
   try{
+    if(apiProvider(k)==='openai'){
+      await callOpenAI(k,'你是測試助手',[{role:'user',content:'hi'}]);
+      toast('✦ OpenAI Key 正常！');
+      return;
+    }
     const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent',
       {method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':k},
        body:JSON.stringify({contents:[{parts:[{text:'hi'}]}]})});
     const d=await r.json();
-    if(r.ok){toast('✦ 正常！finishReason:'+d?.candidates?.[0]?.finishReason);}
+    if(r.ok){toast('✦ Gemini Key 正常！');}
     else toast('失敗：'+r.status+' '+(d?.error?.message||'').slice(0,60));
   }catch(e){toast('錯誤：'+e.message.slice(0,80));}
 }
@@ -1826,7 +1861,7 @@ function updateApiStatus(){
     bar.className='api-status api-ok';bar.textContent='✦ 已解鎖 AI 深度解牌（'+getVerifiedEmail()+'）';bar.style.display='block';
     if(ubar){ubar.style.display='block';ubar.className='api-status api-ok';ubar.textContent='✓ Email 驗證有效';}
   } else if(getApiKey()){
-    bar.className='api-status api-ok';bar.textContent='✓ 自備 API Key（AI 解牌啟用）';bar.style.display='block';
+    bar.className='api-status api-ok';bar.textContent='✓ 自備 '+(apiProvider(getApiKey())==='openai'?'OpenAI':'Gemini')+' Key（AI 解牌啟用）';bar.style.display='block';
     if(ubar)ubar.style.display='none';
   } else {
     bar.className='api-status api-none';bar.textContent='尚未解鎖 · 使用內建牌義解讀';bar.style.display='block';
