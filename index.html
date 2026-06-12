@@ -1938,15 +1938,39 @@ function showHistory(){
         const full=fullMap[r.id]||{};
         const interpHtml=full.interp?`<div style="margin-top:10px;font-size:.82rem;color:var(--muted);line-height:1.7;border-top:1px solid rgba(212,175,55,.12);padding-top:10px">${full.interp.replace(/\n/g,'<br>')}</div>`:'';
         const chatHtml=(full.chat&&full.chat.length)?`<div style="margin-top:10px;border-top:1px solid rgba(212,175,55,.1);padding-top:10px">${full.chat.map(m=>m.role==='user'?`<div style="font-size:.78rem;color:var(--gold);margin-bottom:4px">▶ ${m.text}</div>`:`<div style="font-size:.78rem;color:var(--muted);margin-bottom:8px;line-height:1.6">${m.text.replace(/\n/g,'<br>')}</div>`).join('')}</div>`:'';
-        return `<div style="border:1px solid rgba(212,175,55,.18);background:rgba(42,22,96,.18);padding:18px 20px;margin-bottom:12px">
-          <div style="font-size:.72rem;color:var(--muted);margin-bottom:5px">${r.date} · ${r.spread}</div>
+        return `<div style="border:1px solid rgba(212,175,55,.18);background:rgba(42,22,96,.18);padding:18px 20px;margin-bottom:12px;position:relative">
+          <button onclick="deleteReading(${r.id})" title="刪除這筆記錄"
+            style="position:absolute;top:10px;right:10px;background:none;border:1px solid rgba(224,85,85,.3);color:rgba(224,85,85,.7);width:26px;height:26px;border-radius:50%;cursor:pointer;font-size:.8rem;line-height:1;transition:all .2s"
+            onmouseover="this.style.background='rgba(224,85,85,.15)';this.style.color='var(--red)'"
+            onmouseout="this.style.background='none';this.style.color='rgba(224,85,85,.7)'">✕</button>
+          <div style="font-size:.72rem;color:var(--muted);margin-bottom:5px;padding-right:30px">${r.date} · ${r.spread}</div>
           <div style="font-size:.92rem;color:var(--white)">「${r.q}」</div>
           <div style="font-size:.78rem;color:var(--gold);margin-top:7px">${r.cards.map(c=>`${c.name}${c.rev?'↓':''}`).join(' · ')}</div>
           ${interpHtml}${chatHtml}
         </div>`;
       }).join('')
+      + `<div style="text-align:center;margin-top:18px">
+          <button class="btn btn-ghost btn-sm" onclick="clearAllReadings()" style="color:rgba(224,85,85,.8);border-color:rgba(224,85,85,.3)">🗑 清除全部記錄</button>
+        </div>`
     :'<p style="text-align:center;color:var(--muted);padding:40px">還沒有占卜記錄</p>';
   go('s-history');
+}
+function deleteReading(id){
+  if(!confirm('確定要刪除這筆占卜記錄嗎？刪除後無法復原。'))return;
+  S.readings=S.readings.filter(r=>r.id!==id);
+  localStorage.setItem('tr_readings',JSON.stringify(S.readings));
+  const fullRecs=JSON.parse(localStorage.getItem('tr_full')||'[]').filter(r=>r.id!==id);
+  localStorage.setItem('tr_full',JSON.stringify(fullRecs));
+  showHistory();
+  toast('已刪除該筆記錄');
+}
+function clearAllReadings(){
+  if(!confirm('確定要清除「全部」占卜記錄嗎？此動作無法復原。'))return;
+  S.readings=[];
+  localStorage.removeItem('tr_readings');
+  localStorage.removeItem('tr_full');
+  showHistory();
+  toast('已清除全部記錄');
 }
 
 // ══════════════════════════════════════════
