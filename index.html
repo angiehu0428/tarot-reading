@@ -1431,10 +1431,10 @@ ${refCtx}
 
   let resp, data;
   if(proxyEmail && WORKER_URL){
-    resp=await fetch(WORKER_URL+'/gemini',{
+    resp=await fetchRetry(()=>fetch(WORKER_URL+'/gemini',{
       method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({email:proxyEmail,body:geminiBody})
-    });
+    }));
     data=await resp.json();
     if(!resp.ok)throw new Error(data.error||`Worker ${resp.status}`);
   } else {
@@ -1442,11 +1442,11 @@ ${refCtx}
     if(apiProvider(cleanKey)==='openai'){
       return callOpenAI(cleanKey, AI_SYS_TEXT, [{role:'user',content:prompt}]);
     }
-    resp=await fetch(
+    resp=await fetchRetry(()=>fetch(
       'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent',
       {method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':cleanKey},
        body:JSON.stringify(geminiBody)}
-    );
+    ));
     if(!resp.ok){const e=await resp.json().catch(()=>({}));throw new Error(`API ${resp.status}: ${e?.error?.message||resp.statusText}`);}
     data=await resp.json();
   }
@@ -1454,11 +1454,23 @@ ${refCtx}
   return data.candidates?.[0]?.content?.parts?.[0]?.text||'無法取得回應';
 }
 
+// ── 暫時性錯誤自動重試：503（過載）/ 429（限流）/ 500，最多重試 2 次 ──
+async function fetchRetry(doFetch, tries=3){
+  let resp;
+  for(let i=0;i<tries;i++){
+    try{ resp=await doFetch(); }
+    catch(e){ if(i===tries-1)throw e; await new Promise(r=>setTimeout(r,2000*(i+1))); continue; }
+    if(resp.ok || ![503,429,500].includes(resp.status)) return resp;
+    if(i<tries-1) await new Promise(r=>setTimeout(r,2000*(i+1)));
+  }
+  return resp;
+}
+
 // ── OpenAI 支援：自備 sk- 開頭的 Key 時改走 OpenAI ──
 const AI_SYS_TEXT='你只能用繁體中文回覆。絕對不能使用任何 markdown 語法（不能用 *、**、#、-、• 等符號）。只能輸出純文字段落。';
 function apiProvider(key){return key&&key.startsWith('sk-')?'openai':'gemini';}
 async function callOpenAI(key, sysText, messages){
-  const resp=await fetch('https://api.openai.com/v1/chat/completions',{
+  const resp=await fetchRetry(()=>fetch('https://api.openai.com/v1/chat/completions',{
     method:'POST',
     headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
     body:JSON.stringify({
@@ -1467,7 +1479,7 @@ async function callOpenAI(key, sysText, messages){
       max_completion_tokens:8192,
       messages:[{role:'system',content:sysText},...messages]
     })
-  });
+  }));
   const d=await resp.json().catch(()=>({}));
   if(!resp.ok)throw new Error(`OpenAI ${resp.status}: ${d?.error?.message||resp.statusText}`);
   return d.choices?.[0]?.message?.content||'無法取得回應';
@@ -1695,7 +1707,7 @@ async function sendChat(){
     };
     let ans;
     if(proxyEmail&&WORKER_URL){
-      const r=await fetch(WORKER_URL+'/gemini',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:proxyEmail,body:geminiBody})});
+      const r=await fetchRetry(()=>fetch(WORKER_URL+'/gemini',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:proxyEmail,body:geminiBody})}));
       const data=await r.json();
       if(!r.ok)throw new Error(data.error||`Worker ${r.status}`);
       ans=data.candidates?.[0]?.content?.parts?.[0]?.text||'無法取得回應';
@@ -1705,8 +1717,8 @@ async function sendChat(){
         const oaMsgs=S.chatHistory.slice(0,-1).map(m=>({role:m.role==='user'?'user':'assistant',content:m.text}));
         ans=await callOpenAI(cleanKey, context, [...oaMsgs,{role:'user',content:q}]);
       } else {
-        const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent',
-          {method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':cleanKey},body:JSON.stringify(geminiBody)});
+        const r=await fetchRetry(()=>fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent',
+          {method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':cleanKey},body:JSON.stringify(geminiBody)}));
         const data=await r.json();
         ans=data.candidates?.[0]?.content?.parts?.[0]?.text||'無法取得回應';
       }
