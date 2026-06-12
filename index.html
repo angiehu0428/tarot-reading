@@ -2117,7 +2117,7 @@ function startMusic(){
     AC.resume();
     const master=AC.createGain();
     master.gain.setValueAtTime(0,AC.currentTime);
-    master.gain.linearRampToValueAtTime(.85,AC.currentTime+3);
+    master.gain.linearRampToValueAtTime(.38,AC.currentTime+3);
     master.connect(AC.destination);
 
     // ── 純海浪聲：迴圈棕色噪音 + 低通 + 緩慢起伏（三層交錯：近浪、遠浪、底層湧動） ──
@@ -2142,7 +2142,18 @@ function startMusic(){
       return {src,lfo};
     });
 
-    musicNodes={master,waves};
+    // ── 靜心 soundwave：theta 雙耳節拍（左 108Hz / 右 114Hz → 6Hz 腦波頻率），極輕地墊在海浪下 ──
+    const binaural=[[108,-1],[114,1]].map(([f,pan])=>{
+      const o=AC.createOscillator(); o.type='sine'; o.frequency.value=f;
+      const g=AC.createGain(); g.gain.value=.018;
+      const p=AC.createStereoPanner ? AC.createStereoPanner() : null;
+      if(p){p.pan.value=pan; o.connect(g); g.connect(p); p.connect(master);}
+      else {o.connect(g); g.connect(master);}
+      o.start();
+      return {src:o,lfo:null};
+    });
+
+    musicNodes={master,waves:[...waves,...binaural]};
     musicOn=true;
     document.getElementById('music-btn').classList.add('on');
     localStorage.setItem('tr_music','1');
