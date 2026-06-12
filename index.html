@@ -20,11 +20,47 @@ html,body{min-height:100vh;background:var(--dp);color:var(--white);font-family:'
 .s{position:absolute;background:#fff;border-radius:50%;animation:twinkle var(--d) ease-in-out infinite var(--dl)}
 @keyframes twinkle{0%,100%{opacity:.15;transform:scale(1)}50%{opacity:1;transform:scale(1.4)}}
 
+/* ── 首頁氛圍：星雲、流星、牌扇（純 CSS，零圖片） ── */
+#nebula{position:fixed;inset:-20%;z-index:0;pointer-events:none;
+  background:
+    radial-gradient(38% 30% at 22% 28%, rgba(99,57,196,.16), transparent 70%),
+    radial-gradient(30% 26% at 78% 72%, rgba(212,175,55,.07), transparent 70%),
+    radial-gradient(26% 22% at 72% 16%, rgba(46,134,193,.10), transparent 70%);
+  animation:nebDrift 26s ease-in-out infinite alternate}
+@keyframes nebDrift{from{transform:translate(0,0) scale(1)}to{transform:translate(3%,-2%) scale(1.06)}}
+.shoot{position:fixed;top:14%;left:-8%;width:110px;height:1px;z-index:0;pointer-events:none;
+  background:linear-gradient(90deg,transparent,rgba(240,216,120,.95));
+  transform:rotate(14deg);opacity:0;animation:shoot 11s ease-in 3s infinite}
+.shoot.s2{top:48%;width:80px;animation-delay:8.5s;animation-duration:14s}
+@keyframes shoot{0%{opacity:0;transform:translate(0,0) rotate(14deg)}1.5%{opacity:1}6%{opacity:0;transform:translate(72vw,24vh) rotate(14deg)}100%{opacity:0;transform:translate(72vw,24vh) rotate(14deg)}}
+.w-divider{display:flex;align-items:center;justify-content:center;gap:14px;margin-bottom:26px}
+.w-divider .wline{height:1px;width:88px;background:linear-gradient(90deg,transparent,rgba(212,175,55,.65))}
+.w-divider .wline:last-child{transform:scaleX(-1)}
+.w-divider .wgem{color:var(--gold);font-size:.72rem;text-shadow:0 0 10px rgba(212,175,55,.8);animation:twinkle 3.2s ease-in-out infinite}
+.card-fan{position:relative;width:160px;height:118px;margin:34px auto 24px}
+.fan-card{position:absolute;left:50%;bottom:0;width:60px;height:94px;border-radius:7px;
+  border:1px solid rgba(212,175,55,.5);
+  background:
+    radial-gradient(circle at 50% 32%, rgba(212,175,55,.16), transparent 62%),
+    repeating-linear-gradient(45deg, rgba(212,175,55,.07) 0 2px, transparent 2px 9px),
+    repeating-linear-gradient(-45deg, rgba(212,175,55,.07) 0 2px, transparent 2px 9px),
+    linear-gradient(160deg,#1d0f40,#0c0522);
+  box-shadow:0 8px 26px rgba(0,0,0,.65),0 0 16px rgba(212,175,55,.08);
+  transform:translateX(-50%) rotate(var(--r,0deg));transform-origin:50% 118%;
+  animation:fanFloat 6s ease-in-out var(--fd,0s) infinite}
+.fan-card::before{content:'';position:absolute;inset:4px;border:1px solid rgba(212,175,55,.22);border-radius:4px}
+.fan-card::after{content:'✦';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:rgba(212,175,55,.8);font-size:1.05rem;text-shadow:0 0 9px rgba(212,175,55,.7)}
+.fan-card:nth-child(1){--r:-17deg}
+.fan-card:nth-child(2){--r:0deg;--fd:.9s;z-index:2}
+.fan-card:nth-child(3){--r:17deg;--fd:1.8s}
+@keyframes fanFloat{0%,100%{transform:translateX(-50%) rotate(var(--r,0deg)) translateY(0)}50%{transform:translateX(-50%) rotate(var(--r,0deg)) translateY(-8px)}}
+
 .screen{display:none;min-height:100vh;position:relative;z-index:1;flex-direction:column;align-items:center;justify-content:center;padding:70px 16px 40px;text-align:center}
 .screen.on{display:flex}
 
 .t-gold{font-family:'Cinzel',serif;background:linear-gradient(135deg,var(--gs),var(--gold),var(--gl),var(--gold));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
-.t-title{font-size:clamp(2.4rem,8vw,5rem);font-weight:900;letter-spacing:.05em;animation:glow 3s ease-in-out infinite}
+.t-title{font-size:clamp(2.4rem,8vw,5rem);font-weight:900;letter-spacing:.05em;background-size:200% auto;animation:glow 3s ease-in-out infinite, shimmer 8s linear infinite}
+@keyframes shimmer{to{background-position:200% center}}
 @keyframes glow{0%,100%{filter:drop-shadow(0 0 12px rgba(212,175,55,.4))}50%{filter:drop-shadow(0 0 30px rgba(212,175,55,.9))}}
 .t-sub{font-size:1rem;color:var(--muted);letter-spacing:.25em;margin-top:8px}
 .t-section{font-family:'Cinzel',serif;font-size:clamp(1.4rem,4vw,2.2rem);color:var(--gold);margin-bottom:6px}
@@ -255,6 +291,9 @@ textarea.inp{resize:vertical;min-height:90px}
 <body>
 
 <div id="stars"></div>
+<div id="nebula"></div>
+<div class="shoot"></div>
+<div class="shoot s2"></div>
 <button id="nav-back" onclick="goBack()">← 返回</button>
 <button id="settings-btn" onclick="openSettings()" title="解鎖 AI 深度解牌 / API 設定">⚙ <span id="settings-btn-label">AI 解牌設定</span></button>
 
@@ -322,10 +361,10 @@ textarea.inp{resize:vertical;min-height:90px}
 
 <!-- ══ WELCOME ══ -->
 <div id="s-welcome" class="screen on">
-  <div style="letter-spacing:.6em;color:var(--gold);opacity:.6;font-size:.85rem;margin-bottom:28px">✦ ✦ ✦</div>
+  <div class="w-divider"><span class="wline"></span><span class="wgem">✦</span><span class="wgem" style="animation-delay:.5s;font-size:.95rem">◆</span><span class="wgem" style="animation-delay:1s">✦</span><span class="wline"></span></div>
   <h1 class="t-gold t-title">塔羅神諭</h1>
   <p class="t-sub">讓牌卡引領你走向內心的真相</p>
-  <div class="spin" style="font-size:2.8rem;color:var(--gold);margin:32px 0">✾</div>
+  <div class="card-fan"><div class="fan-card"></div><div class="fan-card"></div><div class="fan-card"></div></div>
   <div>
     <button class="btn" onclick="startNoProject()">✦ 開始占卜 ✦</button>
     <button class="btn" onclick="go('s-projects')">✦ 專案占卜 ✦</button>
