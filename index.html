@@ -515,7 +515,7 @@ textarea.inp{resize:vertical;min-height:90px}
         <div class="interp-h" style="padding:20px 24px 14px;margin-bottom:0;border-bottom:1px solid rgba(212,175,55,.15)">✦ 繼續提問</div>
         <div class="chat-msgs" id="chat-msgs"></div>
         <div class="chat-input-row">
-          <input class="chat-input" id="chat-input" placeholder="針對這次解牌繼續提問..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat()}">
+          <input class="chat-input" id="chat-input" placeholder="針對這次解牌繼續提問..." onkeydown="if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing&&event.keyCode!==229){event.preventDefault();sendChat()}">
           <button class="chat-send" onclick="sendChat()">送出</button>
         </div>
       </div>
@@ -1694,7 +1694,9 @@ function renderChat(){
       ?`<div class="chat-msg-user">${m.text}</div>`
       :`<div class="chat-msg-ai">${m.text.replace(/\n/g,'<br>')}</div>`
   ).join('');
-  el.scrollTop=el.scrollHeight;
+  // 捲到最新一則訊息的「頂端」，長回覆讓用戶自己往下捲
+  const last=el.lastElementChild;
+  if(last) el.scrollTop=Math.max(0, last.offsetTop-el.offsetTop-8);
 }
 function toggleLore(id,btn){
   const panel=document.getElementById(id);
