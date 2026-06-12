@@ -50,6 +50,7 @@ async function handleWebhook(request, env) {
   const params = new URLSearchParams(text);
 
   const sellerId = params.get('seller_id');
+  console.log('webhook ping: seller_id=' + sellerId); // TEMP: capture seller id during setup
   const email = params.get('email')?.toLowerCase().trim();
   const saleId = params.get('sale_id') || '';
   const refunded = params.get('refunded') === 'true';
