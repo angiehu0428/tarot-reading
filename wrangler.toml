@@ -1,0 +1,7 @@
+name = "tarot-worker"
+main = "worker.js"
+compatibility_date = "2026-06-01"
+
+[[kv_namespaces]]
+binding = "TAROT_KV"
+id = "d8831c1811f942b295fe670e3b9910c3"
