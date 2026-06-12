@@ -201,8 +201,10 @@ textarea.inp{resize:vertical;min-height:90px}
 .tl-interp{font-size:.82rem;color:var(--muted);line-height:1.8;white-space:pre-wrap}
 
 /* ── Settings ── */
-#settings-btn{position:fixed;top:18px;right:18px;z-index:200;background:rgba(8,3,26,.7);border:1px solid rgba(212,175,55,.25);color:var(--gold);padding:7px 13px;cursor:pointer;font-size:1rem;transition:all .28s;backdrop-filter:blur(4px)}
-#settings-btn:hover{border-color:var(--gold);background:rgba(212,175,55,.1)}
+#settings-btn{position:fixed;top:18px;right:18px;z-index:200;background:rgba(8,3,26,.8);border:1px solid rgba(212,175,55,.45);color:var(--gold);padding:9px 16px;cursor:pointer;font-size:1rem;transition:all .28s;backdrop-filter:blur(4px);border-radius:50px;display:flex;align-items:center;gap:7px;box-shadow:0 2px 14px rgba(212,175,55,.12)}
+#settings-btn:hover{border-color:var(--gold);background:rgba(212,175,55,.12);box-shadow:0 2px 18px rgba(212,175,55,.3)}
+#settings-btn-label{font-size:.78rem;letter-spacing:.08em;font-family:'Noto Serif TC',serif;white-space:nowrap}
+@media (max-width:480px){#settings-btn-label{display:none}#settings-btn{padding:8px 12px}}
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:500;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
 .modal-overlay.on{display:flex}
 .modal{background:var(--p);border:1px solid rgba(212,175,55,.4);max-width:520px;width:90%;padding:36px 30px;position:relative;text-align:left;max-height:90vh;overflow-y:auto}
@@ -254,7 +256,7 @@ textarea.inp{resize:vertical;min-height:90px}
 
 <div id="stars"></div>
 <button id="nav-back" onclick="goBack()">← 返回</button>
-<button id="settings-btn" onclick="openSettings()" title="API 設定">⚙</button>
+<button id="settings-btn" onclick="openSettings()" title="解鎖 AI 深度解牌 / API 設定">⚙ <span id="settings-btn-label">AI 解牌設定</span></button>
 
 <!-- ══ SETTINGS MODAL ══ -->
 <div class="modal-overlay" id="settings-modal" onclick="if(event.target===this)closeSettings()">
