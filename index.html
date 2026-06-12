@@ -1780,12 +1780,23 @@ function buildInterpPositional(){
 
 function buildDetails(){
   const spread = SPREADS[S.type];
+  const topic = detectTopic(S.q);
   return S.picked.map((di,i)=>{
     const {cid,rev}=S.deck[di]; const card=C[cid]; const data=rev?card.r:card.u;
     const lore=LORE[cid];
     const pid=`lore-${i}`;
     const posDesc = spread && spread.posDesc ? spread.posDesc[i] : '';
     const imgUrl=IMG_BASE+CARD_IMG_FILES[cid]+'&width=300';
+    // 有明確主題時只顯示「總述第一句＋主題段落」，不顯示其他主題的牌義
+    let meaning;
+    if(topic==='general'){
+      meaning=data.m;
+    } else {
+      const first=data.m.split('。')[0]+'。';
+      const seg=topicSentence(data.m,topic,cid,rev);
+      meaning=(seg.startsWith(first)?'':first)+seg
+        +`<span style="display:block;margin-top:6px;font-size:.74rem;color:rgba(212,175,55,.5)">✦ 已聚焦「${TOPIC_LABEL[topic]}」主題，完整牌義可展開下方牌面學習</span>`;
+    }
     return `<div class="card-block">
       <div style="display:flex;gap:14px;align-items:flex-start;margin-bottom:12px">
         <div style="flex-shrink:0;width:72px">
@@ -1799,9 +1810,10 @@ function buildDetails(){
           <div class="kw-list" style="margin-bottom:8px">${data.kw.map(k=>`<span class="kw">${k}</span>`).join('')}</div>
         </div>
       </div>
-      <div class="interp-p">${data.m}</div>
-      <div class="lore-toggle" onclick="toggleLore('${pid}',this)"><i class="lore-arr">›</i> 牌面學習：圖像元素 &amp; 星象解析</div>
+      <div class="interp-p">${meaning}</div>
+      <div class="lore-toggle" onclick="toggleLore('${pid}',this)"><i class="lore-arr">›</i> 牌面學習：完整牌義 &amp; 圖像星象解析</div>
       <div class="lore-panel" id="${pid}">
+        ${topic!=='general'?`<div class="lore-pos-desc" style="font-style:normal">✦ 完整牌義：${data.m}</div>`:''}
         ${posDesc?`<div class="lore-pos-desc">✦ 此位置「${S.pos[i]}」代表：${posDesc}</div>`:''}
         <div class="lore-meta">
           <div class="lore-meta-item"><span class="lore-meta-lbl">元素</span><span class="lore-meta-val">${lore.elem}</span></div>
