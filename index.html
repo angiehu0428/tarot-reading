@@ -144,7 +144,7 @@ textarea.inp{resize:vertical;min-height:90px}
 .chat-box{border:1px solid rgba(212,175,55,.25);background:rgba(42,22,96,.18);margin-top:18px;overflow:hidden}
 .chat-msgs{padding:20px 24px;max-height:420px;overflow-y:auto;display:flex;flex-direction:column;gap:14px}
 .chat-msg-user{align-self:flex-end;background:rgba(212,175,55,.15);border:1px solid rgba(212,175,55,.3);color:var(--white);padding:10px 16px;border-radius:16px 16px 4px 16px;font-size:.88rem;line-height:1.7;max-width:80%}
-.chat-msg-ai{align-self:flex-start;color:var(--muted);font-size:.88rem;line-height:1.8;max-width:92%;text-align:left;width:100%}
+.chat-msg-ai{align-self:flex-start;background:rgba(42,22,96,.45);border:1px solid rgba(212,175,55,.15);color:var(--silver);padding:12px 18px;border-radius:16px 16px 16px 4px;font-size:.88rem;line-height:1.8;max-width:92%;text-align:left}
 .chat-input-row{display:flex;gap:0;border-top:1px solid rgba(212,175,55,.2)}
 .chat-input{flex:1;background:transparent;border:none;color:var(--white);font-family:'Noto Serif TC',serif;font-size:.88rem;padding:14px 18px;outline:none}
 .chat-input::placeholder{color:rgba(255,255,255,.3)}
@@ -512,7 +512,7 @@ textarea.inp{resize:vertical;min-height:90px}
     </div>
     <div id="chat-area" style="display:none">
       <div class="chat-box">
-        <div class="interp-h" style="padding:20px 24px 0;margin-bottom:0">✦ 繼續提問</div>
+        <div class="interp-h" style="padding:20px 24px 14px;margin-bottom:0;border-bottom:1px solid rgba(212,175,55,.15)">✦ 繼續提問</div>
         <div class="chat-msgs" id="chat-msgs"></div>
         <div class="chat-input-row">
           <input class="chat-input" id="chat-input" placeholder="針對這次解牌繼續提問..." onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat()}">
