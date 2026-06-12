@@ -1452,32 +1452,37 @@ ${refCtx}
 // ══════════════════════════════════════════
 //  BUILT-IN INTERPRETATION
 // ══════════════════════════════════════════
+// 牌義吉凶判斷：正位≠吉，要看牌義本身（如寶劍十、權杖五正位仍是辛苦牌）
+const NEG_STEMS = ['衝突','競爭','混亂','重擔','過度','負荷','痛苦','背叛','低谷','失去','失落','悲傷','哀慟','焦慮','恐懼','停滯','欺','束縛','災','毀','崩','壓力','孤獨','匱乏','拖延','逃避','犧牲','挫','失敗','損失','分離','終結','破裂','困','病','憂','背刺','倦怠','掙扎'];
+function kwIsHeavy(kws){
+  const hits = kws.filter(k=>NEG_STEMS.some(s=>k.includes(s))).length;
+  return hits >= 2 || hits >= Math.ceil(kws.length/3);
+}
+
 function buildInterpBuiltin(){
+  // 無視論（重點牌/輔助牌）解法只適用於五張無視論牌陣
+  if(S.type==='five') return buildInterpWuxi();
+  return buildInterpPositional();
+}
+
+// ── 無視論五張牌陣：少數牌 = 重點牌，定整體方向 ──
+function buildInterpWuxi(){
   const n = S.picked.length;
   const revCount = S.picked.filter(di=>S.deck[di].rev).length;
   const uprCount = n - revCount;
 
-  // 無視論：少數牌 = 重點牌，定整體方向
-  // 只有在有明確少數時才區分重點/輔助
-  const hasMinority = n > 1 && revCount !== uprCount && revCount > 0 && uprCount > 0;
+  // 五張牌不會平手；只有全正/全逆時沒有重點牌
+  const hasMinority = revCount > 0 && uprCount > 0;
   const keyIsRev = hasMinority && revCount < uprCount;  // 逆位是少數 → 逆位是重點
-  const keyIsUpr = hasMinority && uprCount < revCount;  // 正位是少數 → 正位是重點
-  // 整體基調：有重點牌 → 跟重點牌走；無重點牌（全同或平手）→ 跟多數走
-  const keyRev = keyIsRev ? true : keyIsUpr ? false : revCount >= uprCount;
+  const keyRev = hasMinority ? keyIsRev : revCount === n;
 
-  const cardNames = [];
-  const cardSummaries = [];
-  const allKw = [];
-  const keyKw = [], supKw = [];
-  const keyCards = [], supCards = [];
+  const cardNames = [], allKw = [], keyKw = [], supKw = [], keyCards = [], supCards = [];
 
   S.picked.forEach((di,i)=>{
     const {cid,rev}=S.deck[di]; const card=C[cid]; const data=rev?card.r:card.u;
     cardNames.push(card.zh+(rev?'（逆）':''));
     allKw.push(...data.kw.slice(0,2));
-    const isKey = n===1 || (!hasMinority) ? null : (keyIsRev ? rev : !rev);
-    const role = isKey===null ? '牌' : isKey ? '重點' : '輔助';
-    cardSummaries.push(`【${role}】${S.pos[i]}的${card.zh}（${rev?'逆位':'正位'}）：「${data.kw.slice(0,3).join('、')}」`);
+    const isKey = !hasMinority ? null : (keyIsRev ? rev : !rev);
     if(isKey===null||isKey){ keyKw.push(...data.kw.slice(0,3)); if(isKey!==null) keyCards.push(card.zh+(rev?'（逆）':'')); }
     else { supKw.push(...data.kw.slice(0,2)); supCards.push(card.zh); }
   });
@@ -1486,10 +1491,9 @@ function buildInterpBuiltin(){
   const supportKw = [...new Set(supKw)].slice(0,4).join('、');
   const revRatio = revCount===0?'全數正位':revCount===n?'全數逆位':`${revCount} 逆 ${uprCount} 正`;
 
-  // Build card summary rows with styled badges
   const rowsHtml = S.picked.map((di,i)=>{
     const {cid,rev}=S.deck[di]; const card=C[cid]; const data=rev?card.r:card.u;
-    const isKey = n===1||(!hasMinority) ? null : (keyIsRev ? rev : !rev);
+    const isKey = !hasMinority ? null : (keyIsRev ? rev : !rev);
     const badge = isKey===null ? '' : isKey
       ? `<span class="wuxi-badge key" style="margin-right:6px;vertical-align:middle">重點</span>`
       : `<span class="wuxi-badge sup" style="margin-right:6px;vertical-align:middle">輔助</span>`;
@@ -1501,11 +1505,7 @@ function buildInterpBuiltin(){
     </div>`;
   }).join('');
 
-  // 牌義吉凶判斷：正位≠吉，要看牌義本身（如寶劍十、權杖五正位仍是辛苦牌）
-  const NEG_STEMS = ['衝突','競爭','混亂','重擔','過度','負荷','痛苦','背叛','低谷','失去','失落','悲傷','哀慟','焦慮','恐懼','停滯','欺','束縛','災','毀','崩','壓力','孤獨','匱乏','拖延','逃避','犧牲','挫','失敗','損失','分離','終結','破裂','困','病','憂','背刺','倦怠','掙扎'];
-  const toneKw = keyKw.length ? keyKw : allKw;
-  const negHits = toneKw.filter(k=>NEG_STEMS.some(s=>k.includes(s))).length;
-  const isHeavy = negHits >= 2 || negHits >= Math.ceil(toneKw.length/3);
+  const isHeavy = kwIsHeavy(keyKw.length ? keyKw : allKw);
 
   let conclusionText = '';
   if(keyCards.length){
@@ -1518,10 +1518,7 @@ function buildInterpBuiltin(){
     }
     if(supCards.length) conclusionText += `輔助牌（${supCards.join('、')}）補充了「${supportKw}」的背景脈絡，作為重點牌能量的延伸與細節說明。`;
   } else {
-    if(revCount>0 && uprCount>0){
-      // 平手：正逆各半，無重點牌
-      conclusionText = `牌組正逆各半（${uprCount} 正 ${revCount} 逆），沒有明確的重點牌，代表這件事正處於拉鋸與轉換的狀態——順流與阻力同時存在，核心能量圍繞「${dominantKw}」。此刻的關鍵不在等待局勢明朗，而在你自己的選擇會讓天平往哪邊傾斜。`;
-    } else if(keyRev){
+    if(keyRev){
       conclusionText = `牌組全數逆位，帶著整體反思與調整的能量，核心圍繞「${dominantKw}」。此刻更適合向內審視、重新評估方向，而非強行推進。`;
     } else if(isHeavy){
       conclusionText = `牌組全數正位，能量直接而明確地展現，核心圍繞「${dominantKw}」。不過要注意：正位代表事情如實發生，而非保證順利——這組牌的牌義偏向辛苦、消耗與考驗，表示關於「${S.q}」，你正面對實實在在的壓力與課題。好消息是這些挑戰都攤在檯面上，沒有隱藏的暗流，正面應對就是此刻最好的策略。`;
@@ -1530,7 +1527,7 @@ function buildInterpBuiltin(){
     }
   }
 
-  const html = `
+  return `
     <p class="interp-p">針對你的問題「${S.q}」，這次牌組帶出了 ${cardNames.join('、')} 的組合能量。</p>
     <div style="margin:14px 0 10px;padding:12px 14px;background:rgba(42,22,96,.25);border-radius:8px;border:1px solid rgba(212,175,55,.12)">
       <div style="font-family:'Cinzel',serif;font-size:.72rem;color:rgba(212,175,55,.6);letter-spacing:.12em;margin-bottom:8px">無視論分析 · ${revRatio}</div>
@@ -1538,7 +1535,77 @@ function buildInterpBuiltin(){
     </div>
     <p class="interp-p">${conclusionText}</p>
     <p class="interp-p" style="font-size:.82rem;color:rgba(212,175,55,.55);margin-top:6px">以上是依照無視論邏輯所做的初步梳理。若想獲得結合感情連結牌組、數字象徵與個人問題脈絡的深度 AI 解析，可以解鎖 AI 解牌功能。</p>`;
-  return html;
+}
+
+// ── 其他牌陣：傳統位置解法，每張牌依其位置意義解讀 ──
+function buildInterpPositional(){
+  const n = S.picked.length;
+  const revCount = S.picked.filter(di=>S.deck[di].rev).length;
+  const uprCount = n - revCount;
+  const spread = SPREADS[S.type];
+
+  const cards = S.picked.map((di,i)=>{
+    const {cid,rev}=S.deck[di]; const card=C[cid]; const data=rev?card.r:card.u;
+    return {card, rev, data, pos:S.pos[i], posDesc: spread&&spread.posDesc?spread.posDesc[i]:''};
+  });
+
+  const cardNames = cards.map(c=>c.card.zh+(c.rev?'（逆）':''));
+  const allKw = [...new Set(cards.flatMap(c=>c.data.kw.slice(0,2)))];
+  const isHeavy = kwIsHeavy(allKw);
+  const revRatio = revCount===0?'全數正位':revCount===n?'全數逆位':`${revCount} 逆 ${uprCount} 正`;
+
+  const rowsHtml = cards.map(c=>{
+    const revSpan = c.rev ? `<span style="color:var(--red);font-size:.75rem">逆</span>` : `<span style="color:var(--muted);font-size:.75rem">正</span>`;
+    return `<div style="display:flex;align-items:baseline;gap:4px;padding:4px 0;border-bottom:1px solid rgba(212,175,55,.08)">
+      <span style="color:var(--muted);font-size:.8rem;min-width:60px;flex-shrink:0">${c.pos}</span>
+      <span style="font-size:.88rem;color:var(--white)">${c.card.zh}</span>${revSpan}
+      <span style="color:var(--gold);font-size:.78rem;margin-left:4px">「${c.data.kw.slice(0,3).join('、')}」</span>
+    </div>`;
+  }).join('');
+
+  // 逐位置敘事：每張牌在它的位置上說什麼
+  let storyText = '';
+  if(S.type==='one'){
+    const c = cards[0];
+    storyText = `這張${c.card.zh}${c.rev?'以逆位出現':''}，帶來「${c.data.kw.slice(0,3).join('、')}」的訊息——${c.data.m.slice(0, c.data.m.indexOf('。')+1)}`;
+  } else if(S.type==='choice'){
+    const [aPro,aCon,bPro,bCon,advice] = cards;
+    storyText = `選項A方面：優勢是${aPro.card.zh}${aPro.rev?'（逆）':''}帶來的「${aPro.data.kw.slice(0,2).join('、')}」，挑戰則是${aCon.card.zh}${aCon.rev?'（逆）':''}所指的「${aCon.data.kw.slice(0,2).join('、')}」。`
+      + `選項B方面：優勢是${bPro.card.zh}${bPro.rev?'（逆）':''}的「${bPro.data.kw.slice(0,2).join('、')}」，挑戰則是${bCon.card.zh}${bCon.rev?'（逆）':''}的「${bCon.data.kw.slice(0,2).join('、')}」。`
+      + `而整體建議位置的${advice.card.zh}${advice.rev?'（逆）':''}提醒你：「${advice.data.kw.slice(0,3).join('、')}」——這是超越兩個選項本身、更高視角的指引。`;
+  } else {
+    // three 或 custom：依位置順序串成時間／脈絡敘事
+    storyText = cards.map((c,i)=>{
+      const posIntro = c.posDesc ? `「${c.pos}」位置（${c.posDesc}）` : `「${c.pos}」位置`;
+      return `${posIntro}出現${c.card.zh}${c.rev?'逆位':''}，指向「${c.data.kw.slice(0,3).join('、')}」`;
+    }).join('；') + '。';
+    if(S.type==='three'){
+      storyText += `從時間軸來看：過去的能量奠定了現在的處境，而現在的狀態正在形塑未來的走向——三張牌連起來，就是「${S.q}」這個問題的發展脈絡。`;
+    }
+  }
+
+  // 整體基調（位置解法不用重點牌，只看整體牌義輕重與正逆比例）
+  let toneText = '';
+  if(revCount===n && n>1){
+    toneText = `牌組全數逆位，提示這個問題的能量目前多處於受阻、內化或需要調整的狀態，先放慢腳步、處理內在，比急著行動更重要。`;
+  } else if(revCount>0 && n>1){
+    toneText = `牌陣中有 ${revCount} 張逆位，代表部分能量受阻或正在轉化中，留意這些位置所對應的面向。`;
+  }
+  if(isHeavy){
+    toneText += `整體牌義偏向辛苦與考驗，表示關於「${S.q}」，眼前有實際的課題要面對——但牌陣把問題攤開來給你看，正是為了讓你能清楚地應對。`;
+  } else if(!toneText){
+    toneText = `整體牌面能量流暢，關於「${S.q}」，你所需要的資源與方向都已在牌中顯現。`;
+  }
+
+  return `
+    <p class="interp-p">針對你的問題「${S.q}」，${spread?spread.name:'牌陣'}抽出了 ${cardNames.join('、')}。</p>
+    <div style="margin:14px 0 10px;padding:12px 14px;background:rgba(42,22,96,.25);border-radius:8px;border:1px solid rgba(212,175,55,.12)">
+      <div style="font-family:'Cinzel',serif;font-size:.72rem;color:rgba(212,175,55,.6);letter-spacing:.12em;margin-bottom:8px">牌陣總覽 · ${revRatio}</div>
+      ${rowsHtml}
+    </div>
+    <p class="interp-p">${storyText}</p>
+    <p class="interp-p">${toneText}</p>
+    <p class="interp-p" style="font-size:.82rem;color:rgba(212,175,55,.55);margin-top:6px">以上是依照牌陣位置所做的初步梳理，詳細牌義請見下方單牌解析。若想獲得結合感情連結牌組、數字象徵與個人問題脈絡的深度 AI 解析，可以解鎖 AI 解牌功能。</p>`;
 }
 
 function buildDetails(){
