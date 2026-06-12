@@ -241,6 +241,10 @@ textarea.inp{resize:vertical;min-height:90px}
 #settings-btn:hover{border-color:var(--gold);background:rgba(212,175,55,.12);box-shadow:0 2px 18px rgba(212,175,55,.3)}
 #settings-btn-label{font-size:.78rem;letter-spacing:.08em;font-family:'Noto Serif TC',serif;white-space:nowrap}
 @media (max-width:480px){#settings-btn-label{display:none}#settings-btn{padding:8px 12px}}
+#music-btn{position:fixed;bottom:18px;right:18px;z-index:200;width:46px;height:46px;border-radius:50%;background:rgba(8,3,26,.8);border:1px solid rgba(212,175,55,.45);color:rgba(212,175,55,.55);font-size:1.15rem;cursor:pointer;transition:all .3s;backdrop-filter:blur(4px);box-shadow:0 2px 14px rgba(212,175,55,.1)}
+#music-btn:hover{border-color:var(--gold);background:rgba(212,175,55,.12)}
+#music-btn.on{color:var(--gold);border-color:var(--gold);box-shadow:0 0 18px rgba(212,175,55,.4);animation:musicPulse 2.4s ease-in-out infinite}
+@keyframes musicPulse{0%,100%{box-shadow:0 0 12px rgba(212,175,55,.3)}50%{box-shadow:0 0 24px rgba(212,175,55,.6)}}
 .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:500;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
 .modal-overlay.on{display:flex}
 .modal{background:var(--p);border:1px solid rgba(212,175,55,.4);max-width:520px;width:90%;padding:36px 30px;position:relative;text-align:left;max-height:90vh;overflow-y:auto}
@@ -296,6 +300,7 @@ textarea.inp{resize:vertical;min-height:90px}
 <div class="shoot s2"></div>
 <button id="nav-back" onclick="goBack()">← 返回</button>
 <button id="settings-btn" onclick="openSettings()" title="解鎖 AI 深度解牌 / API 設定">⚙ <span id="settings-btn-label">AI 解牌設定</span></button>
+<button id="music-btn" onclick="toggleMusic()" title="靜心音樂 開/關">♪</button>
 
 <!-- ══ SETTINGS MODAL ══ -->
 <div class="modal-overlay" id="settings-modal" onclick="if(event.target===this)closeSettings()">
@@ -1156,6 +1161,8 @@ function beginMeditation(){
   S.q=q;
   document.getElementById('med-q-disp').textContent=`「${q}」`;
   go('s-meditation');
+  // 冥想開始自動播放靜心音樂（除非用戶之前關掉過）
+  if(localStorage.getItem('tr_music')!=='0' && !musicOn) startMusic();
   const timerEl=document.getElementById('timer-num');
   const wordEl=document.getElementById('breath-word');
   const btn=document.getElementById('btn-shuffle');
@@ -2098,6 +2105,69 @@ function openSettings(){
   document.getElementById('settings-modal').classList.add('on');
 }
 function closeSettings(){document.getElementById('settings-modal').classList.remove('on');}
+
+// ══════════════════════════════════════════
+//  靜心音樂 — Web Audio 即時生成，零下載
+// ══════════════════════════════════════════
+let AC=null, musicOn=false, musicNodes=null, chimeTimer=null;
+function toggleMusic(){ musicOn ? stopMusic() : startMusic(); }
+function startMusic(){
+  try{
+    if(!AC) AC=new (window.AudioContext||window.webkitAudioContext)();
+    AC.resume();
+    const master=AC.createGain();
+    master.gain.setValueAtTime(0,AC.currentTime);
+    master.gain.linearRampToValueAtTime(.2,AC.currentTime+3);
+    master.connect(AC.destination);
+    // 鈴聲殘響（回授延遲）
+    const delay=AC.createDelay(1); delay.delayTime.value=.45;
+    const fb=AC.createGain(); fb.gain.value=.42;
+    delay.connect(fb); fb.connect(delay); delay.connect(master);
+    // 低頻持續音（A2 + E3 + A3，微失諧 + 慢速呼吸起伏）
+    const droneBus=AC.createGain(); droneBus.gain.value=.5;
+    const lp=AC.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=340;
+    droneBus.connect(lp); lp.connect(master);
+    const oscs=[110,164.81,220.3].map((f,i)=>{
+      const o=AC.createOscillator(); o.type='sine'; o.frequency.value=f;
+      const g=AC.createGain(); g.gain.value=i===0?.5:.26;
+      const lfo=AC.createOscillator(); lfo.frequency.value=.045+.02*i;
+      const lg=AC.createGain(); lg.gain.value=.1;
+      lfo.connect(lg); lg.connect(g.gain);
+      o.connect(g); g.connect(droneBus); o.start(); lfo.start();
+      return [o,lfo];
+    });
+    musicNodes={master,delay,oscs};
+    // 隨機五聲音階鈴聲（A 大調五聲）
+    const notes=[440,523.25,587.33,659.25,783.99,880];
+    (function chime(){
+      if(!musicOn)return;
+      const f=notes[Math.floor(Math.random()*notes.length)]/(Math.random()<.4?2:1);
+      const t=AC.currentTime;
+      const o=AC.createOscillator(); o.type='sine'; o.frequency.value=f;
+      const g=AC.createGain();
+      g.gain.setValueAtTime(0,t);
+      g.gain.linearRampToValueAtTime(.1,t+.02);
+      g.gain.exponentialRampToValueAtTime(.0001,t+5);
+      o.connect(g); g.connect(master); g.connect(delay);
+      o.start(t); o.stop(t+5.2);
+      chimeTimer=setTimeout(chime, 3500+Math.random()*5500);
+    })();
+    musicOn=true;
+    document.getElementById('music-btn').classList.add('on');
+    localStorage.setItem('tr_music','1');
+  }catch(e){toast('此瀏覽器不支援音訊');}
+}
+function stopMusic(){
+  musicOn=false; clearTimeout(chimeTimer);
+  if(musicNodes&&AC){
+    const nodes=musicNodes;
+    nodes.master.gain.linearRampToValueAtTime(0,AC.currentTime+1.2);
+    setTimeout(()=>{nodes.oscs.forEach(([o,l])=>{try{o.stop();l.stop();}catch(e){}});},1400);
+    musicNodes=null;
+  }
+  document.getElementById('music-btn').classList.remove('on');
+  localStorage.setItem('tr_music','0');
+}
 
 // ══════════════════════════════════════════
 //  TOAST
