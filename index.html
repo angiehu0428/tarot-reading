@@ -1518,7 +1518,10 @@ function buildInterpBuiltin(){
     }
     if(supCards.length) conclusionText += `輔助牌（${supCards.join('、')}）補充了「${supportKw}」的背景脈絡，作為重點牌能量的延伸與細節說明。`;
   } else {
-    if(keyRev){
+    if(revCount>0 && uprCount>0){
+      // 平手：正逆各半，無重點牌
+      conclusionText = `牌組正逆各半（${uprCount} 正 ${revCount} 逆），沒有明確的重點牌，代表這件事正處於拉鋸與轉換的狀態——順流與阻力同時存在，核心能量圍繞「${dominantKw}」。此刻的關鍵不在等待局勢明朗，而在你自己的選擇會讓天平往哪邊傾斜。`;
+    } else if(keyRev){
       conclusionText = `牌組全數逆位，帶著整體反思與調整的能量，核心圍繞「${dominantKw}」。此刻更適合向內審視、重新評估方向，而非強行推進。`;
     } else if(isHeavy){
       conclusionText = `牌組全數正位，能量直接而明確地展現，核心圍繞「${dominantKw}」。不過要注意：正位代表事情如實發生，而非保證順利——這組牌的牌義偏向辛苦、消耗與考驗，表示關於「${S.q}」，你正面對實實在在的壓力與課題。好消息是這些挑戰都攤在檯面上，沒有隱藏的暗流，正面應對就是此刻最好的策略。`;
