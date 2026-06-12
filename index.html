@@ -1495,6 +1495,45 @@ function kwIsHeavy(kws){
   return hits >= 2 || hits >= Math.ceil(kws.length/3);
 }
 
+// ── 主題偵測：從問題文字判斷主題，抽出牌義中對應的段落 ──
+function detectTopic(q){
+  const rules=[
+    ['health',/健康|身體|生病|手術|睡眠|體力|療養/],
+    ['study',/學業|考試|讀書|學校|論文|證照|升學|成績/],
+    ['money',/金錢|錢|財運|財務|投資|股票|收入|買房|負債|薪水|薪資/],
+    ['career',/工作|事業|職場|職涯|老闆|同事|面試|轉職|創業|升遷|專案|案子|生意|客戶|合作/],
+    ['love',/感情|愛情|戀愛|喜歡|曖昧|關係|對方|復合|結婚|脫單|告白|分手|桃花|他|她/]
+  ];
+  for(const [k,re] of rules) if(re.test(q)) return k;
+  return 'general';
+}
+const TOPIC_LABEL={love:'感情',career:'事業',money:'財務',health:'健康',study:'學業',general:''};
+function topicSentence(m,topic){
+  // 感情問題抽「感情上…」段；事業/財務/學業抽「事業上…」段；其他取牌義開頭
+  const tag = topic==='love' ? '感情上' : (topic==='career'||topic==='money'||topic==='study') ? '事業上' : '';
+  if(tag){
+    const i=m.indexOf(tag);
+    if(i>=0){
+      const rest=m.slice(i);
+      const next=rest.slice(3).search(/感情上|事業上/);
+      let seg = next>=0 ? rest.slice(0,next+3) : rest;
+      seg=seg.replace(/[，、；]$/,'');
+      if(!seg.endsWith('。'))seg+='。';
+      return seg;
+    }
+  }
+  return m.split('。')[0]+'。';
+}
+// 組出主題段落：挑最多 3 張牌，抽出主題對應牌義
+function buildTopicHtml(topic, indices){
+  if(topic==='general'||!indices.length) return '';
+  const lines=indices.slice(0,3).map(di=>{
+    const {cid,rev}=S.deck[di]; const card=C[cid]; const data=rev?card.r:card.u;
+    return `<span style="color:var(--gold)">${card.zh}${rev?'（逆位）':''}</span>——${topicSentence(data.m,topic)}`;
+  });
+  return `<p class="interp-p">聚焦在你問的「<span style="color:var(--gold)">${TOPIC_LABEL[topic]}</span>」層面：${lines.join('')}</p>`;
+}
+
 function buildInterpBuiltin(){
   // 無視論（重點牌/輔助牌）解法只適用於五張無視論牌陣
   if(S.type==='five') return buildInterpWuxi();
@@ -1512,14 +1551,14 @@ function buildInterpWuxi(){
   const keyIsRev = hasMinority && revCount < uprCount;  // 逆位是少數 → 逆位是重點
   const keyRev = hasMinority ? keyIsRev : revCount === n;
 
-  const cardNames = [], allKw = [], keyKw = [], supKw = [], keyCards = [], supCards = [];
+  const cardNames = [], allKw = [], keyKw = [], supKw = [], keyCards = [], supCards = [], keyIdx = [];
 
   S.picked.forEach((di,i)=>{
     const {cid,rev}=S.deck[di]; const card=C[cid]; const data=rev?card.r:card.u;
     cardNames.push(card.zh+(rev?'（逆）':''));
     allKw.push(...data.kw.slice(0,2));
     const isKey = !hasMinority ? null : (keyIsRev ? rev : !rev);
-    if(isKey===null||isKey){ keyKw.push(...data.kw.slice(0,3)); if(isKey!==null) keyCards.push(card.zh+(rev?'（逆）':'')); }
+    if(isKey===null||isKey){ keyKw.push(...data.kw.slice(0,3)); if(isKey!==null){ keyCards.push(card.zh+(rev?'（逆）':'')); keyIdx.push(di); } }
     else { supKw.push(...data.kw.slice(0,2)); supCards.push(card.zh); }
   });
 
@@ -1563,6 +1602,8 @@ function buildInterpWuxi(){
     }
   }
 
+  const topicHtml = buildTopicHtml(detectTopic(S.q), keyIdx.length ? keyIdx : S.picked);
+
   return `
     <p class="interp-p">針對你的問題「${S.q}」，這次牌組帶出了 ${cardNames.join('、')} 的組合能量。</p>
     <div style="margin:14px 0 10px;padding:12px 14px;background:rgba(42,22,96,.25);border-radius:8px;border:1px solid rgba(212,175,55,.12)">
@@ -1570,6 +1611,7 @@ function buildInterpWuxi(){
       ${rowsHtml}
     </div>
     <p class="interp-p">${conclusionText}</p>
+    ${topicHtml}
     <p class="interp-p" style="font-size:.82rem;color:rgba(212,175,55,.55);margin-top:6px">以上是依照無視論邏輯所做的初步梳理。若想獲得結合感情連結牌組、數字象徵與個人問題脈絡的深度 AI 解析，可以解鎖 AI 解牌功能。</p>`;
 }
 
@@ -1633,6 +1675,9 @@ function buildInterpPositional(){
     toneText = `整體牌面能量流暢，關於「${S.q}」，你所需要的資源與方向都已在牌中顯現。`;
   }
 
+  const topicIdx = S.type==='choice' && S.picked.length>=5 ? [S.picked[0],S.picked[2],S.picked[4]] : S.picked;
+  const topicHtml = buildTopicHtml(detectTopic(S.q), topicIdx);
+
   return `
     <p class="interp-p">針對你的問題「${S.q}」，${spread?spread.name:'牌陣'}抽出了 ${cardNames.join('、')}。</p>
     <div style="margin:14px 0 10px;padding:12px 14px;background:rgba(42,22,96,.25);border-radius:8px;border:1px solid rgba(212,175,55,.12)">
@@ -1640,6 +1685,7 @@ function buildInterpPositional(){
       ${rowsHtml}
     </div>
     <p class="interp-p">${storyText}</p>
+    ${topicHtml}
     <p class="interp-p">${toneText}</p>
     <p class="interp-p" style="font-size:.82rem;color:rgba(212,175,55,.55);margin-top:6px">以上是依照牌陣位置所做的初步梳理，詳細牌義請見下方單牌解析。若想獲得結合感情連結牌組、數字象徵與個人問題脈絡的深度 AI 解析，可以解鎖 AI 解牌功能。</p>`;
 }
