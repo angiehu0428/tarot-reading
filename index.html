@@ -2726,12 +2726,16 @@ async function syncPull(){
     if(!cloud||!Array.isArray(cloud.readings))return false;
     // 以 id 聯集合併本地與雲端（id 為時間戳，新的在前）
     const mergeById=(a,b)=>{const m={};[...a,...b].forEach(x=>{if(x&&x.id!=null)m[x.id]=x;});return Object.values(m).sort((x,y)=>y.id-x.id).slice(0,60);};
-    S.readings=mergeById(S.readings, cloud.readings);
+    const beforeR=S.readings.length;
     const localFull=JSON.parse(localStorage.getItem('tr_full')||'[]');
+    S.readings=mergeById(S.readings, cloud.readings);
     const mergedFull=mergeById(localFull, cloud.full||[]);
     localStorage.setItem('tr_readings',JSON.stringify(S.readings));
     localStorage.setItem('tr_full',JSON.stringify(mergedFull));
-    return true;
+    // 本地有、雲端還沒有的記錄 → 推回讓雲端收斂（另一台裝置下次才拉得到）
+    if(S.readings.length>cloud.readings.length || mergedFull.length>(cloud.full||[]).length) syncPush();
+    // 本地因雲端而新增 → 回報 true，供呼叫端重繪 / 提示（無新增則免重繪）
+    return S.readings.length>beforeR || mergedFull.length>localFull.length;
   }catch(e){return false;}
 }
 
@@ -2952,8 +2956,12 @@ function showChangelog(){
 })();
 applyLang();
 go('s-welcome');
-// 已驗證 email → 啟動時靜默拉回雲端歷史
-if(isVerified()) syncPull();
+// 已驗證 email → 啟動時靜默拉回雲端歷史（syncPull 內部會在需要時推回收斂）
+if(isVerified()) syncPull().then(merged=>{
+  if(!merged) return;
+  const cur=document.querySelector('.screen.on');
+  if(cur && cur.id==='s-history') showHistory(); // 正停在歷史頁才重繪
+});
 </script>
 </body>
 </html>
