@@ -1065,17 +1065,26 @@ const COMBOS = [
 // 小阿爾克那人物牌連結：國王+皇后（成熟穩定）、騎士+侍者（充滿衝勁的年輕感情）。
 
 const SPREADS = {
-  one:{name:'單張牌陣',pos:['核心訊息'],
-    posDesc:['此刻宇宙給你最重要的一個訊息或指引']},
-  three:{name:'三張牌陣',pos:['過去','現在','未來'],
-    posDesc:['影響現在的過去事件或能量模式','你此刻所處的狀態與核心情境','正在形成中的未來趨勢或可能結果']},
-  triangle:{name:'聖三角牌陣',pos:['我以為的狀況','真實的狀況','建言'],
+  one:{name:'單張牌陣',nameEn:'Single Card',pos:['核心訊息'],posEn:['Core Message'],
+    posDesc:['此刻宇宙給你最重要的一個訊息或指引'],posDescEn:['The single most important message or guidance for you right now']},
+  three:{name:'三張牌陣',nameEn:'Three-Card Spread',pos:['過去','現在','未來'],posEn:['Past','Present','Future'],
+    posDesc:['影響現在的過去事件或能量模式','你此刻所處的狀態與核心情境','正在形成中的未來趨勢或可能結果'],
+    posDescEn:['Past events or energy patterns shaping the present','Your current state and the core of the situation','The emerging trend or likely outcome ahead']},
+  triangle:{name:'聖三角牌陣',nameEn:'Holy Triangle Spread',pos:['我以為的狀況','真實的狀況','建言'],posEn:['What I Assume','The Truth','Advice'],
     posDesc:['你主觀認知中的情況——你以為事情是這樣','事件實際的樣貌——牌要讓你看見的真相','超越盲點之後，宇宙給你的具體指引'],
-    hint:'建議問法：「針對目前卡關的狀態，請讓我看到事件的真相」或「在現在的事件中，有我沒注意到的盲點嗎？」'},
-  five:{name:'五張牌陣（無視論）',pos:['牌一','牌二','牌三','牌四','牌五']},
-  choice:{name:'二擇一牌陣',pos:['選項A的優勢','選項A的挑戰','選項B的優勢','選項B的挑戰','整體建議'],
-    posDesc:['選擇A帶來的好處與正面能量','選擇A可能面對的困難與代價','選擇B帶來的好處與正面能量','選擇B可能面對的困難與代價','超越兩個選項的整體智慧與更高視角']}
+    posDescEn:['Your subjective view — what you assume is going on','The real shape of things — the truth the cards reveal','Concrete guidance once you see past the blind spot'],
+    hint:'建議問法：「針對目前卡關的狀態，請讓我看到事件的真相」或「在現在的事件中，有我沒注意到的盲點嗎？」',
+    hintEn:'Suggested wording: "Show me the truth of where I feel stuck," or "Is there a blind spot I\'m missing in this situation?"'},
+  five:{name:'五張牌陣（無視論）',nameEn:'Five-Card Wuxi Spread',pos:['牌一','牌二','牌三','牌四','牌五'],posEn:['Card 1','Card 2','Card 3','Card 4','Card 5']},
+  choice:{name:'二擇一牌陣',nameEn:'Either-Or Spread',pos:['選項A的優勢','選項A的挑戰','選項B的優勢','選項B的挑戰','整體建議'],
+    posEn:['Option A · Strengths','Option A · Challenges','Option B · Strengths','Option B · Challenges','Overall Advice'],
+    posDesc:['選擇A帶來的好處與正面能量','選擇A可能面對的困難與代價','選擇B帶來的好處與正面能量','選擇B可能面對的困難與代價','超越兩個選項的整體智慧與更高視角'],
+    posDescEn:['The benefits and positive energy of choosing A','The difficulties and costs of choosing A','The benefits and positive energy of choosing B','The difficulties and costs of choosing B','Higher wisdom that transcends both options']}
 };
+function spreadNameOf(type){ const s=SPREADS[type]; if(!s)return ''; return LANG==='en'?(s.nameEn||s.name):s.name; }
+function spreadPos(type){ const s=SPREADS[type]; if(!s)return []; return LANG==='en'?(s.posEn||s.pos):s.pos; }
+function spreadPosDesc(type){ const s=SPREADS[type]; if(!s)return null; return LANG==='en'?(s.posDescEn||s.posDesc):s.posDesc; }
+function spreadHint(type){ const s=SPREADS[type]; if(!s)return ''; return LANG==='en'?(s.hintEn||s.hint||''):(s.hint||''); }
 
 const PROJ_COLORS = ['#e74c3c','#e67e22','#d4af37','#27ae60','#2980b9','#8e44ad','#c0392b','#16a085'];
 
@@ -1306,7 +1315,7 @@ function pickSpread(type) {
   document.getElementById('q-title').textContent=isCustom?t('q.title.custom'):t('q.title');
   document.getElementById('custom-area').style.display=isCustom?'block':'none';
   if(isCustom)renderCustomPos();
-  const hint=SPREADS[type]&&SPREADS[type].hint;
+  const hint=spreadHint(type);
   const hintEl=document.getElementById('q-hint');
   hintEl.style.display=hint?'block':'none';
   if(hint)hintEl.textContent='✦ '+hint;
@@ -1333,7 +1342,7 @@ function beginMeditation(){
   if(!q){toast(t('toast.needq'));return;}
   S.pos=S.type==='custom'
     ?Array.from(document.querySelectorAll('.cp-inp')).map(el=>el.value||t('pos.default'))
-    :SPREADS[S.type].pos;
+    :spreadPos(S.type);
   S.q=q;
   document.getElementById('med-q-disp').textContent=`「${q}」`;
   go('s-meditation');
@@ -1425,6 +1434,25 @@ function cardFaceHTML(card,rev){
 // ══════════════════════════════════════════
 //  READING
 // ══════════════════════════════════════════
+function unlockCtaHtml(){
+  if(!GUMROAD_URL) return '';
+  return `
+      <div style="margin-top:22px;padding:16px;background:rgba(212,175,55,.07);border:1px solid rgba(212,175,55,.25);border-radius:12px;text-align:center">
+        <div style="font-family:'Cinzel',serif;font-size:.78rem;color:var(--gold);letter-spacing:.1em;margin-bottom:8px">${L('✦ 解鎖 AI 深度解牌','✦ Unlock AI Deep Reading')}</div>
+        <p class="hint" style="margin:0 0 10px;font-size:.82rem">${L(`獲得針對「${S.q}」的個人化深度解析、感情連結牌組判讀，以及無限追問對話。`,`Get a personalized deep reading of "${S.q}", relationship card-combo insights, and unlimited follow-up chat.`)}</p>
+        <div style="display:flex;justify-content:center;gap:18px;font-size:.76rem;color:var(--muted);margin-bottom:14px;flex-wrap:wrap">
+          <span>${L('① 點下方按鈕購買','① Tap below to purchase')}</span>
+          <span style="color:rgba(212,175,55,.35)">→</span>
+          <span>${L('② 購買完成後','② After checkout')}</span>
+          <span style="color:rgba(212,175,55,.35)">→</span>
+          <span>${L('③ 點左方按鈕輸入購買 email 驗證','③ Verify with your purchase email')}</span>
+        </div>
+        <div style="display:flex;justify-content:center;gap:10px;flex-wrap:wrap">
+          <button class="btn btn-sm" onclick="openSettings()">${L('已購買？點此驗證 Email','Purchased? Verify email')}</button>
+          <a href="${GUMROAD_URL}?wanted=true" data-gumroad-overlay-checkout="true" class="btn btn-sm btn-ghost" style="text-decoration:none">${L('✦ 前往購買解鎖','✦ Purchase to Unlock')}</a>
+        </div>
+      </div>`;
+}
 function showReading(){
   S.lastInterpText = ''; S.chatHistory=[];
   document.getElementById('chat-area').style.display='none';
@@ -1487,7 +1515,7 @@ function showReading(){
     document.getElementById('interp-main').innerHTML=`
       <div class="ai-loading">
         <div class="ai-dots"><div class="ai-dot"></div><div class="ai-dot"></div><div class="ai-dot"></div></div>
-        <div style="font-size:.85rem;color:var(--muted);letter-spacing:.1em">AI 正在${getActiveProject()?'結合過去脈絡':''}解讀牌陣...</div>
+        <div style="font-size:.85rem;color:var(--muted);letter-spacing:.1em">${getActiveProject()?L('AI 正在結合過去脈絡解讀牌陣...','AI is reading your spread with past context...'):L('AI 正在解讀牌陣...','AI is reading your spread...')}</div>
       </div>`;
     callGemini(key,verified?getVerifiedEmail():null).then(text=>{
       S.lastInterpText = text;
@@ -1499,62 +1527,44 @@ function showReading(){
       console.error(err);
       const fb = buildInterpBuiltin();
       S.lastInterpText = fb.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();
-      const unlockCTA = GUMROAD_URL ? `
-        <div style="margin-top:22px;padding:16px;background:rgba(212,175,55,.07);border:1px solid rgba(212,175,55,.25);border-radius:12px;text-align:center">
-          <div style="font-family:'Cinzel',serif;font-size:.78rem;color:var(--gold);letter-spacing:.1em;margin-bottom:8px">✦ 解鎖 AI 深度解牌</div>
-          <p class="hint" style="margin:0 0 10px;font-size:.82rem">獲得針對「${S.q}」的個人化深度解析、感情連結牌組判讀，以及無限追問對話。</p>
-          <div style="display:flex;justify-content:center;gap:18px;font-size:.76rem;color:var(--muted);margin-bottom:14px;flex-wrap:wrap">
-            <span>① 點下方按鈕購買</span>
-            <span style="color:rgba(212,175,55,.35)">→</span>
-            <span>② 購買完成後</span>
-            <span style="color:rgba(212,175,55,.35)">→</span>
-            <span>③ 點左方按鈕輸入購買 email 驗證</span>
-          </div>
-          <div style="display:flex;justify-content:center;gap:10px;flex-wrap:wrap">
-            <button class="btn btn-sm" onclick="openSettings()">已購買？點此驗證 Email</button>
-            <a href="${GUMROAD_URL}?wanted=true" data-gumroad-overlay-checkout="true" class="btn btn-sm btn-ghost" style="text-decoration:none">✦ 前往購買解鎖</a>
-          </div>
-        </div>` : '';
-      document.getElementById('interp-main').innerHTML=`${fb}${unlockCTA}
-        <div style="font-size:.72rem;color:var(--red);margin-top:10px;opacity:.7">（AI 暫時無法連線：${err.message}）</div>`;
+      document.getElementById('interp-main').innerHTML=`${fb}${unlockCtaHtml()}
+        <div style="font-size:.72rem;color:var(--red);margin-top:10px;opacity:.7">${L('（AI 暫時無法連線：','(AI temporarily unavailable: ')}${err.message}）</div>`;
     });
   } else {
     const fb = buildInterpBuiltin();
     S.lastInterpText = fb.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();
-    const unlockCTA = GUMROAD_URL ? `
-      <div style="margin-top:22px;padding:16px;background:rgba(212,175,55,.07);border:1px solid rgba(212,175,55,.25);border-radius:12px;text-align:center">
-        <div style="font-family:'Cinzel',serif;font-size:.78rem;color:var(--gold);letter-spacing:.1em;margin-bottom:8px">✦ 解鎖 AI 深度解牌</div>
-        <p class="hint" style="margin:0 0 10px;font-size:.82rem">獲得針對「${S.q}」的個人化深度解析、感情連結牌組判讀，以及無限追問對話。</p>
-        <div style="display:flex;justify-content:center;gap:18px;font-size:.76rem;color:var(--muted);margin-bottom:14px;flex-wrap:wrap">
-          <span>① 點下方按鈕購買</span>
-          <span style="color:rgba(212,175,55,.35)">→</span>
-          <span>② 購買完成後</span>
-          <span style="color:rgba(212,175,55,.35)">→</span>
-          <span>③ 點左方按鈕輸入購買 email 驗證</span>
-        </div>
-        <div style="display:flex;justify-content:center;gap:10px;flex-wrap:wrap">
-          <button class="btn btn-sm" onclick="openSettings()">已購買？點此驗證 Email</button>
-          <a href="${GUMROAD_URL}?wanted=true" data-gumroad-overlay-checkout="true" class="btn btn-sm btn-ghost" style="text-decoration:none">✦ 前往購買解鎖</a>
-        </div>
-      </div>` : '';
-    document.getElementById('interp-main').innerHTML=`${fb}${unlockCTA}`;
+    document.getElementById('interp-main').innerHTML=`${fb}${unlockCtaHtml()}`;
   }
 }
 
 // ══════════════════════════════════════════
 //  GEMINI API — project-aware
 // ══════════════════════════════════════════
+// ── 英文資料容器（由翻譯填入；缺漏時自動回退中文） ──
+let EN_CARD={}, LORE_EN={}, TOPIC_EXTRA_EN={};
+function cardName(cid){ return LANG==='en' ? (C[cid].en||C[cid].zh) : C[cid].zh; }
+function cardPL(cid){ return LANG==='en' ? (EN_CARD[cid]&&EN_CARD[cid].pl||C[cid].pl) : C[cid].pl; }
+function cardKw(cid,rev){ const e=LANG==='en'&&EN_CARD[cid]?EN_CARD[cid][rev?'r':'u']:null; return (e&&e.kw)?e.kw:(rev?C[cid].r:C[cid].u).kw; }
+function cardMeaning(cid,rev){ const e=LANG==='en'&&EN_CARD[cid]?EN_CARD[cid][rev?'r':'u']:null; return (e&&e.m)?e.m:(rev?C[cid].r:C[cid].u).m; }
+function loreOf(cid){ return LANG==='en'&&LORE_EN[cid]?LORE_EN[cid]:LORE[cid]; }
+function topicExtraOf(cid){ return LANG==='en'&&TOPIC_EXTRA_EN[cid]?TOPIC_EXTRA_EN[cid]:TOPIC_EXTRA[cid]; }
+const SEP = ()=> LANG==='en' ? ', ' : '、';
+function revLabel(rev){ return LANG==='en' ? (rev?' (reversed)':'') : (rev?'（逆位）':''); }
+
 async function callGemini(key, proxyEmail=null){
-  const spreadName=S.type==='custom'?'自訂牌陣':SPREADS[S.type].name;
+  const spreadName=S.type==='custom'?L('自訂牌陣','Custom Spread'):spreadNameOf(S.type);
+  const en = LANG==='en';
 
   // 建立背景知識：數字象徵 + 感情連結牌組
   const numRef = Object.entries(NUM_SYM).map(([n,t])=>t).join(' ');
   const comboRef = COMBOS.map(c=>`【${c.pair.join('＋')}】${c.note}`).join(' ');
-  const refCtx = `\n\n【數字象徵系統】${numRef}\n\n【感情連結牌組參考】${comboRef}`;
+  const refCtx = en ? '' : `\n\n【數字象徵系統】${numRef}\n\n【感情連結牌組參考】${comboRef}`;
 
   const cardLines=S.picked.map((di,i)=>{
-    const {cid,rev}=S.deck[di]; const card=C[cid]; const data=rev?card.r:card.u;
-    return `  ${S.pos[i]}：${card.zh}（${rev?'逆位':'正位'}）\n  關鍵字：${data.kw.join('、')}\n  牌義：${data.m}`;
+    const {cid,rev}=S.deck[di];
+    return en
+      ? `  ${S.pos[i]}: ${cardName(cid)}${rev?' (reversed)':' (upright)'}\n  Keywords: ${cardKw(cid,rev).join(', ')}\n  Meaning: ${cardMeaning(cid,rev)}`
+      : `  ${S.pos[i]}：${cardName(cid)}（${rev?'逆位':'正位'}）\n  關鍵字：${cardKw(cid,rev).join('、')}\n  牌義：${cardMeaning(cid,rev)}`;
   }).join('\n\n');
 
   const proj = getActiveProject();
@@ -1562,11 +1572,15 @@ async function callGemini(key, proxyEmail=null){
   if (proj) {
     const past = proj.readings.slice(-5); // last 5
     if (past.length) {
-      projectCtx = `\n\n【專案主題】${proj.name}${proj.desc?'\n主題描述：'+proj.desc:''}
-\n這是此專案第 ${proj.readings.length+1} 次占卜。以下是過去的記錄（最近 ${past.length} 次）：\n`
-      + past.map((r,i)=>`\n第${i+1}次（${r.date}）：「${r.q}」\n牌陣：${r.spread}\n抽到：${r.cards.map((c,j)=>`${r.pos[j]} ${C[c.cid].zh}${c.rev?'↓':''}`).join('、')}${r.interp?'\n解讀摘要：'+r.interp.slice(0,120)+'…':''}`).join('\n─────\n');
+      projectCtx = en
+        ? `\n\n[Project theme] ${proj.name}${proj.desc?'\nDescription: '+proj.desc:''}\nThis is reading #${proj.readings.length+1} for this project. Past records (most recent ${past.length}):\n`
+          + past.map((r,i)=>`\n#${i+1} (${r.date}): "${r.q}"\nSpread: ${r.spread}\nCards: ${r.cards.map((c,j)=>`${r.pos[j]} ${cardName(c.cid)}${c.rev?'(rev)':''}`).join(', ')}${r.interp?'\nSummary: '+r.interp.slice(0,120)+'…':''}`).join('\n─────\n')
+        : `\n\n【專案主題】${proj.name}${proj.desc?'\n主題描述：'+proj.desc:''}\n這是此專案第 ${proj.readings.length+1} 次占卜。以下是過去的記錄（最近 ${past.length} 次）：\n`
+          + past.map((r,i)=>`\n第${i+1}次（${r.date}）：「${r.q}」\n牌陣：${r.spread}\n抽到：${r.cards.map((c,j)=>`${r.pos[j]} ${cardName(c.cid)}${c.rev?'↓':''}`).join('、')}${r.interp?'\n解讀摘要：'+r.interp.slice(0,120)+'…':''}`).join('\n─────\n');
     } else {
-      projectCtx = `\n\n【專案主題】${proj.name}${proj.desc?'\n主題描述：'+proj.desc:''}（本專案第 1 次占卜）`;
+      projectCtx = en
+        ? `\n\n[Project theme] ${proj.name}${proj.desc?'\nDescription: '+proj.desc:''} (reading #1 for this project)`
+        : `\n\n【專案主題】${proj.name}${proj.desc?'\n主題描述：'+proj.desc:''}（本專案第 1 次占卜）`;
     }
   }
 
@@ -1574,17 +1588,18 @@ async function callGemini(key, proxyEmail=null){
   if(S.type==='five'){
     // 無視論解牌法 - 五張無位置牌陣
     const cards = S.picked.map((di,i)=>{
-      const {cid,rev}=S.deck[di]; const card=C[cid]; const data=rev?card.r:card.u;
-      const lore=LORE[cid];
-      return {name:card.zh, rev, kw:data.kw, m:data.m, elem:lore.elem, astro:lore.astro, num:cid};
+      const {cid,rev}=S.deck[di];
+      const lore=loreOf(cid);
+      return {name:cardName(cid), rev, kw:cardKw(cid,rev), m:cardMeaning(cid,rev), elem:lore.elem, astro:lore.astro, num:cid};
     });
     const revCount = cards.filter(c=>c.rev).length;
     const uprightCount = 5 - revCount;
     const elemCount = {};
     cards.forEach(c=>{ elemCount[c.elem]=(elemCount[c.elem]||0)+1; });
-    const elemSummary = Object.entries(elemCount).sort((a,b)=>b[1]-a[1]).map(([e,n])=>`${e}×${n}`).join('、');
-    const cardDescs = cards.map((c,i)=>`  牌${i+1}：${c.name}（${c.rev?'逆位':'正位'}）｜元素：${c.elem}｜關鍵字：${c.kw.join('、')}｜牌義：${c.m}`).join('\n');
-    // compute which cards are key vs supporting to tell AI
+    const elemSummary = Object.entries(elemCount).sort((a,b)=>b[1]-a[1]).map(([e,n])=>`${e}×${n}`).join(SEP());
+    const cardDescs = cards.map((c,i)=> en
+      ? `  Card ${i+1}: ${c.name} (${c.rev?'reversed':'upright'}) | element: ${c.elem} | keywords: ${c.kw.join(', ')} | meaning: ${c.m}`
+      : `  牌${i+1}：${c.name}（${c.rev?'逆位':'正位'}）｜元素：${c.elem}｜關鍵字：${c.kw.join('、')}｜牌義：${c.m}`).join('\n');
     const revCnt = cards.filter(c=>c.rev).length;
     const uprCnt = 5 - revCnt;
     let keyCards, supCards;
@@ -1595,9 +1610,34 @@ async function callGemini(key, proxyEmail=null){
     } else {
       keyCards = []; supCards = cards.map(c=>c.name);
     }
-    const keyStr = keyCards.length ? keyCards.join('、') : '（全正或全逆，請自行以數字法判斷）';
-    const supStr  = supCards.join('、');
-    prompt = `【重要指令】你必須全程使用繁體中文回覆，禁止使用任何英文或其他語言。禁止使用 markdown 符號（*、**、#、-、•）。只能輸出純文字段落。
+    const keyStr = keyCards.length ? keyCards.join(SEP()) : L('（全正或全逆，請自行以數字法判斷）','(all upright or all reversed — judge by numerology yourself)');
+    const supStr  = supCards.join(SEP());
+    prompt = en ? `[IMPORTANT] Respond entirely in English. Do NOT use any markdown symbols (*, **, #, -, •). Output plain text paragraphs only.
+
+You are a tarot reader skilled in the "Wuxi" (ignore-position) method. Its core: ignore spread positions; let the "key card(s)" (the minority of upright/reversed) define the overall direction, the "supporting cards" fill in detail, then weave everything into one integrated reading focused on the question.${projectCtx}
+
+[This reading]
+Question: "${S.q}"
+
+[Five cards]
+${cardDescs}
+
+[Wuxi basis]
+Upright: ${uprCnt} / Reversed: ${revCnt}
+Key cards (minority): ${keyStr}
+Supporting cards (majority): ${supStr}
+Element distribution: ${elemSummary}
+
+[Requirements]
+Write one flowing fortune-analysis essay. Do not use card names or "Card 1/2" as headings, and do not list card-by-card. Card names may flow naturally into sentences, but the whole must read as a complete analysis of "${S.q}".
+
+Structure (seamless, no visible headings):
+Para 1: Open with the key card's core energy — the querent's inner state and the essential direction of this question.
+Para 2: Bring in the supporting cards — how outer environment, other people, or hidden background interweave with the key card.
+Para 3: From the elemental angle — what does the "${elemSummary}" distribution reveal? What does an over-abundant element trend toward, and what does a lacking element suggest is needed?
+Para 4: Integrate everything into concrete advice, warm and empowering.${proj && proj.readings.length ? '\nAlso weave in the past records to point out how this theme is developing.' : ''}
+
+About 350-450 words. Begin the essay directly; no self-introduction.` : `【重要指令】你必須全程使用繁體中文回覆，禁止使用任何英文或其他語言。禁止使用 markdown 符號（*、**、#、-、•）。只能輸出純文字段落。
 
 你是一位精通無視論塔羅解牌法的占卜師。無視論核心：忽略牌陣位置，以「重點牌」定大局方向，以「輔助牌」補充細節，最終融會貫通圍繞問題給出整體解讀。${projectCtx}
 
@@ -1625,7 +1665,25 @@ ${refCtx}
 
 約 500-600 字。請直接開始寫文章，不需要自我介紹。`;
   } else {
-    prompt = `【重要指令】你必須全程使用繁體中文回覆，禁止使用任何英文或其他語言。禁止使用 markdown 符號（*、**、#、-、•）。只能輸出純文字段落。
+    prompt = en ? `[IMPORTANT] Respond entirely in English. Do NOT use any markdown symbols (*, **, #, -, •). Output plain text paragraphs only.
+
+You are a tarot reader with deep tarot knowledge and spiritual insight.${projectCtx}
+
+[This reading]
+Question: "${S.q}"
+Spread: ${spreadName}
+
+${cardLines}
+
+[Requirements]
+Write one flowing fortune-analysis essay. Do not use position names ("Past"/"Present"/"Future") or card names as headings, and do not list card-by-card. Card names may flow naturally into sentences, but the whole must read as a complete analysis of "${S.q}".
+
+Structure (seamless, no visible headings):
+Para 1: Survey the overall energy — the core of this question and the present situation; what are the cards saying to one another?
+Para 2: Go deeper — the upright/reversed contrast, the flow of energy, the hidden influences, and how they jointly answer "${S.q}".${proj && proj.readings.length ? '\nWeave in the past records to show how this theme is developing and shifting.' : ''}
+Para 3: Integrate everything into concrete advice, warm and empowering.
+
+About 300-400 words. Begin directly; no self-introduction.` : `【重要指令】你必須全程使用繁體中文回覆，禁止使用任何英文或其他語言。禁止使用 markdown 符號（*、**、#、-、•）。只能輸出純文字段落。
 
 你是一位具有深厚塔羅知識與靈性智慧的占卜師。${projectCtx}
 
@@ -1650,7 +1708,7 @@ ${refCtx}
   const geminiBody = {
     contents:[{parts:[{text:prompt}]}],
     generationConfig:{temperature:.85,maxOutputTokens:8192},
-    systemInstruction:{parts:[{text:'你只能用繁體中文回覆。絕對不能使用任何 markdown 語法（不能用 *、**、#、-、• 等符號）。只能輸出純文字段落。'}]}
+    systemInstruction:{parts:[{text:AI_SYS_TEXT()}]}
   };
 
   let resp, data;
@@ -1664,7 +1722,7 @@ ${refCtx}
   } else {
     const cleanKey=key.split('').filter(c=>c.charCodeAt(0)>=32&&c.charCodeAt(0)<=126).join('');
     if(apiProvider(cleanKey)==='openai'){
-      return callOpenAI(cleanKey, AI_SYS_TEXT, [{role:'user',content:prompt}]);
+      return callOpenAI(cleanKey, AI_SYS_TEXT(), [{role:'user',content:prompt}]);
     }
     resp=await fetchRetry(()=>fetch(
       'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent',
@@ -1675,7 +1733,7 @@ ${refCtx}
     data=await resp.json();
   }
   if(data.error)throw new Error(data.error.message||data.error);
-  return data.candidates?.[0]?.content?.parts?.[0]?.text||'無法取得回應';
+  return data.candidates?.[0]?.content?.parts?.[0]?.text||L('無法取得回應','No response received');
 }
 
 // ── 暫時性錯誤自動重試：503（過載）/ 429（限流）/ 500，最多重試 2 次 ──
@@ -1691,7 +1749,9 @@ async function fetchRetry(doFetch, tries=3){
 }
 
 // ── OpenAI 支援：自備 sk- 開頭的 Key 時改走 OpenAI ──
-const AI_SYS_TEXT='你只能用繁體中文回覆。絕對不能使用任何 markdown 語法（不能用 *、**、#、-、• 等符號）。只能輸出純文字段落。';
+function AI_SYS_TEXT(){ return LANG==='en'
+  ? 'Respond only in English. Never use any markdown syntax (no *, **, #, -, • symbols). Output plain text paragraphs only.'
+  : '你只能用繁體中文回覆。絕對不能使用任何 markdown 語法（不能用 *、**、#、-、• 等符號）。只能輸出純文字段落。'; }
 function apiProvider(key){return key&&key.startsWith('sk-')?'openai':'gemini';}
 async function callOpenAI(key, sysText, messages){
   const resp=await fetchRetry(()=>fetch('https://api.openai.com/v1/chat/completions',{
@@ -2071,7 +2131,9 @@ async function sendChat(){
   msgsEl.appendChild(loadingEl);
   msgsEl.scrollTop=msgsEl.scrollHeight;
   try{
-    const context=`你是一位精通塔羅的占卜師。以下是剛才的占卜結果：\n問題：「${S.q}」\n解讀：${S.lastInterpText}\n\n請根據以上解讀回答問卜者的追問。回答必須完整，不能中途停止。全程用繁體中文，禁止使用 markdown 符號，輸出純文字段落。`;
+    const context=LANG==='en'
+      ? `You are a tarot reader. Here is the reading just given:\nQuestion: "${S.q}"\nReading: ${S.lastInterpText}\n\nAnswer the querent's follow-up based on this reading. Your answer must be complete and not cut off. Respond entirely in English, no markdown symbols, plain text paragraphs only.`
+      : `你是一位精通塔羅的占卜師。以下是剛才的占卜結果：\n問題：「${S.q}」\n解讀：${S.lastInterpText}\n\n請根據以上解讀回答問卜者的追問。回答必須完整，不能中途停止。全程用繁體中文，禁止使用 markdown 符號，輸出純文字段落。`;
     const history=S.chatHistory.slice(0,-1).map(m=>({role:m.role==='user'?'user':'model',parts:[{text:m.text}]}));
     const geminiBody={
       systemInstruction:{parts:[{text:context}]},
