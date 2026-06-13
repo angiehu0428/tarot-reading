@@ -602,6 +602,10 @@ textarea.inp{resize:vertical;min-height:90px}
 <div id="s-history" class="screen">
   <h2 class="t-section t-gold">占卜記錄</h2>
   <div class="t-divider">— ✦ —</div>
+  <div style="max-width:660px;width:100%;margin-bottom:6px">
+    <input class="inp" id="hist-search" placeholder="🔍 搜尋關鍵字（問題、牌名、解讀內容）..." oninput="renderHistList()" style="margin-bottom:10px">
+    <div id="hist-topics" style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-bottom:14px"></div>
+  </div>
   <div class="hist-list" id="hist-list" style="max-width:660px;width:100%;text-align:left"></div>
   <button class="btn btn-ghost" onclick="goBack()" style="margin-top:16px">返回</button>
 </div>
@@ -1994,13 +1998,40 @@ function saveReading(){
 // ══════════════════════════════════════════
 //  HISTORY
 // ══════════════════════════════════════════
+let histTopic='all';
 function showHistory(){
+  // 主題分類籤（依問題文字自動分類，含筆數）
+  const counts={all:S.readings.length};
+  S.readings.forEach(r=>{const t=detectTopic(r.q);counts[t]=(counts[t]||0)+1;});
+  const TOPICS=[['all','全部'],['love','感情'],['career','事業'],['money','財務'],['health','健康'],['study','學業'],['general','其他']];
+  document.getElementById('hist-topics').innerHTML=TOPICS
+    .filter(([k])=>k==='all'||counts[k])
+    .map(([k,label])=>{
+      const on=histTopic===k;
+      return `<button onclick="setHistTopic('${k}')" style="padding:6px 14px;border-radius:50px;cursor:pointer;font-size:.78rem;letter-spacing:.05em;transition:all .25s;
+        background:${on?'rgba(212,175,55,.18)':'rgba(8,3,26,.4)'};
+        border:1px solid ${on?'var(--gold)':'rgba(212,175,55,.25)'};
+        color:${on?'var(--gold)':'var(--muted)'}">${label} ${k==='all'?counts.all:counts[k]||0}</button>`;
+    }).join('');
+  renderHistList();
+  go('s-history');
+}
+function setHistTopic(t){histTopic=t;showHistory();}
+function renderHistList(){
   const el=document.getElementById('hist-list');
+  const kw=(document.getElementById('hist-search').value||'').trim().toLowerCase();
   const fullRecs = JSON.parse(localStorage.getItem('tr_full')||'[]');
   const fullMap = {};
   fullRecs.forEach(r=>{ fullMap[r.id]=r; });
-  el.innerHTML=S.readings.length
-    ?S.readings.map(r=>{
+  let list=S.readings;
+  if(histTopic!=='all') list=list.filter(r=>detectTopic(r.q)===histTopic);
+  if(kw) list=list.filter(r=>{
+    const full=fullMap[r.id]||{};
+    const hay=(r.q+' '+r.cards.map(c=>c.name).join(' ')+' '+(full.interp||'')+' '+((full.chat||[]).map(m=>m.text).join(' '))).toLowerCase();
+    return hay.includes(kw);
+  });
+  el.innerHTML=list.length
+    ?list.map(r=>{
         const full=fullMap[r.id]||{};
         const interpHtml=full.interp?`<div style="margin-top:10px;font-size:.82rem;color:var(--muted);line-height:1.7;border-top:1px solid rgba(212,175,55,.12);padding-top:10px">${full.interp.replace(/\n/g,'<br>')}</div>`:'';
         const chatHtml=(full.chat&&full.chat.length)?`<div style="margin-top:10px;border-top:1px solid rgba(212,175,55,.1);padding-top:10px">${full.chat.map(m=>m.role==='user'?`<div style="font-size:.78rem;color:var(--gold);margin-bottom:4px">▶ ${m.text}</div>`:`<div style="font-size:.78rem;color:var(--muted);margin-bottom:8px;line-height:1.6">${m.text.replace(/\n/g,'<br>')}</div>`).join('')}</div>`:'';
@@ -2018,8 +2049,9 @@ function showHistory(){
       + `<div style="text-align:center;margin-top:18px">
           <button class="btn btn-ghost btn-sm" onclick="clearAllReadings()" style="color:rgba(224,85,85,.8);border-color:rgba(224,85,85,.3)">🗑 清除全部記錄</button>
         </div>`
-    :'<p style="text-align:center;color:var(--muted);padding:40px">還沒有占卜記錄</p>';
-  go('s-history');
+    :(S.readings.length
+      ?'<p style="text-align:center;color:var(--muted);padding:40px">沒有符合條件的記錄，試試其他關鍵字或分類</p>'
+      :'<p style="text-align:center;color:var(--muted);padding:40px">還沒有占卜記錄</p>');
 }
 function deleteReading(id){
   if(!confirm('確定要刪除這筆占卜記錄嗎？刪除後無法復原。'))return;
