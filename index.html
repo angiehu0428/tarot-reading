@@ -249,6 +249,9 @@ textarea.inp{resize:vertical;min-height:90px}
 #settings-btn:hover{border-color:var(--gold);background:rgba(212,175,55,.12);box-shadow:0 2px 18px rgba(212,175,55,.3)}
 #settings-btn-label{font-size:.78rem;letter-spacing:.08em;font-family:'Noto Serif TC',serif;white-space:nowrap}
 @media (max-width:480px){#settings-btn-label{display:none}#settings-btn{padding:8px 12px}}
+#lang-btn{position:fixed;top:18px;right:170px;z-index:200;min-width:42px;height:38px;border-radius:50px;background:rgba(8,3,26,.8);border:1px solid rgba(212,175,55,.45);color:var(--gold);font-family:'Cinzel',serif;font-size:.82rem;letter-spacing:.05em;cursor:pointer;transition:all .3s;backdrop-filter:blur(4px)}
+#lang-btn:hover{border-color:var(--gold);background:rgba(212,175,55,.12)}
+@media (max-width:480px){#lang-btn{right:64px;top:18px}}
 #music-btn{position:fixed;bottom:18px;right:18px;z-index:200;width:46px;height:46px;border-radius:50%;background:rgba(8,3,26,.8);border:1px solid rgba(212,175,55,.45);color:rgba(212,175,55,.55);font-size:1.15rem;cursor:pointer;transition:all .3s;backdrop-filter:blur(4px);box-shadow:0 2px 14px rgba(212,175,55,.1)}
 #music-btn:hover{border-color:var(--gold);background:rgba(212,175,55,.12)}
 #music-btn.on{color:var(--gold);border-color:var(--gold);box-shadow:0 0 18px rgba(212,175,55,.4);animation:musicPulse 2.4s ease-in-out infinite}
@@ -306,127 +309,106 @@ textarea.inp{resize:vertical;min-height:90px}
 <div id="nebula"></div>
 <div class="shoot"></div>
 <div class="shoot s2"></div>
-<button id="nav-back" onclick="goBack()">← 返回</button>
-<button id="settings-btn" onclick="openSettings()" title="解鎖 AI 深度解牌 / API 設定">⚙ <span id="settings-btn-label">AI 解牌設定</span></button>
-<button id="music-btn" onclick="toggleMusic()" title="靜心音場 開/關：海浪聲＋theta 靜心音波（建議戴耳機）">♪</button>
+<button id="nav-back" onclick="goBack()" data-i18n="nav.back">← 返回</button>
+<button id="settings-btn" onclick="openSettings()" data-i18n-title="settings.btn.title">⚙ <span id="settings-btn-label" data-i18n="settings.btn.label">AI 解牌設定</span></button>
+<button id="lang-btn" onclick="toggleLang()" title="切換語言 / Switch language">EN</button>
+<button id="music-btn" onclick="toggleMusic()" data-i18n-title="music.btn.title">♪</button>
 
 <!-- ══ SETTINGS MODAL ══ -->
 <div class="modal-overlay" id="settings-modal" onclick="if(event.target===this)closeSettings()">
   <div class="modal">
     <button class="modal-close" onclick="closeSettings()">✕</button>
-    <h3>✦ AI 深度解牌</h3>
+    <h3 data-i18n="set.title">✦ AI 深度解牌</h3>
 
     <!-- 狀態列 -->
     <div id="api-status-bar" style="margin:10px 0"></div>
 
     <!-- ① Gumroad 購買解鎖區 -->
     <div style="background:rgba(212,175,55,.07);border:1px solid rgba(212,175,55,.25);border-radius:12px;padding:16px;margin-bottom:16px">
-      <div style="font-family:'Cinzel',serif;font-size:.8rem;color:var(--gold);letter-spacing:.1em;margin-bottom:8px">✦ 購買解鎖 · 支持創作</div>
-      <p class="hint" style="margin:0 0 12px">購買後即可解鎖 AI 深度解牌功能，獲得針對你問題的個人化塔羅分析、感情連結牌組解讀與追問對話。</p>
+      <div style="font-family:'Cinzel',serif;font-size:.8rem;color:var(--gold);letter-spacing:.1em;margin-bottom:8px" data-i18n="set.buy.head">✦ 購買解鎖 · 支持創作</div>
+      <p class="hint" style="margin:0 0 12px" data-i18n="set.buy.desc">購買後即可解鎖 AI 深度解牌功能，獲得針對你問題的個人化塔羅分析、感情連結牌組解讀與追問對話。</p>
       <a href="https://huisangie.gumroad.com/l/tarotreading?wanted=true" data-gumroad-overlay-checkout="true"
         style="display:inline-flex;align-items:center;gap:8px;background:var(--gold);color:#1a0a2e;padding:10px 20px;border-radius:50px;font-size:.85rem;font-weight:700;text-decoration:none;margin-bottom:14px;transition:opacity .2s"
-        onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
+        onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'" data-i18n="set.buy.btn">
         ✦ 前往購買解鎖
       </a>
-      <div style="font-size:.75rem;color:var(--muted);margin-bottom:12px">支援信用卡 · PayPal · 購買後以購買時填寫的 email 驗證</div>
+      <div style="font-size:.75rem;color:var(--muted);margin-bottom:12px" data-i18n="set.buy.note">支援信用卡 · PayPal · 購買後以購買時填寫的 email 驗證</div>
       <div id="unlock-status-bar" style="margin-bottom:10px;display:none"></div>
-      <label class="lbl">已購買？輸入購買時的 Email 驗證</label>
+      <label class="lbl" data-i18n="set.buy.label">已購買？輸入購買時的 Email 驗證</label>
       <input class="inp" type="email" id="unlock-input" placeholder="your@email.com" autocomplete="email">
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
-        <button class="btn btn-sm" onclick="verifyEmail()">驗證解鎖</button>
-        <button class="btn btn-sm btn-ghost" onclick="clearVerifiedEmail()">清除驗證</button>
+        <button class="btn btn-sm" onclick="verifyEmail()" data-i18n="set.buy.verify">驗證解鎖</button>
+        <button class="btn btn-sm btn-ghost" onclick="clearVerifiedEmail()" data-i18n="set.buy.clear">清除驗證</button>
       </div>
     </div>
 
     <!-- ② 自備 API Key -->
     <div style="margin-top:4px;border-top:1px solid rgba(212,175,55,.12);padding-top:14px">
-      <div style="font-family:'Cinzel',serif;font-size:.8rem;color:var(--gold);letter-spacing:.1em;margin-bottom:8px">✦ 使用自己的 API Key</div>
+      <div style="font-family:'Cinzel',serif;font-size:.8rem;color:var(--gold);letter-spacing:.1em;margin-bottom:8px" data-i18n="set.key.head">✦ 使用自己的 API Key</div>
       <div style="background:rgba(255,255,255,.04);border-radius:10px;padding:12px;margin-bottom:12px;font-size:.78rem;color:var(--silver);line-height:1.7">
-        <strong style="color:var(--gold);display:block;margin-bottom:6px">為什麼在這裡用自己的 Key，比直接貼給 AI 更好？</strong>
-        ✦ 本站已針對塔羅深度調教 AI 提示詞，包含無視論解牌法、重點牌 vs 輔助牌邏輯、元素分析架構<br>
-        ✦ 内建 78 張牌的感情、事業、逆位細節，以及感情連結牌組、數字象徵等專業解讀資料庫<br>
-        ✦ 自動整合你的占卜脈絡，支援多輪追問對話<br>
-        ✦ 你只要有 Key，其餘全部幫你設定好了
-        <div style="margin-top:8px;padding:8px;background:rgba(212,175,55,.06);border-radius:6px;font-size:.74rem;color:var(--muted)">
-          支援兩種 Key（自動辨識）：<br>
-          ✦ Gemini（免費）：<a href="https://aistudio.google.com" target="_blank" style="color:var(--gold)">aistudio.google.com</a> → Get API Key → Create API Key<br>
-          ✦ OpenAI（付費）：<a href="https://platform.openai.com/api-keys" target="_blank" style="color:var(--gold)">platform.openai.com/api-keys</a> → Create new secret key
-        </div>
+        <strong style="color:var(--gold);display:block;margin-bottom:6px" data-i18n="set.key.why">為什麼在這裡用自己的 Key，比直接貼給 AI 更好？</strong>
+        <span data-i18n="set.key.b1">✦ 本站已針對塔羅深度調教 AI 提示詞，包含無視論解牌法、重點牌 vs 輔助牌邏輯、元素分析架構</span><br>
+        <span data-i18n="set.key.b2">✦ 内建 78 張牌的感情、事業、逆位細節，以及感情連結牌組、數字象徵等專業解讀資料庫</span><br>
+        <span data-i18n="set.key.b3">✦ 自動整合你的占卜脈絡，支援多輪追問對話</span><br>
+        <span data-i18n="set.key.b4">✦ 你只要有 Key，其餘全部幫你設定好了</span>
+        <div style="margin-top:8px;padding:8px;background:rgba(212,175,55,.06);border-radius:6px;font-size:.74rem;color:var(--muted)" data-i18n-html="set.key.gethtml"></div>
       </div>
-      <label class="lbl">貼上你的 Gemini 或 OpenAI API Key</label>
+      <label class="lbl" data-i18n="set.key.label">貼上你的 Gemini 或 OpenAI API Key</label>
       <input class="inp" type="password" id="api-key-input" placeholder="AIza...（Gemini）或 sk-...（OpenAI）">
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
-        <button class="btn btn-sm" onclick="saveApiKey()">儲存並啟用</button>
-        <button class="btn btn-sm btn-ghost" onclick="clearApiKey()">清除</button>
-        <button class="btn btn-sm btn-ghost" onclick="testApiKey()">測試連線</button>
+        <button class="btn btn-sm" onclick="saveApiKey()" data-i18n="set.key.save">儲存並啟用</button>
+        <button class="btn btn-sm btn-ghost" onclick="clearApiKey()" data-i18n="set.key.clear">清除</button>
+        <button class="btn btn-sm btn-ghost" onclick="testApiKey()" data-i18n="set.key.test">測試連線</button>
       </div>
     </div>
 
     <hr class="divider-line" style="margin-top:20px">
-    <h3 style="margin-top:16px">✦ 關於抽牌公平性</h3>
-    <p class="hint" style="margin-top:10px">
-      本程式使用 <strong style="color:var(--gold)">crypto.getRandomValues()</strong>——瀏覽器的加密安全隨機算法，
-      與任何對話記憶、AI、或過去紀錄完全無關。<br><br>
-      每次洗牌都是獨立事件，結果由當下按下洗牌的瞬間決定，無任何偏向。
-    </p>
+    <h3 style="margin-top:16px" data-i18n="set.fair.title">✦ 關於抽牌公平性</h3>
+    <p class="hint" style="margin-top:10px" data-i18n-html="set.fair.body"></p>
   </div>
 </div>
 
 <!-- ══ WELCOME ══ -->
 <div id="s-welcome" class="screen on">
   <div class="w-divider"><span class="wline"></span><span class="wgem">✦</span><span class="wgem" style="animation-delay:.5s;font-size:.95rem">◆</span><span class="wgem" style="animation-delay:1s">✦</span><span class="wline"></span></div>
-  <h1 class="t-gold t-title">塔羅神諭</h1>
-  <p class="t-sub">讓牌卡引領你走向內心的真相</p>
+  <h1 class="t-gold t-title" data-i18n="brand">塔羅神諭</h1>
+  <p class="t-sub" data-i18n="w.sub">讓牌卡引領你走向內心的真相</p>
   <div class="card-fan"><div class="fan-card"></div><div class="fan-card"></div><div class="fan-card"></div></div>
   <div>
-    <button class="btn" onclick="startNoProject()">✦ 開始占卜 ✦</button>
-    <button class="btn" onclick="go('s-projects')">✦ 專案占卜 ✦</button>
+    <button class="btn" onclick="startNoProject()" data-i18n="w.start">✦ 開始占卜 ✦</button>
+    <button class="btn" onclick="go('s-projects')" data-i18n="w.project">✦ 專案占卜 ✦</button>
   </div>
   <div style="margin-top:14px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
-    <button class="btn btn-ghost btn-sm" onclick="showHistory()">歷史記錄</button>
-    <button class="btn btn-ghost btn-sm" onclick="addToHome()">⭐ 加入書籤 / 手機桌面</button>
+    <button class="btn btn-ghost btn-sm" onclick="showHistory()" data-i18n="w.history">歷史記錄</button>
+    <button class="btn btn-ghost btn-sm" onclick="addToHome()" data-i18n="w.addhome">⭐ 加入書籤 / 手機桌面</button>
   </div>
-  <p style="margin-top:36px;font-size:.72rem;color:rgba(154,141,181,.35);letter-spacing:.12em">大阿爾克那 · 22張主牌 · 偉特圖像 · 加密隨機</p>
+  <p style="margin-top:36px;font-size:.72rem;color:rgba(154,141,181,.35);letter-spacing:.12em" data-i18n="w.tagline">大阿爾克那 · 22張主牌 · 偉特圖像 · 加密隨機</p>
 
   <!-- AI 說明連結 -->
   <div style="margin-top:22px;max-width:480px;width:100%">
     <div id="ai-info-bar" style="border:1px solid rgba(212,175,55,.2);background:rgba(42,22,96,.2);padding:14px 18px;cursor:pointer;transition:all .3s" onclick="toggleAiInfo()">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
-        <span style="font-family:'Cinzel',serif;font-size:.75rem;color:var(--gold);letter-spacing:.1em">✦ 如何啟用 AI 個人化解牌？</span>
+        <span style="font-family:'Cinzel',serif;font-size:.75rem;color:var(--gold);letter-spacing:.1em" data-i18n="w.ai.q">✦ 如何啟用 AI 個人化解牌？</span>
         <span id="ai-info-arr" style="color:var(--gold);font-size:1rem;transition:transform .3s;display:inline-block">›</span>
       </div>
     </div>
     <div id="ai-info-panel" style="display:none;border:1px solid rgba(212,175,55,.15);border-top:none;background:rgba(8,3,26,.4);padding:18px 20px;text-align:left">
-      <p style="font-size:.82rem;color:var(--muted);line-height:2;margin-bottom:14px">
-        本程式支援 <strong style="color:var(--gold)">Google Gemini AI</strong> 解牌，針對你的問題與牌陣給出深度個人化分析。<br>
-        未設定時也可正常使用，以內建牌義解讀。
-      </p>
+      <p style="font-size:.82rem;color:var(--muted);line-height:2;margin-bottom:14px" data-i18n-html="w.ai.intro"></p>
       <div style="border-left:2px solid rgba(212,175,55,.35);padding-left:14px;margin-bottom:16px">
-        <p style="font-family:'Cinzel',serif;font-size:.72rem;color:var(--gold);letter-spacing:.1em;margin-bottom:10px">方法一：購買解鎖（推薦）</p>
-        <p style="font-size:.8rem;color:var(--muted);line-height:2.1">
-          1. 點右上角 <strong style="color:var(--silver)">⚙</strong> → 點「前往購買解鎖」<br>
-          2. 在彈出視窗中完成購買<br>
-          3. 輸入購買時填寫的 Email → 點「驗證解鎖」
-        </p>
+        <p style="font-family:'Cinzel',serif;font-size:.72rem;color:var(--gold);letter-spacing:.1em;margin-bottom:10px" data-i18n="w.ai.m1"></p>
+        <p style="font-size:.8rem;color:var(--muted);line-height:2.1" data-i18n-html="w.ai.m1.s"></p>
       </div>
       <div style="border-left:2px solid rgba(212,175,55,.15);padding-left:14px;margin-bottom:16px">
-        <p style="font-family:'Cinzel',serif;font-size:.72rem;color:var(--gold);letter-spacing:.1em;margin-bottom:10px">方法二：自備 API Key（支援 Gemini / OpenAI）</p>
-        <p style="font-size:.8rem;color:var(--muted);line-height:2.1">
-          1. Gemini 免費取得：<a href="https://aistudio.google.com" target="_blank" style="color:var(--gold);text-decoration:none;border-bottom:1px solid rgba(212,175,55,.4)">aistudio.google.com</a>，或 OpenAI：<a href="https://platform.openai.com/api-keys" target="_blank" style="color:var(--gold);text-decoration:none;border-bottom:1px solid rgba(212,175,55,.4)">platform.openai.com</a><br>
-          2. 點右上角 <strong style="color:var(--silver)">⚙</strong> → 貼上 API Key → 儲存（自動辨識種類）
-        </p>
+        <p style="font-family:'Cinzel',serif;font-size:.72rem;color:var(--gold);letter-spacing:.1em;margin-bottom:10px" data-i18n="w.ai.m2"></p>
+        <p style="font-size:.8rem;color:var(--muted);line-height:2.1" data-i18n-html="w.ai.m2.s"></p>
       </div>
-      <p style="font-size:.75rem;color:rgba(154,141,181,.55);line-height:1.8">
-        ✦ 購買一次，永久解鎖本裝置<br>
-        ✦ 自備 Key 完全免費，每分鐘可解牌 15 次<br>
-        ✦ 兩種方式皆不會對外傳送個人資料
-      </p>
+      <p style="font-size:.75rem;color:rgba(154,141,181,.55);line-height:1.8" data-i18n-html="w.ai.foot"></p>
     </div>
   </div>
 
   <div style="margin-top:32px;font-size:.68rem;color:rgba(154,141,181,.3);letter-spacing:.08em;text-align:center;line-height:2">
-    © 2026 塔羅神諭 · All Rights Reserved<br>
-    <a href="javascript:void(0)" onclick="window.location.href='mai'+'lto:'+'angiehu'+'@'+'gmail.com'" style="color:rgba(212,175,55,.35);text-decoration:none;transition:color .3s" onmouseover="this.style.color='rgba(212,175,55,.7)'" onmouseout="this.style.color='rgba(212,175,55,.35)'">聯繫我們</a>
+    <span data-i18n="w.copyright">© 2026 塔羅神諭 · All Rights Reserved</span><br>
+    <a href="javascript:void(0)" onclick="window.location.href='mai'+'lto:'+'angiehu'+'@'+'gmail.com'" style="color:rgba(212,175,55,.35);text-decoration:none;transition:color .3s" onmouseover="this.style.color='rgba(212,175,55,.7)'" onmouseout="this.style.color='rgba(212,175,55,.35)'" data-i18n="w.contact">聯繫我們</a>
   </div>
 </div>
 
@@ -475,51 +457,51 @@ textarea.inp{resize:vertical;min-height:90px}
 <!-- ══ SPREAD ══ -->
 <div id="s-spread" class="screen">
   <div class="proj-banner" id="spread-banner"></div>
-  <h2 class="t-section t-gold">選擇牌陣</h2>
+  <h2 class="t-section t-gold" data-i18n="sp.title">選擇牌陣</h2>
   <div class="t-divider">— ✦ —</div>
   <div class="spread-grid">
     <div class="spread-opt" onclick="pickSpread('three')">
       <span class="spread-icon">☽ ☉ ☾</span>
-      <div class="spread-name">三張牌陣</div>
-      <div class="spread-desc">過去 · 現在 · 未來<br>探索時間的流動</div>
-      <div class="spread-fit">適合：想了解一件事的來龍去脈與發展趨勢，如「這段關係會怎麼發展」</div>
+      <div class="spread-name" data-i18n="sp.three.name">三張牌陣</div>
+      <div class="spread-desc" data-i18n-html="sp.three.desc">過去 · 現在 · 未來<br>探索時間的流動</div>
+      <div class="spread-fit" data-i18n="sp.three.fit">適合：想了解一件事的來龍去脈與發展趨勢，如「這段關係會怎麼發展」</div>
     </div>
     <div class="spread-opt" onclick="pickSpread('triangle')">
       <span class="spread-icon">▲</span>
-      <div class="spread-name">聖三角牌陣</div>
-      <div class="spread-desc">我以為的狀況 · 真實的狀況 · 建言<br>看見事件的真相與盲點</div>
-      <div class="spread-fit">適合：卡關、想不通的事，如「在現在的事件中，有我沒注意到的盲點嗎」</div>
+      <div class="spread-name" data-i18n="sp.tri.name">聖三角牌陣</div>
+      <div class="spread-desc" data-i18n-html="sp.tri.desc">我以為的狀況 · 真實的狀況 · 建言<br>看見事件的真相與盲點</div>
+      <div class="spread-fit" data-i18n="sp.tri.fit">適合：卡關、想不通的事，如「在現在的事件中，有我沒注意到的盲點嗎」</div>
     </div>
     <div class="spread-opt" onclick="pickSpread('five')">
       <span class="spread-icon">✦✦✦✦✦</span>
-      <div class="spread-name">五張無視論</div>
-      <div class="spread-desc">無視論五牌陣<br>重點牌 · 輔助牌 · 元素分析</div>
-      <div class="spread-fit">適合：想深入了解單一主題的整體能量，如「接下來這段感情的走向」</div>
+      <div class="spread-name" data-i18n="sp.five.name">五張無視論</div>
+      <div class="spread-desc" data-i18n-html="sp.five.desc">無視論五牌陣<br>重點牌 · 輔助牌 · 元素分析</div>
+      <div class="spread-fit" data-i18n="sp.five.fit">適合：想深入了解單一主題的整體能量，如「接下來這段感情的走向」</div>
     </div>
     <div class="spread-opt" onclick="pickSpread('choice')">
       <span class="spread-icon">⚖</span>
-      <div class="spread-name">二擇一牌陣</div>
-      <div class="spread-desc">兩條路的深度分析<br>幫你看清選擇</div>
-      <div class="spread-fit">適合：在兩個選項間猶豫，如「該留在現職還是接受新工作」</div>
+      <div class="spread-name" data-i18n="sp.choice.name">二擇一牌陣</div>
+      <div class="spread-desc" data-i18n-html="sp.choice.desc">兩條路的深度分析<br>幫你看清選擇</div>
+      <div class="spread-fit" data-i18n="sp.choice.fit">適合：在兩個選項間猶豫，如「該留在現職還是接受新工作」</div>
     </div>
     <div class="spread-opt" onclick="pickSpread('one')">
       <span class="spread-icon">✦</span>
-      <div class="spread-name">單張牌陣</div>
-      <div class="spread-desc">今日訊息 · 快速指引<br>一牌道盡核心</div>
-      <div class="spread-fit">適合：簡單明確的問題或每日指引，如「今天我該注意什麼」</div>
+      <div class="spread-name" data-i18n="sp.one.name">單張牌陣</div>
+      <div class="spread-desc" data-i18n-html="sp.one.desc">今日訊息 · 快速指引<br>一牌道盡核心</div>
+      <div class="spread-fit" data-i18n="sp.one.fit">適合：簡單明確的問題或每日指引，如「今天我該注意什麼」</div>
     </div>
     <div class="spread-opt" onclick="pickSpread('custom')">
       <span class="spread-icon">✧</span>
-      <div class="spread-name">自訂牌陣</div>
-      <div class="spread-desc">設計你專屬的牌陣<br>最多 10 張</div>
-      <div class="spread-fit">適合：有自己習慣的牌陣，自由定義每個位置的意義</div>
+      <div class="spread-name" data-i18n="sp.custom.name">自訂牌陣</div>
+      <div class="spread-desc" data-i18n-html="sp.custom.desc">設計你專屬的牌陣<br>最多 10 張</div>
+      <div class="spread-fit" data-i18n="sp.custom.fit">適合：有自己習慣的牌陣，自由定義每個位置的意義</div>
     </div>
   </div>
 </div>
 
 <!-- ══ QUESTION ══ -->
 <div id="s-question" class="screen">
-  <h2 class="t-section t-gold" id="q-title">輸入你的問題</h2>
+  <h2 class="t-section t-gold" id="q-title" data-i18n="q.title">輸入你的問題</h2>
   <div class="t-divider">— ✦ —</div>
   <div class="form-wrap">
     <div id="custom-area" style="display:none;margin-bottom:24px">
@@ -528,107 +510,102 @@ textarea.inp{resize:vertical;min-height:90px}
       <div id="custom-pos-list"></div>
     </div>
     <div id="q-hint" style="display:none;margin-bottom:14px;padding:10px 14px;border-left:2px solid rgba(212,175,55,.4);background:rgba(212,175,55,.05);font-size:.78rem;color:rgba(212,175,55,.75);line-height:1.8;text-align:left"></div>
-    <label class="lbl">你的問題</label>
-    <textarea class="inp" id="q-input" placeholder="寫下你心中想要了解的事..."></textarea>
+    <label class="lbl" data-i18n="q.label">你的問題</label>
+    <textarea class="inp" id="q-input" data-i18n-ph="q.ph" placeholder="寫下你心中想要了解的事..."></textarea>
     <div style="text-align:center;margin-top:8px">
-      <button class="btn" onclick="beginMeditation()">✦ 進入冥想 ✦</button>
+      <button class="btn" onclick="beginMeditation()" data-i18n="q.go">✦ 進入冥想 ✦</button>
     </div>
   </div>
 </div>
 
 <!-- ══ MEDITATION ══ -->
 <div id="s-meditation" class="screen">
-  <h2 class="t-section t-gold">靜心冥想</h2>
+  <h2 class="t-section t-gold" data-i18n="med.title">靜心冥想</h2>
   <div class="t-divider">— ✦ —</div>
   <div class="med-q" id="med-q-disp"></div>
   <div class="med-ring"><div class="breath-ball"></div></div>
-  <div class="breath-word" id="breath-word">吸氣...</div>
+  <div class="breath-word" id="breath-word"></div>
   <div class="timer-num" id="timer-num">15</div>
-  <p class="t-muted" style="margin-bottom:20px;letter-spacing:.1em">請專注於問題，讓答案從心中自然升起</p>
-  <button class="btn" id="btn-shuffle" onclick="beginShuffle()" disabled>✦ 開始洗牌 ✦</button>
-  <button class="btn btn-ghost btn-sm" onclick="skipMeditation()" style="margin-top:8px;opacity:.5;font-size:.75rem;letter-spacing:.1em;border-color:transparent">跳過冥想</button>
+  <p class="t-muted" style="margin-bottom:20px;letter-spacing:.1em" data-i18n="med.guide">請專注於問題，讓答案從心中自然升起</p>
+  <button class="btn" id="btn-shuffle" onclick="beginShuffle()" disabled data-i18n="med.shuffle">✦ 開始洗牌 ✦</button>
+  <button class="btn btn-ghost btn-sm" onclick="skipMeditation()" style="margin-top:8px;opacity:.5;font-size:.75rem;letter-spacing:.1em;border-color:transparent" data-i18n="med.skip">跳過冥想</button>
 
   <!-- 靜心音場說明 -->
   <div style="margin-top:26px;max-width:440px;width:100%">
     <div style="border:1px solid rgba(212,175,55,.18);background:rgba(8,3,26,.35);padding:13px 18px;cursor:pointer;transition:all .3s" onclick="toggleSoundInfo()">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
-        <span style="font-family:'Cinzel',serif;font-size:.72rem;color:rgba(212,175,55,.8);letter-spacing:.1em">♪ 關於靜心音場</span>
+        <span style="font-family:'Cinzel',serif;font-size:.72rem;color:rgba(212,175,55,.8);letter-spacing:.1em" data-i18n="med.snd.head">♪ 關於靜心音場</span>
         <span id="sound-info-arr" style="color:var(--gold);font-size:1rem;transition:transform .3s;display:inline-block">›</span>
       </div>
     </div>
     <div id="sound-info-panel" style="display:none;border:1px solid rgba(212,175,55,.12);border-top:none;background:rgba(8,3,26,.45);padding:16px 20px;text-align:left">
-      <p style="font-size:.78rem;color:var(--muted);line-height:2">
-        <strong style="color:var(--gold)">海浪聲</strong>——由近浪、遠浪與碎浪三層交織而成，節奏彼此錯開，如真實海岸般自然不重複。<br>
-        <strong style="color:var(--gold)">Theta 靜心音波</strong>——海浪之下墊著極輕的雙耳節拍（左耳 108Hz、右耳 114Hz），大腦會感知到 6Hz 的差頻，對應深度放鬆與冥想時的 theta 腦波頻率。<br><br>
-        <span style="color:rgba(212,175,55,.7)">✦ 建議戴耳機聆聽</span>——雙耳節拍需要左右耳接收不同頻率才有效果。<br>
-        <span style="color:rgba(154,141,181,.6)">音場由瀏覽器即時生成，每次聆聽都是獨一無二的海。右下角 ♪ 可隨時開關。</span>
-      </p>
+      <p style="font-size:.78rem;color:var(--muted);line-height:2" data-i18n-html="med.snd.body"></p>
     </div>
   </div>
 </div>
 
 <!-- ══ SHUFFLE ══ -->
 <div id="s-shuffle" class="screen">
-  <h2 class="t-section t-gold">洗牌中</h2>
+  <h2 class="t-section t-gold" data-i18n="sh.title">洗牌中</h2>
   <div class="t-divider">— ✦ —</div>
-  <p class="t-muted" style="margin-bottom:2px">將你的意念注入牌卡之中</p>
-  <div class="rand-badge">🔐 加密隨機算法 · 每次完全獨立</div>
+  <p class="t-muted" style="margin-bottom:2px" data-i18n="sh.sub">將你的意念注入牌卡之中</p>
+  <div class="rand-badge" data-i18n="sh.badge">🔐 加密隨機算法 · 每次完全獨立</div>
   <div class="shuffle-wrap" id="shuffle-wrap"></div>
-  <button class="btn" id="btn-pick" onclick="beginPick()" style="display:none;margin-top:16px">✦ 開始抽牌 ✦</button>
+  <button class="btn" id="btn-pick" onclick="beginPick()" style="display:none;margin-top:16px" data-i18n="sh.pick">✦ 開始抽牌 ✦</button>
 </div>
 
 <!-- ══ PICK ══ -->
 <div id="s-pick" class="screen">
-  <h2 class="t-section t-gold" id="pick-title">選擇牌卡</h2>
+  <h2 class="t-section t-gold" id="pick-title" data-i18n="pick.title">選擇牌卡</h2>
   <div class="t-divider">— ✦ —</div>
-  <p class="t-muted">以直覺選擇，還需選擇 <span id="pick-left" style="color:var(--gold);font-weight:700"></span> 張</p>
+  <p class="t-muted"><span data-i18n="pick.left.pre">以直覺選擇，還需選擇 </span><span id="pick-left" style="color:var(--gold);font-weight:700"></span><span data-i18n="pick.left.suf"> 張</span></p>
   <div class="cards-grid" id="cards-grid"></div>
 </div>
 
 <!-- ══ READING ══ -->
 <div id="s-reading" class="screen">
   <div class="reading-wrap">
-    <h2 class="t-section t-gold">✦ 神諭解讀 ✦</h2>
+    <h2 class="t-section t-gold" data-i18n="rd.head">✦ 神諭解讀 ✦</h2>
     <div class="t-divider">— ✦ —</div>
     <div class="proj-banner" id="reading-proj-banner"></div>
     <p style="color:var(--muted);font-style:italic;font-size:.88rem;margin-bottom:18px" id="r-q-disp"></p>
     <div class="reading-spread" id="reading-spread"></div>
     <div class="interp-box">
-      <div class="interp-h">✦ 整體解讀</div>
+      <div class="interp-h" data-i18n="rd.interp">✦ 整體解讀</div>
       <div id="interp-main"></div>
     </div>
     <div id="chat-area" style="display:none">
       <div class="chat-box">
-        <div class="interp-h" style="padding:20px 24px 14px;margin-bottom:0;border-bottom:1px solid rgba(212,175,55,.15)">✦ 繼續提問</div>
+        <div class="interp-h" style="padding:20px 24px 14px;margin-bottom:0;border-bottom:1px solid rgba(212,175,55,.15)" data-i18n="rd.chat">✦ 繼續提問</div>
         <div class="chat-msgs" id="chat-msgs"></div>
         <div class="chat-input-row">
-          <input class="chat-input" id="chat-input" placeholder="針對這次解牌繼續提問..." onkeydown="if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing&&event.keyCode!==229){event.preventDefault();sendChat()}">
-          <button class="chat-send" onclick="sendChat()">送出</button>
+          <input class="chat-input" id="chat-input" data-i18n-ph="rd.chat.ph" placeholder="針對這次解牌繼續提問..." onkeydown="if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing&&event.keyCode!==229){event.preventDefault();sendChat()}">
+          <button class="chat-send" onclick="sendChat()" data-i18n="rd.chat.send">送出</button>
         </div>
       </div>
     </div>
     <div class="interp-box" id="card-details-box" style="margin-top:18px">
-      <div class="interp-h">✦ 單牌解析</div>
+      <div class="interp-h" data-i18n="rd.detail">✦ 單牌解析</div>
       <div id="card-details"></div>
     </div>
     <div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:26px">
-      <button class="btn" onclick="saveReading()">儲存記錄</button>
-      <button class="btn" onclick="go('s-spread')">再占一次</button>
-      <button class="btn btn-ghost" onclick="go('s-welcome')">回首頁</button>
+      <button class="btn" onclick="saveReading()" data-i18n="rd.save">儲存記錄</button>
+      <button class="btn" onclick="go('s-spread')" data-i18n="rd.again">再占一次</button>
+      <button class="btn btn-ghost" onclick="go('s-welcome')" data-i18n="rd.home">回首頁</button>
     </div>
   </div>
 </div>
 
 <!-- ══ HISTORY ══ -->
 <div id="s-history" class="screen">
-  <h2 class="t-section t-gold">占卜記錄</h2>
+  <h2 class="t-section t-gold" data-i18n="h.title">占卜記錄</h2>
   <div class="t-divider">— ✦ —</div>
   <div style="max-width:660px;width:100%;margin-bottom:6px">
-    <input class="inp" id="hist-search" placeholder="🔍 搜尋關鍵字（問題、牌名、解讀內容）..." oninput="renderHistList()" style="margin-bottom:10px">
+    <input class="inp" id="hist-search" data-i18n-ph="h.search.ph" placeholder="🔍 搜尋關鍵字（問題、牌名、解讀內容）..." oninput="renderHistList()" style="margin-bottom:10px">
     <div id="hist-topics" style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-bottom:14px"></div>
   </div>
   <div class="hist-list" id="hist-list" style="max-width:660px;width:100%;text-align:left"></div>
-  <button class="btn btn-ghost" onclick="goBack()" style="margin-top:16px">返回</button>
+  <button class="btn btn-ghost" onclick="goBack()" style="margin-top:16px" data-i18n="nav.back2">返回</button>
 </div>
 
 <script>
@@ -637,6 +614,155 @@ textarea.inp{resize:vertical;min-height:90px}
 // ══════════════════════════════════════════
 const GUMROAD_URL = 'https://huisangie.gumroad.com/l/tarotreading';
 const WORKER_URL = 'https://tarot-worker.angiehu.workers.dev';
+
+// ══════════════════════════════════════════
+//  i18n 多語系（瀏覽器自動偵測 + 手動切換）
+// ══════════════════════════════════════════
+let LANG = (function(){
+  const saved = localStorage.getItem('tr_lang');
+  if(saved==='zh'||saved==='en') return saved;
+  return /^zh/i.test(navigator.language||navigator.userLanguage||'') ? 'zh' : 'en';
+})();
+const T = {};
+function t(k){ const e=T[k]; return e ? (e[LANG]!=null?e[LANG]:e.zh) : k; }
+// 行內雙語助手：用於 JS 動態產生的字串（toast、解讀文案等）
+function L(zh,en){ return LANG==='zh' ? zh : en; }
+function applyLang(){
+  document.documentElement.lang = LANG==='zh' ? 'zh-TW' : 'en';
+  document.querySelectorAll('[data-i18n]').forEach(el=>{ el.textContent=t(el.getAttribute('data-i18n')); });
+  document.querySelectorAll('[data-i18n-html]').forEach(el=>{ el.innerHTML=t(el.getAttribute('data-i18n-html')); });
+  document.querySelectorAll('[data-i18n-ph]').forEach(el=>{ el.setAttribute('placeholder', t(el.getAttribute('data-i18n-ph'))); });
+  document.querySelectorAll('[data-i18n-title]').forEach(el=>{ el.setAttribute('title', t(el.getAttribute('data-i18n-title'))); });
+  const lb=document.getElementById('lang-btn'); if(lb) lb.textContent=(LANG==='zh'?'EN':'中');
+}
+function setLang(l){ LANG=l; localStorage.setItem('tr_lang',l); applyLang(); if(typeof onLangChange==='function') onLangChange(); }
+function toggleLang(){ setLang(LANG==='zh'?'en':'zh'); }
+// 若使用者正停在某個畫面，切換語言時重繪動態內容
+function onLangChange(){
+  const cur=document.querySelector('.screen.on');
+  if(cur&&cur.id==='s-history') showHistory();
+}
+
+Object.assign(T, {
+  'brand':{zh:'塔羅神諭',en:'Tarot Oracle'},
+  'nav.back':{zh:'← 返回',en:'← Back'},
+  'nav.back2':{zh:'返回',en:'Back'},
+  'settings.btn.label':{zh:'AI 解牌設定',en:'AI Reading'},
+  'settings.btn.title':{zh:'解鎖 AI 深度解牌 / API 設定',en:'Unlock AI reading / API settings'},
+  'music.btn.title':{zh:'靜心音場 開/關：海浪聲＋theta 靜心音波（建議戴耳機）',en:'Meditation sound on/off: ocean waves + theta soundwave (headphones recommended)'},
+  // ── Settings modal ──
+  'set.title':{zh:'✦ AI 深度解牌',en:'✦ AI Deep Reading'},
+  'set.buy.head':{zh:'✦ 購買解鎖 · 支持創作',en:'✦ Unlock by Purchase · Support the Creator'},
+  'set.buy.desc':{zh:'購買後即可解鎖 AI 深度解牌功能，獲得針對你問題的個人化塔羅分析、感情連結牌組解讀與追問對話。',en:'Purchase to unlock AI deep readings — personalized analysis of your question, relationship card-combo insights, and unlimited follow-up chat.'},
+  'set.buy.btn':{zh:'✦ 前往購買解鎖',en:'✦ Purchase to Unlock'},
+  'set.buy.note':{zh:'支援信用卡 · PayPal · 購買後以購買時填寫的 email 驗證',en:'Credit card · PayPal · Verify with the email used at checkout'},
+  'set.buy.label':{zh:'已購買？輸入購買時的 Email 驗證',en:'Already purchased? Enter your checkout email'},
+  'set.buy.verify':{zh:'驗證解鎖',en:'Verify & Unlock'},
+  'set.buy.clear':{zh:'清除驗證',en:'Clear'},
+  'set.key.head':{zh:'✦ 使用自己的 API Key',en:'✦ Use Your Own API Key'},
+  'set.key.why':{zh:'為什麼在這裡用自己的 Key，比直接貼給 AI 更好？',en:'Why use your own key here instead of pasting it into a chatbot?'},
+  'set.key.b1':{zh:'✦ 本站已針對塔羅深度調教 AI 提示詞，包含無視論解牌法、重點牌 vs 輔助牌邏輯、元素分析架構',en:'✦ Prompts fine-tuned for tarot — Wuxi method, key vs. supporting cards, elemental analysis'},
+  'set.key.b2':{zh:'✦ 内建 78 張牌的感情、事業、逆位細節，以及感情連結牌組、數字象徵等專業解讀資料庫',en:'✦ Built-in database of all 78 cards: love, career, reversals, card combos, numerology'},
+  'set.key.b3':{zh:'✦ 自動整合你的占卜脈絡，支援多輪追問對話',en:'✦ Weaves in your reading context, supports multi-turn follow-up chat'},
+  'set.key.b4':{zh:'✦ 你只要有 Key，其餘全部幫你設定好了',en:'✦ Just bring a key — everything else is set up for you'},
+  'set.key.gethtml':{zh:'支援兩種 Key（自動辨識）：<br>✦ Gemini（免費）：<a href="https://aistudio.google.com" target="_blank" style="color:var(--gold)">aistudio.google.com</a> → Get API Key → Create API Key<br>✦ OpenAI（付費）：<a href="https://platform.openai.com/api-keys" target="_blank" style="color:var(--gold)">platform.openai.com/api-keys</a> → Create new secret key',en:'Two key types supported (auto-detected):<br>✦ Gemini (free): <a href="https://aistudio.google.com" target="_blank" style="color:var(--gold)">aistudio.google.com</a> → Get API Key → Create API Key<br>✦ OpenAI (paid): <a href="https://platform.openai.com/api-keys" target="_blank" style="color:var(--gold)">platform.openai.com/api-keys</a> → Create new secret key'},
+  'set.key.label':{zh:'貼上你的 Gemini 或 OpenAI API Key',en:'Paste your Gemini or OpenAI API key'},
+  'set.key.save':{zh:'儲存並啟用',en:'Save & Enable'},
+  'set.key.clear':{zh:'清除',en:'Clear'},
+  'set.key.test':{zh:'測試連線',en:'Test'},
+  'set.fair.title':{zh:'✦ 關於抽牌公平性',en:'✦ On Shuffle Fairness'},
+  'set.fair.body':{zh:'本程式使用 <strong style="color:var(--gold)">crypto.getRandomValues()</strong>——瀏覽器的加密安全隨機算法，與任何對話記憶、AI、或過去紀錄完全無關。<br><br>每次洗牌都是獨立事件，結果由當下按下洗牌的瞬間決定，無任何偏向。',en:'This app uses <strong style="color:var(--gold)">crypto.getRandomValues()</strong> — the browser\'s cryptographically secure randomizer, completely independent of any chat memory, AI, or past records.<br><br>Every shuffle is an independent event, decided at the moment you shuffle, with no bias.'},
+  // ── Welcome ──
+  'w.sub':{zh:'讓牌卡引領你走向內心的真相',en:'Let the cards guide you to your inner truth'},
+  'w.start':{zh:'✦ 開始占卜 ✦',en:'✦ Begin Reading ✦'},
+  'w.project':{zh:'✦ 專案占卜 ✦',en:'✦ Project Reading ✦'},
+  'w.history':{zh:'歷史記錄',en:'History'},
+  'w.addhome':{zh:'⭐ 加入書籤 / 手機桌面',en:'⭐ Bookmark / Add to Home'},
+  'w.tagline':{zh:'大阿爾克那 · 22張主牌 · 偉特圖像 · 加密隨機',en:'Major & Minor Arcana · 78 cards · Rider–Waite · Crypto-random'},
+  'w.ai.q':{zh:'✦ 如何啟用 AI 個人化解牌？',en:'✦ How to enable personalized AI readings?'},
+  'w.ai.intro':{zh:'本程式支援 <strong style="color:var(--gold)">Google Gemini</strong> 與 <strong style="color:var(--gold)">OpenAI</strong> 解牌，針對你的問題與牌陣給出深度個人化分析。<br>未設定時也可正常使用，以內建牌義解讀。',en:'Supports <strong style="color:var(--gold)">Google Gemini</strong> and <strong style="color:var(--gold)">OpenAI</strong> for readings — deep personalized analysis of your question and spread.<br>Works without setup too, using built-in card meanings.'},
+  'w.ai.m1':{zh:'方法一：購買解鎖（推薦）',en:'Option 1: Unlock by purchase (recommended)'},
+  'w.ai.m1.s':{zh:'1. 點右上角 <strong style="color:var(--silver)">⚙</strong> → 點「前往購買解鎖」<br>2. 在彈出視窗中完成購買<br>3. 輸入購買時填寫的 Email → 點「驗證解鎖」',en:'1. Tap <strong style="color:var(--silver)">⚙</strong> top-right → "Purchase to Unlock"<br>2. Complete checkout in the popup<br>3. Enter your checkout email → "Verify & Unlock"'},
+  'w.ai.m2':{zh:'方法二：自備 API Key（支援 Gemini / OpenAI）',en:'Option 2: Bring your own API key (Gemini / OpenAI)'},
+  'w.ai.m2.s':{zh:'1. Gemini 免費取得：<a href="https://aistudio.google.com" target="_blank" style="color:var(--gold);text-decoration:none;border-bottom:1px solid rgba(212,175,55,.4)">aistudio.google.com</a>，或 OpenAI：<a href="https://platform.openai.com/api-keys" target="_blank" style="color:var(--gold);text-decoration:none;border-bottom:1px solid rgba(212,175,55,.4)">platform.openai.com</a><br>2. 點右上角 <strong style="color:var(--silver)">⚙</strong> → 貼上 API Key → 儲存（自動辨識種類）',en:'1. Get Gemini free at <a href="https://aistudio.google.com" target="_blank" style="color:var(--gold);text-decoration:none;border-bottom:1px solid rgba(212,175,55,.4)">aistudio.google.com</a>, or OpenAI at <a href="https://platform.openai.com/api-keys" target="_blank" style="color:var(--gold);text-decoration:none;border-bottom:1px solid rgba(212,175,55,.4)">platform.openai.com</a><br>2. Tap <strong style="color:var(--silver)">⚙</strong> top-right → paste key → save (auto-detected)'},
+  'w.ai.foot':{zh:'✦ 購買一次，永久解鎖本裝置<br>✦ 自備 Key 完全免費，每分鐘可解牌 15 次<br>✦ 兩種方式皆不會對外傳送個人資料',en:'✦ Buy once, unlocked forever on this device<br>✦ Your own key is free, ~15 readings per minute<br>✦ Neither method sends your personal data anywhere'},
+  'w.copyright':{zh:'© 2026 塔羅神諭 · All Rights Reserved',en:'© 2026 Tarot Oracle · All Rights Reserved'},
+  'w.contact':{zh:'聯繫我們',en:'Contact Us'},
+  // ── Spread select ──
+  'sp.title':{zh:'選擇牌陣',en:'Choose a Spread'},
+  'sp.three.name':{zh:'三張牌陣',en:'Three-Card Spread'},
+  'sp.three.desc':{zh:'過去 · 現在 · 未來<br>探索時間的流動',en:'Past · Present · Future<br>Explore the flow of time'},
+  'sp.three.fit':{zh:'適合：想了解一件事的來龍去脈與發展趨勢，如「這段關係會怎麼發展」',en:'Best for: understanding how something unfolds — e.g. "How will this relationship develop?"'},
+  'sp.tri.name':{zh:'聖三角牌陣',en:'Holy Triangle Spread'},
+  'sp.tri.desc':{zh:'我以為的狀況 · 真實的狀況 · 建言<br>看見事件的真相與盲點',en:'What I assume · The truth · Advice<br>See the reality and your blind spots'},
+  'sp.tri.fit':{zh:'適合：卡關、想不通的事，如「在現在的事件中，有我沒注意到的盲點嗎」',en:'Best for: feeling stuck — e.g. "Is there a blind spot I\'m missing in this situation?"'},
+  'sp.five.name':{zh:'五張無視論',en:'Five-Card Wuxi'},
+  'sp.five.desc':{zh:'無視論五牌陣<br>重點牌 · 輔助牌 · 元素分析',en:'Wuxi method<br>Key card · supporting cards · elements'},
+  'sp.five.fit':{zh:'適合：想深入了解單一主題的整體能量，如「接下來這段感情的走向」',en:'Best for: the overall energy of one theme — e.g. "Where is this relationship heading?"'},
+  'sp.choice.name':{zh:'二擇一牌陣',en:'Either-Or Spread'},
+  'sp.choice.desc':{zh:'兩條路的深度分析<br>幫你看清選擇',en:'Deep analysis of two paths<br>See your options clearly'},
+  'sp.choice.fit':{zh:'適合：在兩個選項間猶豫，如「該留在現職還是接受新工作」',en:'Best for: choosing between two options — e.g. "Stay in my job or take the new offer?"'},
+  'sp.one.name':{zh:'單張牌陣',en:'Single Card'},
+  'sp.one.desc':{zh:'今日訊息 · 快速指引<br>一牌道盡核心',en:'Daily message · quick guidance<br>One card, one core insight'},
+  'sp.one.fit':{zh:'適合：簡單明確的問題或每日指引，如「今天我該注意什麼」',en:'Best for: simple questions or daily guidance — e.g. "What should I watch for today?"'},
+  'sp.custom.name':{zh:'自訂牌陣',en:'Custom Spread'},
+  'sp.custom.desc':{zh:'設計你專屬的牌陣<br>最多 10 張',en:'Design your own spread<br>Up to 10 cards'},
+  'sp.custom.fit':{zh:'適合：有自己習慣的牌陣，自由定義每個位置的意義',en:'Best for: your own layouts — define what each position means'},
+  // ── Question ──
+  'q.title':{zh:'輸入你的問題',en:'Enter Your Question'},
+  'q.title.custom':{zh:'自訂牌陣設定',en:'Custom Spread Setup'},
+  'q.n.label':{zh:'牌陣張數（1–10）',en:'Number of cards (1–10)'},
+  'q.label':{zh:'你的問題',en:'Your question'},
+  'q.ph':{zh:'寫下你心中想要了解的事...',en:'Write down what you wish to understand...'},
+  'q.go':{zh:'✦ 進入冥想 ✦',en:'✦ Enter Meditation ✦'},
+  // ── Meditation ──
+  'med.title':{zh:'靜心冥想',en:'Meditation'},
+  'med.guide':{zh:'請專注於問題，讓答案從心中自然升起',en:'Focus on your question; let the answer rise from within'},
+  'med.shuffle':{zh:'✦ 開始洗牌 ✦',en:'✦ Shuffle ✦'},
+  'med.skip':{zh:'跳過冥想',en:'Skip meditation'},
+  'med.snd.head':{zh:'♪ 關於靜心音場',en:'♪ About the Sound Field'},
+  'med.snd.body':{zh:'<strong style="color:var(--gold)">海浪聲</strong>——由近浪、遠浪與碎浪三層交織而成，節奏彼此錯開，如真實海岸般自然不重複。<br><strong style="color:var(--gold)">Theta 靜心音波</strong>——海浪之下墊著極輕的雙耳節拍（左耳 108Hz、右耳 114Hz），大腦會感知到 6Hz 的差頻，對應深度放鬆與冥想時的 theta 腦波頻率。<br><br><span style="color:rgba(212,175,55,.7)">✦ 建議戴耳機聆聽</span>——雙耳節拍需要左右耳接收不同頻率才有效果。<br><span style="color:rgba(154,141,181,.6)">音場由瀏覽器即時生成，每次聆聽都是獨一無二的海。右下角 ♪ 可隨時開關。</span>',en:'<strong style="color:var(--gold)">Ocean waves</strong> — three layers (near, far, and breaking surf) interweave at offset rhythms, never repeating, like a real shoreline.<br><strong style="color:var(--gold)">Theta soundwave</strong> — beneath the waves sits a faint binaural beat (108Hz left, 114Hz right); your brain perceives the 6Hz difference, matching the theta brainwave of deep relaxation and meditation.<br><br><span style="color:rgba(212,175,55,.7)">✦ Headphones recommended</span> — binaural beats need each ear to hear a different frequency.<br><span style="color:rgba(154,141,181,.6)">Generated live by your browser — every listen is a unique sea. Toggle anytime with ♪ at bottom-right.</span>'},
+  // ── Reading ──
+  'rd.interp':{zh:'✦ 整體解讀',en:'✦ Overall Reading'},
+  'rd.chat':{zh:'✦ 繼續提問',en:'✦ Follow-up Questions'},
+  'rd.chat.ph':{zh:'針對這次解牌繼續提問...',en:'Ask a follow-up about this reading...'},
+  'rd.chat.send':{zh:'送出',en:'Send'},
+  'rd.detail':{zh:'✦ 單牌解析',en:'✦ Card-by-Card'},
+  'rd.save':{zh:'儲存記錄',en:'Save'},
+  'rd.again':{zh:'再占一次',en:'Read Again'},
+  'rd.home':{zh:'回首頁',en:'Home'},
+  // ── Meditation breath ──
+  'med.breath.in':{zh:'吸氣...',en:'Inhale...'},
+  'med.breath.hold':{zh:'屏息...',en:'Hold...'},
+  'med.breath.out':{zh:'呼氣...',en:'Exhale...'},
+  'med.ready':{zh:'準備好了～',en:'Ready ✦'},
+  'toast.needq':{zh:'請先輸入你的問題',en:'Please enter your question first'},
+  'pos.default':{zh:'位置',en:'Position'},
+  // ── Shuffle ──
+  'sh.title':{zh:'洗牌中',en:'Shuffling'},
+  'sh.sub':{zh:'將你的意念注入牌卡之中',en:'Pour your intention into the cards'},
+  'sh.badge':{zh:'🔐 加密隨機算法 · 每次完全獨立',en:'🔐 Cryptographic randomness · fully independent each time'},
+  'sh.pick':{zh:'✦ 開始抽牌 ✦',en:'✦ Draw Cards ✦'},
+  // ── Reading head ──
+  'rd.head':{zh:'✦ 神諭解讀 ✦',en:'✦ The Oracle Speaks ✦'},
+  // ── Pick ──
+  'pick.title':{zh:'選擇牌卡',en:'Choose Your Cards'},
+  'pick.left.pre':{zh:'以直覺選擇，還需選擇 ',en:'Choose intuitively — '},
+  'pick.left.suf':{zh:' 張',en:' more to go'},
+  // ── History ──
+  'h.title':{zh:'占卜記錄',en:'Reading History'},
+  'h.search.ph':{zh:'🔍 搜尋關鍵字（問題、牌名、解讀內容）...',en:'🔍 Search (question, card name, reading text)...'},
+  'h.clearall':{zh:'🗑 清除全部記錄',en:'🗑 Clear All History'},
+  'h.empty':{zh:'還沒有占卜記錄',en:'No readings yet'},
+  'h.noresult':{zh:'沒有符合條件的記錄，試試其他關鍵字或分類',en:'No matching records — try other keywords or a different category'},
+  'h.topic.all':{zh:'全部',en:'All'},
+  'h.topic.love':{zh:'感情',en:'Love'},
+  'h.topic.career':{zh:'事業',en:'Career'},
+  'h.topic.money':{zh:'財務',en:'Money'},
+  'h.topic.health':{zh:'健康',en:'Health'},
+  'h.topic.study':{zh:'學業',en:'Study'},
+  'h.topic.general':{zh:'其他',en:'Other'}
+});
 
 // ══════════════════════════════════════════
 //  CRYPTO RANDOM — zero memory, zero bias
@@ -1060,7 +1186,7 @@ function selectColor(c) {
 // ══════════════════════════════════════════
 function createProject() {
   const name = document.getElementById('pn-name').value.trim();
-  if (!name) { toast('請輸入專案名稱'); return; }
+  if (!name) { toast(L('請輸入專案名稱','Please enter a project name')); return; }
   const proj = {
     id: Date.now(),
     name,
@@ -1141,7 +1267,7 @@ function deleteProject(id) {
   S.projects = S.projects.filter(p=>p.id!==id);
   saveProjects();
   if (S.activeProjectId === id) S.activeProjectId = null;
-  toast('專案已刪除');
+  toast(L('專案已刪除','Project deleted'));
   goBack();
 }
 
@@ -1177,7 +1303,7 @@ function startNoProject() {
 function pickSpread(type) {
   S.type=type;
   const isCustom=type==='custom';
-  document.getElementById('q-title').textContent=isCustom?'自訂牌陣設定':'輸入你的問題';
+  document.getElementById('q-title').textContent=isCustom?t('q.title.custom'):t('q.title');
   document.getElementById('custom-area').style.display=isCustom?'block':'none';
   if(isCustom)renderCustomPos();
   const hint=SPREADS[type]&&SPREADS[type].hint;
@@ -1189,7 +1315,7 @@ function pickSpread(type) {
 function renderCustomPos(){
   const n=Math.min(10,Math.max(1,parseInt(document.getElementById('custom-n').value)||3));
   const c=document.getElementById('custom-pos-list');c.innerHTML='';
-  for(let i=0;i<n;i++)c.innerHTML+=`<label class="lbl">位置 ${i+1} 名稱</label><input class="inp cp-inp" placeholder="例：當前情況" value="位置 ${i+1}">`;
+  for(let i=0;i<n;i++)c.innerHTML+=`<label class="lbl">${L('位置','Position')} ${i+1} ${L('名稱','name')}</label><input class="inp cp-inp" placeholder="${L('例：當前情況','e.g. Current situation')}" value="${L('位置','Position')} ${i+1}">`;
 }
 
 // ══════════════════════════════════════════
@@ -1198,15 +1324,15 @@ function renderCustomPos(){
 function skipMeditation(){
   if(S.timer)clearInterval(S.timer);
   document.getElementById('timer-num').textContent='✦';
-  document.getElementById('breath-word').textContent='準備好了～';
+  document.getElementById('breath-word').textContent=t('med.ready');
   const btn=document.getElementById('btn-shuffle');
   btn.disabled=false;btn.classList.add('btn-glow');
 }
 function beginMeditation(){
   const q=document.getElementById('q-input').value.trim();
-  if(!q){toast('請先輸入你的問題');return;}
+  if(!q){toast(t('toast.needq'));return;}
   S.pos=S.type==='custom'
-    ?Array.from(document.querySelectorAll('.cp-inp')).map(el=>el.value||'位置')
+    ?Array.from(document.querySelectorAll('.cp-inp')).map(el=>el.value||t('pos.default'))
     :SPREADS[S.type].pos;
   S.q=q;
   document.getElementById('med-q-disp').textContent=`「${q}」`;
@@ -1217,14 +1343,14 @@ function beginMeditation(){
   const wordEl=document.getElementById('breath-word');
   const btn=document.getElementById('btn-shuffle');
   btn.disabled=true;btn.classList.remove('btn-glow');
-  let t=15,bi=0;
-  const bw=['吸氣...','屏息...','呼氣...','屏息...'];
-  timerEl.textContent=t;
+  let sec=15,bi=0;
+  const bw=[t('med.breath.in'),t('med.breath.hold'),t('med.breath.out'),t('med.breath.hold')];
+  timerEl.textContent=sec;
   const biv=setInterval(()=>{wordEl.textContent=bw[bi%4];bi++;},2000);
   if(S.timer)clearInterval(S.timer);
   S.timer=setInterval(()=>{
-    t--;timerEl.textContent=t;
-    if(t<=0){clearInterval(S.timer);clearInterval(biv);timerEl.textContent='✦';wordEl.textContent='準備好了～';btn.disabled=false;btn.classList.add('btn-glow');}
+    sec--;timerEl.textContent=sec;
+    if(sec<=0){clearInterval(S.timer);clearInterval(biv);timerEl.textContent='✦';wordEl.textContent=t('med.ready');btn.disabled=false;btn.classList.add('btn-glow');}
   },1000);
 }
 
@@ -1258,7 +1384,7 @@ function beginShuffle(){
 function beginPick(){
   S.picked=[];
   const need=S.pos.length;
-  document.getElementById('pick-title').textContent=`選擇 ${need} 張牌卡`;
+  document.getElementById('pick-title').textContent=L(`選擇 ${need} 張牌卡`,`Choose ${need} card${need>1?'s':''}`);
   document.getElementById('pick-left').textContent=need;
   const grid=document.getElementById('cards-grid');grid.innerHTML='';
   S.deck.forEach((_,i)=>{
@@ -1933,7 +2059,7 @@ async function sendChat(){
   if(!q)return;
   const key=getApiKey();
   const proxyEmail=isVerified()?getVerifiedEmail():null;
-  if(!key&&!proxyEmail){toast('請先設定 API Key 或驗證購買 Email');return;}
+  if(!key&&!proxyEmail){toast(L('請先設定 API Key 或驗證購買 Email','Set an API key or verify your purchase email first'));return;}
   input.value='';
   if(!S.chatHistory) S.chatHistory=[];
   S.chatHistory.push({role:'user',text:q});
@@ -1972,7 +2098,7 @@ async function sendChat(){
     }
     S.chatHistory.push({role:'ai',text:ans.replace(/\*\*(.+?)\*\*/g,'$1').replace(/\*(.+?)\*/g,'$1').replace(/[*#`_~]/g,'')});
   }catch(e){
-    S.chatHistory.push({role:'ai',text:'抱歉，發生錯誤：'+e.message});
+    S.chatHistory.push({role:'ai',text:L('抱歉，發生錯誤：','Sorry, an error occurred: ')+e.message});
   }
   renderChat();
 }
@@ -2022,7 +2148,7 @@ function saveReading(){
     saveProjects();
     toast(`✦ 已儲存至專案「${proj.name}」`);
   } else {
-    toast('✦ 占卜記錄已儲存');
+    toast(L('✦ 占卜記錄已儲存','✦ Reading saved'));
   }
 }
 
@@ -2033,21 +2159,21 @@ let histTopic='all';
 function showHistory(){
   // 主題分類籤（依問題文字自動分類，含筆數）
   const counts={all:S.readings.length};
-  S.readings.forEach(r=>{const t=detectTopic(r.q);counts[t]=(counts[t]||0)+1;});
-  const TOPICS=[['all','全部'],['love','感情'],['career','事業'],['money','財務'],['health','健康'],['study','學業'],['general','其他']];
+  S.readings.forEach(r=>{const tp=detectTopic(r.q);counts[tp]=(counts[tp]||0)+1;});
+  const TOPICS=['all','love','career','money','health','study','general'];
   document.getElementById('hist-topics').innerHTML=TOPICS
-    .filter(([k])=>k==='all'||counts[k])
-    .map(([k,label])=>{
+    .filter(k=>k==='all'||counts[k])
+    .map(k=>{
       const on=histTopic===k;
       return `<button onclick="setHistTopic('${k}')" style="padding:6px 14px;border-radius:50px;cursor:pointer;font-size:.78rem;letter-spacing:.05em;transition:all .25s;
         background:${on?'rgba(212,175,55,.18)':'rgba(8,3,26,.4)'};
         border:1px solid ${on?'var(--gold)':'rgba(212,175,55,.25)'};
-        color:${on?'var(--gold)':'var(--muted)'}">${label} ${k==='all'?counts.all:counts[k]||0}</button>`;
+        color:${on?'var(--gold)':'var(--muted)'}">${t('h.topic.'+k)} ${k==='all'?counts.all:counts[k]||0}</button>`;
     }).join('');
   renderHistList();
   go('s-history');
 }
-function setHistTopic(t){histTopic=t;showHistory();}
+function setHistTopic(k){histTopic=k;showHistory();}
 function renderHistList(){
   const el=document.getElementById('hist-list');
   const kw=(document.getElementById('hist-search').value||'').trim().toLowerCase();
@@ -2067,7 +2193,7 @@ function renderHistList(){
         const interpHtml=full.interp?`<div style="margin-top:10px;font-size:.82rem;color:var(--muted);line-height:1.7;border-top:1px solid rgba(212,175,55,.12);padding-top:10px">${full.interp.replace(/\n/g,'<br>')}</div>`:'';
         const chatHtml=(full.chat&&full.chat.length)?`<div style="margin-top:10px;border-top:1px solid rgba(212,175,55,.1);padding-top:10px">${full.chat.map(m=>m.role==='user'?`<div style="font-size:.78rem;color:var(--gold);margin-bottom:4px">▶ ${m.text}</div>`:`<div style="font-size:.78rem;color:var(--muted);margin-bottom:8px;line-height:1.6">${m.text.replace(/\n/g,'<br>')}</div>`).join('')}</div>`:'';
         return `<div style="border:1px solid rgba(212,175,55,.18);background:rgba(42,22,96,.18);padding:18px 20px;margin-bottom:12px;position:relative">
-          <button onclick="deleteReading(${r.id})" title="刪除這筆記錄"
+          <button onclick="deleteReading(${r.id})" title="${L('刪除這筆記錄','Delete this record')}"
             style="position:absolute;top:10px;right:10px;background:none;border:1px solid rgba(224,85,85,.3);color:rgba(224,85,85,.7);width:26px;height:26px;border-radius:50%;cursor:pointer;font-size:.8rem;line-height:1;transition:all .2s"
             onmouseover="this.style.background='rgba(224,85,85,.15)';this.style.color='var(--red)'"
             onmouseout="this.style.background='none';this.style.color='rgba(224,85,85,.7)'">✕</button>
@@ -2078,28 +2204,28 @@ function renderHistList(){
         </div>`;
       }).join('')
       + `<div style="text-align:center;margin-top:18px">
-          <button class="btn btn-ghost btn-sm" onclick="clearAllReadings()" style="color:rgba(224,85,85,.8);border-color:rgba(224,85,85,.3)">🗑 清除全部記錄</button>
+          <button class="btn btn-ghost btn-sm" onclick="clearAllReadings()" style="color:rgba(224,85,85,.8);border-color:rgba(224,85,85,.3)">${t('h.clearall')}</button>
         </div>`
     :(S.readings.length
-      ?'<p style="text-align:center;color:var(--muted);padding:40px">沒有符合條件的記錄，試試其他關鍵字或分類</p>'
-      :'<p style="text-align:center;color:var(--muted);padding:40px">還沒有占卜記錄</p>');
+      ?`<p style="text-align:center;color:var(--muted);padding:40px">${t('h.noresult')}</p>`
+      :`<p style="text-align:center;color:var(--muted);padding:40px">${t('h.empty')}</p>`);
 }
 function deleteReading(id){
-  if(!confirm('確定要刪除這筆占卜記錄嗎？刪除後無法復原。'))return;
+  if(!confirm(L('確定要刪除這筆占卜記錄嗎？刪除後無法復原。','Delete this reading? This cannot be undone.')))return;
   S.readings=S.readings.filter(r=>r.id!==id);
   localStorage.setItem('tr_readings',JSON.stringify(S.readings));
   const fullRecs=JSON.parse(localStorage.getItem('tr_full')||'[]').filter(r=>r.id!==id);
   localStorage.setItem('tr_full',JSON.stringify(fullRecs));
   showHistory();
-  toast('已刪除該筆記錄');
+  toast(L('已刪除該筆記錄','Record deleted'));
 }
 function clearAllReadings(){
-  if(!confirm('確定要清除「全部」占卜記錄嗎？此動作無法復原。'))return;
+  if(!confirm(L('確定要清除「全部」占卜記錄嗎？此動作無法復原。','Clear ALL reading history? This cannot be undone.')))return;
   S.readings=[];
   localStorage.removeItem('tr_readings');
   localStorage.removeItem('tr_full');
   showHistory();
-  toast('已清除全部記錄');
+  toast(L('已清除全部記錄','All history cleared'));
 }
 
 // ══════════════════════════════════════════
@@ -2109,26 +2235,26 @@ function clearAllReadings(){
 // Email verification via Cloudflare Worker
 async function verifyEmail(){
   const email=document.getElementById('unlock-input').value.trim().toLowerCase();
-  if(!email){toast('請輸入 Email');return;}
-  if(!WORKER_URL){toast('⚠ 管理員尚未設定 Worker URL');return;}
+  if(!email){toast(L('請輸入 Email','Please enter your email'));return;}
+  if(!WORKER_URL){toast(L('⚠ 管理員尚未設定 Worker URL','⚠ Worker URL not configured'));return;}
   const ubar=document.getElementById('unlock-status-bar');
-  ubar.style.display='block';ubar.className='api-status api-none';ubar.textContent='驗證中...';
+  ubar.style.display='block';ubar.className='api-status api-none';ubar.textContent=L('驗證中...','Verifying...');
   try{
     const r=await fetch(WORKER_URL+'/check',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});
     const d=await r.json();
     if(d.verified){
       localStorage.setItem('tr_verified_email',email);
-      ubar.className='api-status api-ok';ubar.textContent='✓ 驗證成功！已解鎖 AI 解牌';
-      updateApiStatus();toast('✦ 驗證成功！AI 解牌已解鎖');closeSettings();
+      ubar.className='api-status api-ok';ubar.textContent=L('✓ 驗證成功！已解鎖 AI 解牌','✓ Verified! AI reading unlocked');
+      updateApiStatus();toast(L('✦ 驗證成功！AI 解牌已解鎖','✦ Verified! AI reading unlocked'));closeSettings();
     } else {
-      ubar.textContent='✗ 此 Email 尚未有購買記錄，請確認使用 Gumroad 購買時填寫的 Email';
+      ubar.textContent=L('✗ 此 Email 尚未有購買記錄，請確認使用 Gumroad 購買時填寫的 Email','✗ No purchase found for this email. Please use the email from your Gumroad checkout.');
     }
-  }catch(e){ubar.textContent='✗ 無法連線，請稍後再試：'+e.message.slice(0,60);}
+  }catch(e){ubar.textContent=L('✗ 無法連線，請稍後再試：','✗ Connection failed, please try again: ')+e.message.slice(0,60);}
 }
 function clearVerifiedEmail(){
   localStorage.removeItem('tr_verified_email');
   document.getElementById('unlock-input').value='';
-  updateApiStatus();toast('已清除驗證');
+  updateApiStatus();toast(L('已清除驗證','Verification cleared'));
 }
 function isVerified(){return !!localStorage.getItem('tr_verified_email')&&!!WORKER_URL;}
 function getVerifiedEmail(){return localStorage.getItem('tr_verified_email')||'';}
@@ -2138,44 +2264,44 @@ function getApiKey(){
 }
 function saveApiKey(){
   const k=document.getElementById('api-key-input').value.trim().replace(/[^\x20-\x7E]/g,'');
-  if(!k){toast('請輸入 API Key');return;}
+  if(!k){toast(L('請輸入 API Key','Please enter an API key'));return;}
   localStorage.setItem('gemini_key',k);
-  updateApiStatus();toast('✦ API Key 已儲存');closeSettings();
+  updateApiStatus();toast(L('✦ API Key 已儲存','✦ API key saved'));closeSettings();
 }
 async function testApiKey(){
   const k=(document.getElementById('api-key-input').value.trim()||getApiKey()).split('').filter(c=>c.charCodeAt(0)>=32&&c.charCodeAt(0)<=126).join('');
-  if(!k){toast('請先輸入 API Key');return;}
-  toast('測試中...');
+  if(!k){toast(L('請先輸入 API Key','Please enter an API key first'));return;}
+  toast(L('測試中...','Testing...'));
   try{
     if(apiProvider(k)==='openai'){
       await callOpenAI(k,'你是測試助手',[{role:'user',content:'hi'}]);
-      toast('✦ OpenAI Key 正常！');
+      toast(L('✦ OpenAI Key 正常！','✦ OpenAI key works!'));
       return;
     }
     const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent',
       {method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':k},
        body:JSON.stringify({contents:[{parts:[{text:'hi'}]}]})});
     const d=await r.json();
-    if(r.ok){toast('✦ Gemini Key 正常！');}
-    else toast('失敗：'+r.status+' '+(d?.error?.message||'').slice(0,60));
-  }catch(e){toast('錯誤：'+e.message.slice(0,80));}
+    if(r.ok){toast(L('✦ Gemini Key 正常！','✦ Gemini key works!'));}
+    else toast(L('失敗：','Failed: ')+r.status+' '+(d?.error?.message||'').slice(0,60));
+  }catch(e){toast(L('錯誤：','Error: ')+e.message.slice(0,80));}
 }
 function clearApiKey(){
   localStorage.removeItem('gemini_key');
   document.getElementById('api-key-input').value='';
-  updateApiStatus();toast('已清除 API Key');
+  updateApiStatus();toast(L('已清除 API Key','API key cleared'));
 }
 function updateApiStatus(){
   const bar=document.getElementById('api-status-bar');
   const ubar=document.getElementById('unlock-status-bar');
   if(isVerified()){
-    bar.className='api-status api-ok';bar.textContent='✦ 已解鎖 AI 深度解牌（'+getVerifiedEmail()+'）';bar.style.display='block';
-    if(ubar){ubar.style.display='block';ubar.className='api-status api-ok';ubar.textContent='✓ Email 驗證有效';}
+    bar.className='api-status api-ok';bar.textContent=L('✦ 已解鎖 AI 深度解牌（','✦ AI deep reading unlocked (')+getVerifiedEmail()+'）';bar.style.display='block';
+    if(ubar){ubar.style.display='block';ubar.className='api-status api-ok';ubar.textContent=L('✓ Email 驗證有效','✓ Email verified');}
   } else if(getApiKey()){
-    bar.className='api-status api-ok';bar.textContent='✓ 自備 '+(apiProvider(getApiKey())==='openai'?'OpenAI':'Gemini')+' Key（AI 解牌啟用）';bar.style.display='block';
+    bar.className='api-status api-ok';bar.textContent=L('✓ 自備 ','✓ Your own ')+(apiProvider(getApiKey())==='openai'?'OpenAI':'Gemini')+L(' Key（AI 解牌啟用）',' key (AI reading enabled)');bar.style.display='block';
     if(ubar)ubar.style.display='none';
   } else {
-    bar.className='api-status api-none';bar.textContent='尚未解鎖 · 使用內建牌義解讀';bar.style.display='block';
+    bar.className='api-status api-none';bar.textContent=L('尚未解鎖 · 使用內建牌義解讀','Not unlocked · using built-in card meanings');bar.style.display='block';
     if(ubar)ubar.style.display='none';
   }
 }
@@ -2238,7 +2364,7 @@ function startMusic(){
     musicOn=true;
     document.getElementById('music-btn').classList.add('on');
     localStorage.setItem('tr_music','1');
-  }catch(e){toast('此瀏覽器不支援音訊');}
+  }catch(e){toast(L('此瀏覽器不支援音訊','Your browser does not support audio'));}
 }
 function stopMusic(){
   musicOn=false;
@@ -2319,6 +2445,7 @@ function toggleAiInfo(){
   if(k){const clean=k.split('').filter(c=>c.charCodeAt(0)>=32&&c.charCodeAt(0)<=126).join('');if(clean!==k)localStorage.setItem('gemini_key',clean);}
   localStorage.removeItem('tr_unlock'); // migrate: old code-based unlock no longer used
 })();
+applyLang();
 go('s-welcome');
 </script>
 </body>
