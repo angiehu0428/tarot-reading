@@ -543,7 +543,7 @@ textarea.inp{resize:vertical;min-height:90px}
     <div class="spread-opt" onclick="pickSpread('custom')">
       <span class="spread-icon">✧</span>
       <div class="spread-name" data-i18n="sp.custom.name">自訂牌陣</div>
-      <div class="spread-desc" data-i18n-html="sp.custom.desc">設計你專屬的牌陣<br>最多 10 張</div>
+      <div class="spread-desc" data-i18n-html="sp.custom.desc">設計你專屬的牌陣<br>最多 12 張（可排整年運勢）</div>
       <div class="spread-fit" data-i18n="sp.custom.fit">適合：有自己習慣的牌陣，自由定義每個位置的意義</div>
     </div>
   </div>
@@ -555,8 +555,8 @@ textarea.inp{resize:vertical;min-height:90px}
   <div class="t-divider">— ✦ —</div>
   <div class="form-wrap">
     <div id="custom-area" style="display:none;margin-bottom:24px">
-      <label class="lbl">牌陣張數（1–10）</label>
-      <input type="number" class="inp" id="custom-n" min="1" max="10" value="3" oninput="renderCustomPos()">
+      <label class="lbl" data-i18n="q.n.label">牌陣張數（1–12）</label>
+      <input type="number" class="inp" id="custom-n" min="1" max="12" value="3" oninput="renderCustomPos()">
       <div id="custom-pos-list"></div>
     </div>
     <div id="q-hint" style="display:none;margin-bottom:14px;padding:10px 14px;border-left:2px solid rgba(212,175,55,.4);background:rgba(212,175,55,.05);font-size:.78rem;color:rgba(212,175,55,.75);line-height:1.8;text-align:left"></div>
@@ -778,12 +778,12 @@ Object.assign(T, {
   'sp.one.desc':{zh:'今日訊息 · 快速指引<br>一牌道盡核心',en:'Daily message · quick guidance<br>One card, one core insight'},
   'sp.one.fit':{zh:'適合：簡單明確的問題或每日指引，如「今天我該注意什麼」',en:'Best for: simple questions or daily guidance — e.g. "What should I watch for today?"'},
   'sp.custom.name':{zh:'自訂牌陣',en:'Custom Spread'},
-  'sp.custom.desc':{zh:'設計你專屬的牌陣<br>最多 10 張',en:'Design your own spread<br>Up to 10 cards'},
+  'sp.custom.desc':{zh:'設計你專屬的牌陣<br>最多 12 張（可排整年運勢）',en:'Design your own spread<br>Up to 12 cards (e.g. a 12-month year ahead)'},
   'sp.custom.fit':{zh:'適合：有自己習慣的牌陣，自由定義每個位置的意義',en:'Best for: your own layouts — define what each position means'},
   // ── Question ──
   'q.title':{zh:'輸入你的問題',en:'Enter Your Question'},
   'q.title.custom':{zh:'自訂牌陣設定',en:'Custom Spread Setup'},
-  'q.n.label':{zh:'牌陣張數（1–10）',en:'Number of cards (1–10)'},
+  'q.n.label':{zh:'牌陣張數（1–12）',en:'Number of cards (1–12)'},
   'q.label':{zh:'你的問題',en:'Your question'},
   'q.ph':{zh:'寫下你心中想要了解的事...',en:'Write down what you wish to understand...'},
   'q.go':{zh:'✦ 進入冥想 ✦',en:'✦ Enter Meditation ✦'},
@@ -1409,9 +1409,16 @@ function pickSpread(type) {
   go('s-question');
 }
 function renderCustomPos(){
-  const n=Math.min(10,Math.max(1,parseInt(document.getElementById('custom-n').value)||3));
+  const n=Math.min(12,Math.max(1,parseInt(document.getElementById('custom-n').value)||3));
   const c=document.getElementById('custom-pos-list');c.innerHTML='';
-  for(let i=0;i<n;i++)c.innerHTML+=`<label class="lbl">${L('位置','Position')} ${i+1} ${L('名稱','name')}</label><input class="inp cp-inp" placeholder="${L('例：當前情況','e.g. Current situation')}" value="${L('位置','Position')} ${i+1}">`;
+  // 12 張時預設帶入十二個月份，方便排「整年每月運勢」（仍可自行修改）
+  const months=n===12?(LANG==='en'
+    ?['January','February','March','April','May','June','July','August','September','October','November','December']
+    :['一月','二月','三月','四月','五月','六月','七月','八月','九月','十月','十一月','十二月']):null;
+  for(let i=0;i<n;i++){
+    const val=months?months[i]:`${L('位置','Position')} ${i+1}`;
+    c.innerHTML+=`<label class="lbl">${L('位置','Position')} ${i+1} ${L('名稱','name')}</label><input class="inp cp-inp" placeholder="${L('例：當前情況','e.g. Current situation')}" value="${val}">`;
+  }
 }
 
 // ══════════════════════════════════════════
