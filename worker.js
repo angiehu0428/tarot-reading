@@ -2,25 +2,33 @@
 // KV namespace: TAROT_KV
 // Env vars: GEMINI_KEY, GUMROAD_SELLER_ID
 
-const ALLOWED_ORIGIN = 'https://angiehu0428.github.io';
+const ALLOWED_ORIGINS = [
+  'https://angiehu0428.github.io',
+  'https://tarot.angiehu.com',
+];
 
-const CORS = {
-  'Access-Control-Allow-Origin': ALLOWED_ORIGIN,
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
-};
+function corsHeaders(request) {
+  const origin = request && request.headers.get('Origin');
+  const allow = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  return {
+    'Access-Control-Allow-Origin': allow,
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Vary': 'Origin',
+  };
+}
 
-function json(data, status = 200) {
+function json(data, status = 200, request) {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { ...CORS, 'Content-Type': 'application/json' },
+    headers: { ...corsHeaders(request), 'Content-Type': 'application/json' },
   });
 }
 
 export default {
   async fetch(request, env) {
     if (request.method === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: CORS });
+      return new Response(null, { status: 204, headers: corsHeaders(request) });
     }
 
     const url = new URL(request.url);
@@ -83,26 +91,26 @@ async function handleWebhook(request, env) {
 // ── Check if email is verified ───────────────────────────────
 async function handleCheck(request, env) {
   const { email } = await request.json().catch(() => ({}));
-  if (!email) return json({ verified: false });
+  if (!email) return json({ verified: false }, 200, request);
 
   const record = await env.TAROT_KV.get(`email:${email.toLowerCase().trim()}`);
-  return json({ verified: !!record });
+  return json({ verified: !!record }, 200, request);
 }
 
 // ── History sync (paid users only) ───────────────────────────
 async function handleSync(request, env) {
   const { email, action, readings, full } = await request.json().catch(() => ({}));
   const e = email && email.toLowerCase().trim();
-  if (!e) return json({ error: 'no email' }, 400);
+  if (!e) return json({ error: 'no email' }, 400, request);
 
   // Only verified (paid) emails may sync
   const record = await env.TAROT_KV.get(`email:${e}`);
-  if (!record) return json({ error: 'email not verified' }, 403);
+  if (!record) return json({ error: 'email not verified' }, 403, request);
 
   const key = `hist:${e}`;
   if (action === 'pull') {
     const stored = await env.TAROT_KV.get(key);
-    return json(stored ? JSON.parse(stored) : { readings: [], full: [] });
+    return json(stored ? JSON.parse(stored) : { readings: [], full: [] }, 200, request);
   }
   if (action === 'push') {
     const payload = JSON.stringify({
@@ -111,23 +119,23 @@ async function handleSync(request, env) {
       updated: new Date().toISOString(),
     });
     await env.TAROT_KV.put(key, payload, { expirationTtl: 60 * 60 * 24 * 730 });
-    return json({ ok: true });
+    return json({ ok: true }, 200, request);
   }
-  return json({ error: 'bad action' }, 400);
+  return json({ error: 'bad action' }, 400, request);
 }
 
 // ── Gemini proxy ─────────────────────────────────────────────
 async function handleGemini(request, env) {
   const { email, body: geminiBody } = await request.json().catch(() => ({}));
 
-  if (!email) return json({ error: '請提供 email' }, 400);
+  if (!email) return json({ error: '請提供 email' }, 400, request);
 
   const record = await env.TAROT_KV.get(`email:${email.toLowerCase().trim()}`);
   if (!record) {
-    return json({ error: '此 email 尚未驗證付款。請確認使用 Gumroad 購買時的 email。' }, 403);
+    return json({ error: '此 email 尚未驗證付款。請確認使用 Gumroad 購買時的 email。' }, 403, request);
   }
 
-  if (!geminiBody) return json({ error: '缺少請求內容' }, 400);
+  if (!geminiBody) return json({ error: '缺少請求內容' }, 400, request);
 
   const resp = await fetch(
     'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent',
@@ -142,5 +150,5 @@ async function handleGemini(request, env) {
   );
 
   const data = await resp.json();
-  return json(data, resp.status);
+  return json(data, resp.status, request);
 }
