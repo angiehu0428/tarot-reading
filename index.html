@@ -3,7 +3,25 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>✦ 塔羅神諭 ✦</title>
+<title>塔羅神諭 Tarot Oracle｜免費線上塔羅占卜・AI 個人化解牌</title>
+<meta name="description" content="塔羅神諭：免費線上塔羅占卜，78 張偉特塔羅牌、加密隨機洗牌，提供無視論五牌陣、三張牌陣、聖三角等多種牌陣，並以 AI 提供感情、事業、財運的個人化深度解牌。Free online tarot reading with all 78 Rider–Waite cards and AI-powered personalized interpretations for love, career, and money.">
+<meta name="keywords" content="塔羅,塔羅牌,線上塔羅,免費塔羅占卜,塔羅占卜,AI塔羅,AI解牌,塔羅解牌,無視論,偉特塔羅,愛情塔羅,感情塔羅,事業塔羅,財運塔羅,線上占卜,每日塔羅,tarot,tarot reading,free tarot,online tarot,AI tarot,tarot card reading,love tarot,Rider-Waite tarot">
+<meta name="author" content="Angie Hu">
+<meta name="robots" content="index,follow">
+<link rel="canonical" href="https://tarot.angiehu.com/">
+<!-- Open Graph / 社群分享 -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="塔羅神諭 Tarot Oracle">
+<meta property="og:title" content="塔羅神諭 Tarot Oracle｜免費線上塔羅占卜・AI 個人化解牌">
+<meta property="og:description" content="免費線上塔羅占卜：78 張偉特牌、多種牌陣與 AI 個人化深度解牌。Free online tarot reading with 78 Rider–Waite cards and AI interpretations.">
+<meta property="og:url" content="https://tarot.angiehu.com/">
+<meta property="og:image" content="https://tarot.angiehu.com/og-cover.svg">
+<meta property="og:locale" content="zh_TW">
+<meta property="og:locale:alternate" content="en_US">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="塔羅神諭 Tarot Oracle｜免費線上塔羅占卜・AI 解牌">
+<meta name="twitter:description" content="免費線上塔羅占卜，78 張偉特牌、多種牌陣與 AI 個人化深度解牌。">
+<meta name="twitter:image" content="https://tarot.angiehu.com/og-cover.svg">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon.svg">
@@ -11,6 +29,33 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="塔羅神諭">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "塔羅神諭 Tarot Oracle",
+  "alternateName": ["Tarot Oracle","塔羅神諭","線上塔羅占卜"],
+  "url": "https://tarot.angiehu.com/",
+  "description": "免費線上塔羅占卜，78 張偉特塔羅牌、加密隨機洗牌，提供無視論等多種牌陣與 AI 個人化深度解牌。Free online tarot reading with all 78 Rider–Waite cards and AI-powered personalized interpretations.",
+  "applicationCategory": "LifestyleApplication",
+  "operatingSystem": "Web browser",
+  "inLanguage": ["zh-TW","en"],
+  "image": "https://tarot.angiehu.com/og-cover.svg",
+  "author": { "@type": "Person", "name": "Angie Hu" },
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    { "@type": "Question", "name": "塔羅神諭是免費的嗎？", "acceptedAnswer": { "@type": "Answer", "text": "是，基本的線上塔羅占卜與內建牌義解讀完全免費。AI 個人化深度解牌可透過購買解鎖，或自備 Gemini／OpenAI API Key 使用。" } },
+    { "@type": "Question", "name": "Is Tarot Oracle free?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Online tarot readings with built-in card meanings are completely free. AI-powered personalized readings can be unlocked by purchase, or by using your own Gemini or OpenAI API key." } },
+    { "@type": "Question", "name": "有哪些塔羅牌陣？", "acceptedAnswer": { "@type": "Answer", "text": "提供五張無視論牌陣（最推薦，全方位解讀）、三張牌陣（過去現在未來）、聖三角牌陣、二擇一牌陣、單張牌陣，以及自訂牌陣。" } }
+  ]
+}
+</script>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Noto+Serif+TC:wght@300;400;700&display=swap" rel="stylesheet">
 <script src="https://gumroad.com/js/gumroad.js"></script>
 <style>
@@ -648,6 +693,9 @@ function applyLang(){
   document.querySelectorAll('[data-i18n-ph]').forEach(el=>{ el.setAttribute('placeholder', t(el.getAttribute('data-i18n-ph'))); });
   document.querySelectorAll('[data-i18n-title]').forEach(el=>{ el.setAttribute('title', t(el.getAttribute('data-i18n-title'))); });
   const lb=document.getElementById('lang-btn'); if(lb) lb.textContent=(LANG==='zh'?'EN':'中');
+  document.title = LANG==='en'
+    ? 'Tarot Oracle｜Free Online Tarot Reading with AI Interpretations'
+    : '塔羅神諭 Tarot Oracle｜免費線上塔羅占卜・AI 個人化解牌';
 }
 function setLang(l){ LANG=l; localStorage.setItem('tr_lang',l); applyLang(); if(typeof onLangChange==='function') onLangChange(); }
 function toggleLang(){ setLang(LANG==='zh'?'en':'zh'); }
