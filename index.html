@@ -543,7 +543,7 @@ textarea.inp{resize:vertical;min-height:90px}
     <div class="spread-opt" onclick="pickSpread('custom')">
       <span class="spread-icon">✧</span>
       <div class="spread-name" data-i18n="sp.custom.name">自訂牌陣</div>
-      <div class="spread-desc" data-i18n-html="sp.custom.desc">設計你專屬的牌陣<br>最多 10 張</div>
+      <div class="spread-desc" data-i18n-html="sp.custom.desc">設計你專屬的牌陣<br>最多 12 張（可排整年運勢）</div>
       <div class="spread-fit" data-i18n="sp.custom.fit">適合：有自己習慣的牌陣，自由定義每個位置的意義</div>
     </div>
   </div>
@@ -555,8 +555,8 @@ textarea.inp{resize:vertical;min-height:90px}
   <div class="t-divider">— ✦ —</div>
   <div class="form-wrap">
     <div id="custom-area" style="display:none;margin-bottom:24px">
-      <label class="lbl">牌陣張數（1–10）</label>
-      <input type="number" class="inp" id="custom-n" min="1" max="10" value="3" oninput="renderCustomPos()">
+      <label class="lbl" data-i18n="q.n.label">牌陣張數（1–12）</label>
+      <input type="number" class="inp" id="custom-n" min="1" max="12" value="3" oninput="renderCustomPos()">
       <div id="custom-pos-list"></div>
     </div>
     <div id="q-hint" style="display:none;margin-bottom:14px;padding:10px 14px;border-left:2px solid rgba(212,175,55,.4);background:rgba(212,175,55,.05);font-size:.78rem;color:rgba(212,175,55,.75);line-height:1.8;text-align:left"></div>
@@ -778,12 +778,12 @@ Object.assign(T, {
   'sp.one.desc':{zh:'今日訊息 · 快速指引<br>一牌道盡核心',en:'Daily message · quick guidance<br>One card, one core insight'},
   'sp.one.fit':{zh:'適合：簡單明確的問題或每日指引，如「今天我該注意什麼」',en:'Best for: simple questions or daily guidance — e.g. "What should I watch for today?"'},
   'sp.custom.name':{zh:'自訂牌陣',en:'Custom Spread'},
-  'sp.custom.desc':{zh:'設計你專屬的牌陣<br>最多 10 張',en:'Design your own spread<br>Up to 10 cards'},
+  'sp.custom.desc':{zh:'設計你專屬的牌陣<br>最多 12 張（可排整年運勢）',en:'Design your own spread<br>Up to 12 cards (e.g. a 12-month year ahead)'},
   'sp.custom.fit':{zh:'適合：有自己習慣的牌陣，自由定義每個位置的意義',en:'Best for: your own layouts — define what each position means'},
   // ── Question ──
   'q.title':{zh:'輸入你的問題',en:'Enter Your Question'},
   'q.title.custom':{zh:'自訂牌陣設定',en:'Custom Spread Setup'},
-  'q.n.label':{zh:'牌陣張數（1–10）',en:'Number of cards (1–10)'},
+  'q.n.label':{zh:'牌陣張數（1–12）',en:'Number of cards (1–12)'},
   'q.label':{zh:'你的問題',en:'Your question'},
   'q.ph':{zh:'寫下你心中想要了解的事...',en:'Write down what you wish to understand...'},
   'q.go':{zh:'✦ 進入冥想 ✦',en:'✦ Enter Meditation ✦'},
@@ -1409,7 +1409,7 @@ function pickSpread(type) {
   go('s-question');
 }
 function renderCustomPos(){
-  const n=Math.min(10,Math.max(1,parseInt(document.getElementById('custom-n').value)||3));
+  const n=Math.min(12,Math.max(1,parseInt(document.getElementById('custom-n').value)||3));
   const c=document.getElementById('custom-pos-list');c.innerHTML='';
   for(let i=0;i<n;i++)c.innerHTML+=`<label class="lbl">${L('位置','Position')} ${i+1} ${L('名稱','name')}</label><input class="inp cp-inp" placeholder="${L('例：當前情況','e.g. Current situation')}" value="${L('位置','Position')} ${i+1}">`;
 }
@@ -2726,12 +2726,16 @@ async function syncPull(){
     if(!cloud||!Array.isArray(cloud.readings))return false;
     // 以 id 聯集合併本地與雲端（id 為時間戳，新的在前）
     const mergeById=(a,b)=>{const m={};[...a,...b].forEach(x=>{if(x&&x.id!=null)m[x.id]=x;});return Object.values(m).sort((x,y)=>y.id-x.id).slice(0,60);};
-    S.readings=mergeById(S.readings, cloud.readings);
+    const beforeR=S.readings.length;
     const localFull=JSON.parse(localStorage.getItem('tr_full')||'[]');
+    S.readings=mergeById(S.readings, cloud.readings);
     const mergedFull=mergeById(localFull, cloud.full||[]);
     localStorage.setItem('tr_readings',JSON.stringify(S.readings));
     localStorage.setItem('tr_full',JSON.stringify(mergedFull));
-    return true;
+    // 本地有、雲端還沒有的記錄 → 推回讓雲端收斂（另一台裝置下次才拉得到）
+    if(S.readings.length>cloud.readings.length || mergedFull.length>(cloud.full||[]).length) syncPush();
+    // 本地因雲端而新增 → 回報 true，供呼叫端重繪 / 提示（無新增則免重繪）
+    return S.readings.length>beforeR || mergedFull.length>localFull.length;
   }catch(e){return false;}
 }
 
@@ -2920,8 +2924,8 @@ function toggleAiInfo(){
 // ══════════════════════════════════════════
 const CHANGELOG = [
   { date:'2026-06-13',
-    zh:['啟用專屬網址 tarot.angiehu.com','新增「更新紀錄」頁面，記錄每次更新','五張無視論牌陣標示為「最推薦」全方位解牌','追問區加入提示，引導如何向 AI 追問細節','付費會員新增跨裝置雲端同步歷史記錄','強化 SEO 與結構化資料，讓 Google 與 AI 更容易找到本站'],
-    en:['Launched the custom address tarot.angiehu.com','Added this Changelog page to track every update','Marked the Five-Card Wuxi spread as the recommended all-around reading','Added hints in the follow-up area on how to ask the AI for details','Paid members get cross-device cloud history sync','Improved SEO and structured data so Google and AI can find the site more easily'] },
+    zh:['自訂牌陣張數上限提升至 12 張（適合占算一整年每月運勢）','強化跨裝置同步：開啟網站即自動雙向同步，另一台裝置的記錄更即時呈現','啟用專屬網址 tarot.angiehu.com','新增「更新紀錄」頁面，記錄每次更新','五張無視論牌陣標示為「最推薦」全方位解牌','追問區加入提示，引導如何向 AI 追問細節','付費會員新增跨裝置雲端同步歷史記錄','強化 SEO 與結構化資料，讓 Google 與 AI 更容易找到本站'],
+    en:['Custom spread now supports up to 12 cards (great for a month-by-month year-ahead reading)','Stronger cross-device sync: two-way sync runs automatically on load, so another device\'s readings show up sooner','Launched the custom address tarot.angiehu.com','Added this Changelog page to track every update','Marked the Five-Card Wuxi spread as the recommended all-around reading','Added hints in the follow-up area on how to ask the AI for details','Paid members get cross-device cloud history sync','Improved SEO and structured data so Google and AI can find the site more easily'] },
   { date:'2026-06-12',
     zh:['推出完整英文版，瀏覽器語言自動偵測 + 右上角一鍵切換','78 張牌的英文牌義、關鍵字、圖像星象資料庫','首頁加入星雲、流星、牌扇動畫與書籤／加入主畫面功能','新增聖三角牌陣；每個牌陣加上「適合占卜什麼」說明'],
     en:['Launched the full English version with browser-language auto-detect and a one-tap toggle','English database of all 78 cards: meanings, keywords, imagery & astrology','Home page nebula / shooting-star / card-fan animations, plus bookmark / add-to-home','Added the Holy Triangle spread; each spread now notes what it is best for'] },
@@ -2952,8 +2956,12 @@ function showChangelog(){
 })();
 applyLang();
 go('s-welcome');
-// 已驗證 email → 啟動時靜默拉回雲端歷史
-if(isVerified()) syncPull();
+// 已驗證 email → 啟動時靜默拉回雲端歷史（syncPull 內部會在需要時推回收斂）
+if(isVerified()) syncPull().then(merged=>{
+  if(!merged) return;
+  const cur=document.querySelector('.screen.on');
+  if(cur && cur.id==='s-history') showHistory(); // 正停在歷史頁才重繪
+});
 </script>
 </body>
 </html>
