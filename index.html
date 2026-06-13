@@ -1774,24 +1774,26 @@ async function callOpenAI(key, sysText, messages){
 // ══════════════════════════════════════════
 // 牌義吉凶判斷：正位≠吉，要看牌義本身（如寶劍十、權杖五正位仍是辛苦牌）
 const NEG_STEMS = ['衝突','競爭','混亂','重擔','過度','負荷','痛苦','背叛','低谷','失去','失落','悲傷','哀慟','焦慮','恐懼','停滯','欺','束縛','災','毀','崩','壓力','孤獨','匱乏','拖延','逃避','犧牲','挫','失敗','損失','分離','終結','破裂','困','病','憂','背刺','倦怠','掙扎'];
+const NEG_STEMS_EN = ['conflict','rivalry','chaos','burden','overwhelm','overload','pain','betray','rock bottom','loss','lose','grief','sorrow','anxiety','fear','stagnat','deceit','bondage','restrict','disaster','ruin','collapse','stress','isolat','lonely','lack','scarcity','delay','avoid','escape','sacrifice','setback','fail','separat','ending','rupture','stuck','illness','worry','exhaust','struggle','crisis'];
 function kwIsHeavy(kws){
-  const hits = kws.filter(k=>NEG_STEMS.some(s=>k.includes(s))).length;
+  const stems = LANG==='en' ? NEG_STEMS_EN : NEG_STEMS;
+  const hits = kws.filter(k=>stems.some(s=>k.toLowerCase().includes(s))).length;
   return hits >= 2 || hits >= Math.ceil(kws.length/3);
 }
 
-// ── 主題偵測：從問題文字判斷主題，抽出牌義中對應的段落 ──
+// ── 主題偵測：中英文皆可，從問題文字判斷主題 ──
 function detectTopic(q){
   const rules=[
-    ['health',/健康|身體|生病|手術|睡眠|體力|療養/],
-    ['study',/學業|考試|讀書|學校|論文|證照|升學|成績/],
-    ['money',/金錢|錢|財運|財務|投資|股票|收入|買房|負債|薪水|薪資/],
-    ['career',/工作|事業|職場|職涯|老闆|同事|面試|轉職|創業|升遷|專案|案子|生意|客戶|合作/],
-    ['love',/感情|愛情|戀愛|喜歡|曖昧|關係|對方|復合|結婚|脫單|告白|分手|桃花|他|她/]
+    ['health',/健康|身體|生病|手術|睡眠|體力|療養|health|body|sick|illness|surgery|sleep|wellness|fitness/i],
+    ['study',/學業|考試|讀書|學校|論文|證照|升學|成績|stud(y|ies)|exam|test|school|thesis|degree|grade|college|class/i],
+    ['money',/金錢|錢|財運|財務|投資|股票|收入|買房|負債|薪水|薪資|money|financ|invest|stock|income|salary|wealth|debt|cash|wage|budget/i],
+    ['career',/工作|事業|職場|職涯|老闆|同事|面試|轉職|創業|升遷|專案|案子|生意|客戶|合作|career|job|work|boss|colleague|interview|business|promotion|project|client|startup/i],
+    ['love',/感情|愛情|戀愛|喜歡|曖昧|關係|對方|復合|結婚|脫單|告白|分手|桃花|他|她|love|relationship|dating|crush|romance|partner|marriage|breakup|ex\b|him|her|boyfriend|girlfriend|spouse/i]
   ];
   for(const [k,re] of rules) if(re.test(q)) return k;
   return 'general';
 }
-const TOPIC_LABEL={love:'感情',career:'事業',money:'財務',health:'健康',study:'學業',general:''};
+function topicLabel(topic){ return t('h.topic.'+topic); }
 
 // 財務（$）與健康（h）補充牌義：依標準偉特體系撰寫，u=正位 r=逆位
 const TOPIC_EXTRA={
@@ -1875,13 +1877,24 @@ const TOPIC_EXTRA={
 77:{u:{$:'財富版圖的王者格局，事業與資產都進入成熟豐收期。',h:'資源充足的從容讓身心安穩，享受成就也維持節制。'},r:{$:'守財奴式的固執或炫富式的揮霍，財富觀需要校準。',h:'應酬與安逸堆出的健康赤字，富貴更要養生。'}}
 };
 
-function topicSentence(m,topic,cid,rev){
+function topicSentence(topic,cid,rev){
   // 財務/健康優先使用補充牌義
-  if((topic==='money'||topic==='health') && TOPIC_EXTRA[cid]){
-    const e=TOPIC_EXTRA[cid][rev?'r':'u'][topic==='money'?'$':'h'];
-    if(e) return (topic==='money'?'財務上，':'健康上，')+e;
+  const ex=topicExtraOf(cid);
+  if((topic==='money'||topic==='health') && ex){
+    const e=ex[rev?'r':'u'][topic==='money'?'$':'h'];
+    if(e) return LANG==='en' ? (topic==='money'?'On money: ':'On health: ')+e : (topic==='money'?'財務上，':'健康上，')+e;
   }
-  // 感情問題抽「感情上…」段；事業/學業抽「事業上…」段；其他取牌義開頭
+  if(LANG==='en'){
+    // 英文：結構化欄位 love/career；缺漏時取牌義第一句
+    const en=EN_CARD[cid] && EN_CARD[cid][rev?'r':'u'];
+    if(en){
+      if(topic==='love' && en.love) return en.love;
+      if((topic==='career'||topic==='money'||topic==='study') && en.career) return en.career;
+    }
+    const m=cardMeaning(cid,rev); return m.split('. ')[0].replace(/\.$/,'')+'.';
+  }
+  // 中文：從牌義抽「感情上…」「事業上…」段
+  const m=cardMeaning(cid,rev);
   const tag = topic==='love' ? '感情上' : (topic==='career'||topic==='money'||topic==='study') ? '事業上' : '';
   if(tag){
     const i=m.indexOf(tag);
@@ -1899,11 +1912,14 @@ function topicSentence(m,topic,cid,rev){
 // 組出主題段落：挑最多 3 張牌，抽出主題對應牌義
 function buildTopicHtml(topic, indices){
   if(topic==='general'||!indices.length) return '';
+  const dash = LANG==='en' ? ' — ' : '——';
   const lines=indices.slice(0,3).map(di=>{
-    const {cid,rev}=S.deck[di]; const card=C[cid]; const data=rev?card.r:card.u;
-    return `<span style="color:var(--gold)">${card.zh}${rev?'（逆位）':''}</span>——${topicSentence(data.m,topic,cid,rev)}`;
+    const {cid,rev}=S.deck[di];
+    return `<span style="color:var(--gold)">${cardName(cid)}${revLabel(rev)}</span>${dash}${topicSentence(topic,cid,rev)}`;
   });
-  return `<p class="interp-p">聚焦在你問的「<span style="color:var(--gold)">${TOPIC_LABEL[topic]}</span>」層面：${lines.join('')}</p>`;
+  return LANG==='en'
+    ? `<p class="interp-p">Focused on your "<span style="color:var(--gold)">${topicLabel(topic)}</span>" question: ${lines.join(' ')}</p>`
+    : `<p class="interp-p">聚焦在你問的「<span style="color:var(--gold)">${topicLabel(topic)}</span>」層面：${lines.join('')}</p>`;
 }
 
 function buildInterpBuiltin(){
@@ -1923,32 +1939,33 @@ function buildInterpWuxi(){
   const keyIsRev = hasMinority && revCount < uprCount;  // 逆位是少數 → 逆位是重點
   const keyRev = hasMinority ? keyIsRev : revCount === n;
 
+  const sep=SEP(), en=LANG==='en';
   const cardNames = [], allKw = [], keyKw = [], supKw = [], keyCards = [], supCards = [], keyIdx = [];
 
   S.picked.forEach((di,i)=>{
-    const {cid,rev}=S.deck[di]; const card=C[cid]; const data=rev?card.r:card.u;
-    cardNames.push(card.zh+(rev?'（逆）':''));
-    allKw.push(...data.kw.slice(0,2));
+    const {cid,rev}=S.deck[di]; const kw=cardKw(cid,rev);
+    cardNames.push(cardName(cid)+revLabel(rev));
+    allKw.push(...kw.slice(0,2));
     const isKey = !hasMinority ? null : (keyIsRev ? rev : !rev);
-    if(isKey===null||isKey){ keyKw.push(...data.kw.slice(0,3)); if(isKey!==null){ keyCards.push(card.zh+(rev?'（逆）':'')); keyIdx.push(di); } }
-    else { supKw.push(...data.kw.slice(0,2)); supCards.push(card.zh); }
+    if(isKey===null||isKey){ keyKw.push(...kw.slice(0,3)); if(isKey!==null){ keyCards.push(cardName(cid)+revLabel(rev)); keyIdx.push(di); } }
+    else { supKw.push(...kw.slice(0,2)); supCards.push(cardName(cid)); }
   });
 
-  const dominantKw = [...new Set(keyKw.length ? keyKw : allKw)].slice(0,4).join('、');
-  const supportKw = [...new Set(supKw)].slice(0,4).join('、');
-  const revRatio = revCount===0?'全數正位':revCount===n?'全數逆位':`${revCount} 逆 ${uprCount} 正`;
+  const dominantKw = [...new Set(keyKw.length ? keyKw : allKw)].slice(0,4).join(sep);
+  const supportKw = [...new Set(supKw)].slice(0,4).join(sep);
+  const revRatio = revCount===0?L('全數正位','all upright'):revCount===n?L('全數逆位','all reversed'):en?`${revCount} reversed, ${uprCount} upright`:`${revCount} 逆 ${uprCount} 正`;
 
   const rowsHtml = S.picked.map((di,i)=>{
-    const {cid,rev}=S.deck[di]; const card=C[cid]; const data=rev?card.r:card.u;
+    const {cid,rev}=S.deck[di];
     const isKey = !hasMinority ? null : (keyIsRev ? rev : !rev);
     const badge = isKey===null ? '' : isKey
-      ? `<span class="wuxi-badge key" style="margin-right:6px;vertical-align:middle">重點</span>`
-      : `<span class="wuxi-badge sup" style="margin-right:6px;vertical-align:middle">輔助</span>`;
-    const revSpan = rev ? `<span style="color:var(--red);font-size:.75rem">逆</span>` : `<span style="color:var(--muted);font-size:.75rem">正</span>`;
+      ? `<span class="wuxi-badge key" style="margin-right:6px;vertical-align:middle">${L('重點','Key')}</span>`
+      : `<span class="wuxi-badge sup" style="margin-right:6px;vertical-align:middle">${L('輔助','Support')}</span>`;
+    const revSpan = rev ? `<span style="color:var(--red);font-size:.75rem">${L('逆','R')}</span>` : `<span style="color:var(--muted);font-size:.75rem">${L('正','U')}</span>`;
     return `<div style="display:flex;align-items:baseline;gap:4px;padding:4px 0;border-bottom:1px solid rgba(212,175,55,.08)">
       ${badge}<span style="color:var(--muted);font-size:.8rem;min-width:28px">${S.pos[i]}</span>
-      <span style="font-size:.88rem;color:var(--white)">${card.zh}</span>${revSpan}
-      <span style="color:var(--gold);font-size:.78rem;margin-left:4px">「${data.kw.slice(0,3).join('、')}」</span>
+      <span style="font-size:.88rem;color:var(--white)">${cardName(cid)}</span>${revSpan}
+      <span style="color:var(--gold);font-size:.78rem;margin-left:4px">${en?`"${cardKw(cid,rev).slice(0,3).join(', ')}"`:`「${cardKw(cid,rev).slice(0,3).join('、')}」`}</span>
     </div>`;
   }).join('');
 
@@ -1956,35 +1973,54 @@ function buildInterpWuxi(){
 
   let conclusionText = '';
   if(keyCards.length){
+    const kc=keyCards.join(sep);
     if(keyRev){
-      conclusionText = `重點牌（${keyCards.join('、')}）以逆位出現，定義了此次牌陣的核心訊息：「${dominantKw}」。這提示你在關於「${S.q}」這件事上，有需要停下來重新審視的能量或阻力。`;
+      conclusionText = en
+        ? `The key card(s) (${kc}) appear reversed, defining the core message of this spread: "${dominantKw}". Regarding "${S.q}", this signals energy or resistance that asks you to pause and re-examine.`
+        : `重點牌（${kc}）以逆位出現，定義了此次牌陣的核心訊息：「${dominantKw}」。這提示你在關於「${S.q}」這件事上，有需要停下來重新審視的能量或阻力。`;
     } else if(isHeavy){
-      conclusionText = `重點牌（${keyCards.join('、')}）以正位出現，核心訊息是「${dominantKw}」。正位代表這些能量正在檯面上如實發生——但牌義本身偏向辛苦與考驗，表示關於「${S.q}」，你正處在需要正面迎接挑戰的階段。困難不是暗流，而是清楚可見的課題，這也意味著你能直接面對與處理它。`;
+      conclusionText = en
+        ? `The key card(s) (${kc}) appear upright; the core message is "${dominantKw}". Upright means these energies are unfolding openly — yet the meanings lean toward hardship and testing. Regarding "${S.q}", you are at a stage that calls for meeting challenges head-on. The difficulty isn't hidden; it's a clearly visible task, which also means you can face and handle it directly.`
+        : `重點牌（${kc}）以正位出現，核心訊息是「${dominantKw}」。正位代表這些能量正在檯面上如實發生——但牌義本身偏向辛苦與考驗，表示關於「${S.q}」，你正處在需要正面迎接挑戰的階段。困難不是暗流，而是清楚可見的課題，這也意味著你能直接面對與處理它。`;
     } else {
-      conclusionText = `重點牌（${keyCards.join('、')}）以正位出現，定義了此次牌陣的核心訊息：「${dominantKw}」。這是推動你前進的主要能量，宇宙在此指引你信任這股動力。`;
+      conclusionText = en
+        ? `The key card(s) (${kc}) appear upright, defining the core message of this spread: "${dominantKw}". This is the main energy carrying you forward — the universe guides you to trust this momentum.`
+        : `重點牌（${kc}）以正位出現，定義了此次牌陣的核心訊息：「${dominantKw}」。這是推動你前進的主要能量，宇宙在此指引你信任這股動力。`;
     }
-    if(supCards.length) conclusionText += `輔助牌（${supCards.join('、')}）補充了「${supportKw}」的背景脈絡，作為重點牌能量的延伸與細節說明。`;
+    if(supCards.length) conclusionText += en
+      ? ` The supporting cards (${supCards.join(sep)}) add the context of "${supportKw}", extending and detailing the key card's energy.`
+      : `輔助牌（${supCards.join(sep)}）補充了「${supportKw}」的背景脈絡，作為重點牌能量的延伸與細節說明。`;
   } else {
     if(keyRev){
-      conclusionText = `牌組全數逆位，帶著整體反思與調整的能量，核心圍繞「${dominantKw}」。此刻更適合向內審視、重新評估方向，而非強行推進。`;
+      conclusionText = en
+        ? `The whole spread is reversed, carrying an energy of reflection and adjustment, centered on "${dominantKw}". This is a time to look inward and re-evaluate your direction rather than forcing things forward.`
+        : `牌組全數逆位，帶著整體反思與調整的能量，核心圍繞「${dominantKw}」。此刻更適合向內審視、重新評估方向，而非強行推進。`;
     } else if(isHeavy){
-      conclusionText = `牌組全數正位，能量直接而明確地展現，核心圍繞「${dominantKw}」。不過要注意：正位代表事情如實發生，而非保證順利——這組牌的牌義偏向辛苦、消耗與考驗，表示關於「${S.q}」，你正面對實實在在的壓力與課題。好消息是這些挑戰都攤在檯面上，沒有隱藏的暗流，正面應對就是此刻最好的策略。`;
+      conclusionText = en
+        ? `The whole spread is upright, the energy showing up directly and clearly, centered on "${dominantKw}". Note, though: upright means things happen as they are, not that they go smoothly — these meanings lean toward hardship and testing. Regarding "${S.q}", you face real pressure and real tasks. The good news: the challenges are all out in the open, with no hidden undercurrents, so meeting them head-on is the best strategy now.`
+        : `牌組全數正位，能量直接而明確地展現，核心圍繞「${dominantKw}」。不過要注意：正位代表事情如實發生，而非保證順利——這組牌的牌義偏向辛苦、消耗與考驗，表示關於「${S.q}」，你正面對實實在在的壓力與課題。好消息是這些挑戰都攤在檯面上，沒有隱藏的暗流，正面應對就是此刻最好的策略。`;
     } else {
-      conclusionText = `牌組整體能量積極，核心聚焦於「${dominantKw}」。你已具備面對這個問題所需的資源與意志，宇宙鼓勵你信任自己的方向。`;
+      conclusionText = en
+        ? `The overall energy is positive, focused on "${dominantKw}". You already hold the resources and will to face this question — the universe encourages you to trust your direction.`
+        : `牌組整體能量積極，核心聚焦於「${dominantKw}」。你已具備面對這個問題所需的資源與意志，宇宙鼓勵你信任自己的方向。`;
     }
   }
 
   const topicHtml = buildTopicHtml(detectTopic(S.q), keyIdx.length ? keyIdx : S.picked);
+  const intro = en
+    ? `For your question "${S.q}", this spread brings the combined energy of ${cardNames.join(', ')}.`
+    : `針對你的問題「${S.q}」，這次牌組帶出了 ${cardNames.join('、')} 的組合能量。`;
+  const foot = L('以上是依照無視論邏輯所做的初步梳理。若想獲得結合感情連結牌組、數字象徵與個人問題脈絡的深度 AI 解析，可以解鎖 AI 解牌功能。','This is an initial reading by the Wuxi method. For a deeper AI analysis that weaves in relationship card-combos, numerology, and your personal context, unlock AI readings.');
 
   return `
-    <p class="interp-p">針對你的問題「${S.q}」，這次牌組帶出了 ${cardNames.join('、')} 的組合能量。</p>
+    <p class="interp-p">${intro}</p>
     <div style="margin:14px 0 10px;padding:12px 14px;background:rgba(42,22,96,.25);border-radius:8px;border:1px solid rgba(212,175,55,.12)">
-      <div style="font-family:'Cinzel',serif;font-size:.72rem;color:rgba(212,175,55,.6);letter-spacing:.12em;margin-bottom:8px">無視論分析 · ${revRatio}</div>
+      <div style="font-family:'Cinzel',serif;font-size:.72rem;color:rgba(212,175,55,.6);letter-spacing:.12em;margin-bottom:8px">${L('無視論分析','Wuxi Analysis')} · ${revRatio}</div>
       ${rowsHtml}
     </div>
     <p class="interp-p">${conclusionText}</p>
     ${topicHtml}
-    <p class="interp-p" style="font-size:.82rem;color:rgba(212,175,55,.55);margin-top:6px">以上是依照無視論邏輯所做的初步梳理。若想獲得結合感情連結牌組、數字象徵與個人問題脈絡的深度 AI 解析，可以解鎖 AI 解牌功能。</p>`;
+    <p class="interp-p" style="font-size:.82rem;color:rgba(212,175,55,.55);margin-top:6px">${foot}</p>`;
 }
 
 // ── 其他牌陣：傳統位置解法，每張牌依其位置意義解讀 ──
@@ -1994,121 +2030,139 @@ function buildInterpPositional(){
   const uprCount = n - revCount;
   const spread = SPREADS[S.type];
 
+  const en=LANG==='en', sep=SEP();
   const cards = S.picked.map((di,i)=>{
-    const {cid,rev}=S.deck[di]; const card=C[cid]; const data=rev?card.r:card.u;
-    return {card, rev, data, pos:S.pos[i], posDesc: spread&&spread.posDesc?spread.posDesc[i]:''};
+    const {cid,rev}=S.deck[di]; const pd=spreadPosDesc(S.type);
+    return {cid, rev, kw:cardKw(cid,rev), m:cardMeaning(cid,rev), pos:S.pos[i], posDesc: pd?pd[i]:''};
   });
 
-  const cardNames = cards.map(c=>c.card.zh+(c.rev?'（逆）':''));
-  const allKw = [...new Set(cards.flatMap(c=>c.data.kw.slice(0,2)))];
+  const cardNames = cards.map(c=>cardName(c.cid)+revLabel(c.rev));
+  const allKw = [...new Set(cards.flatMap(c=>c.kw.slice(0,2)))];
   const isHeavy = kwIsHeavy(allKw);
-  const revRatio = revCount===0?'全數正位':revCount===n?'全數逆位':`${revCount} 逆 ${uprCount} 正`;
+  const revRatio = revCount===0?L('全數正位','all upright'):revCount===n?L('全數逆位','all reversed'):en?`${revCount} reversed, ${uprCount} upright`:`${revCount} 逆 ${uprCount} 正`;
+  const kwq = (arr,k)=> en ? `"${arr.slice(0,k).join(', ')}"` : `「${arr.slice(0,k).join('、')}」`;
 
   const rowsHtml = cards.map(c=>{
-    const revSpan = c.rev ? `<span style="color:var(--red);font-size:.75rem">逆</span>` : `<span style="color:var(--muted);font-size:.75rem">正</span>`;
+    const revSpan = c.rev ? `<span style="color:var(--red);font-size:.75rem">${L('逆','R')}</span>` : `<span style="color:var(--muted);font-size:.75rem">${L('正','U')}</span>`;
     return `<div style="display:flex;align-items:baseline;gap:4px;padding:4px 0;border-bottom:1px solid rgba(212,175,55,.08)">
       <span style="color:var(--muted);font-size:.8rem;min-width:60px;flex-shrink:0">${c.pos}</span>
-      <span style="font-size:.88rem;color:var(--white)">${c.card.zh}</span>${revSpan}
-      <span style="color:var(--gold);font-size:.78rem;margin-left:4px">「${c.data.kw.slice(0,3).join('、')}」</span>
+      <span style="font-size:.88rem;color:var(--white)">${cardName(c.cid)}</span>${revSpan}
+      <span style="color:var(--gold);font-size:.78rem;margin-left:4px">${kwq(c.kw,3)}</span>
     </div>`;
   }).join('');
 
-  // 逐位置敘事：每張牌在它的位置上說什麼
+  const firstSentence = m => en ? (m.split('. ')[0].replace(/\.$/,'')+'.') : (m.split('。')[0]+'。');
   let storyText = '';
   if(S.type==='one'){
     const c = cards[0];
-    storyText = `這張${c.card.zh}${c.rev?'以逆位出現':''}，帶來「${c.data.kw.slice(0,3).join('、')}」的訊息——${c.data.m.slice(0, c.data.m.indexOf('。')+1)}`;
+    storyText = en
+      ? `This ${cardName(c.cid)}${c.rev?', reversed,':''} brings the message of ${kwq(c.kw,3)} — ${firstSentence(c.m)}`
+      : `這張${cardName(c.cid)}${c.rev?'以逆位出現':''}，帶來「${c.kw.slice(0,3).join('、')}」的訊息——${firstSentence(c.m)}`;
   } else if(S.type==='choice'){
     const [aPro,aCon,bPro,bCon,advice] = cards;
-    storyText = `選項A方面：優勢是${aPro.card.zh}${aPro.rev?'（逆）':''}帶來的「${aPro.data.kw.slice(0,2).join('、')}」，挑戰則是${aCon.card.zh}${aCon.rev?'（逆）':''}所指的「${aCon.data.kw.slice(0,2).join('、')}」。`
-      + `選項B方面：優勢是${bPro.card.zh}${bPro.rev?'（逆）':''}的「${bPro.data.kw.slice(0,2).join('、')}」，挑戰則是${bCon.card.zh}${bCon.rev?'（逆）':''}的「${bCon.data.kw.slice(0,2).join('、')}」。`
-      + `而整體建議位置的${advice.card.zh}${advice.rev?'（逆）':''}提醒你：「${advice.data.kw.slice(0,3).join('、')}」——這是超越兩個選項本身、更高視角的指引。`;
+    storyText = en
+      ? `Option A — its strength is the ${kwq(aPro.kw,2)} of ${cardName(aPro.cid)}${revLabel(aPro.rev)}; its challenge is the ${kwq(aCon.kw,2)} of ${cardName(aCon.cid)}${revLabel(aCon.rev)}. Option B — its strength is the ${kwq(bPro.kw,2)} of ${cardName(bPro.cid)}${revLabel(bPro.rev)}; its challenge is the ${kwq(bCon.kw,2)} of ${cardName(bCon.cid)}${revLabel(bCon.rev)}. And in the advice position, ${cardName(advice.cid)}${revLabel(advice.rev)} reminds you: ${kwq(advice.kw,3)} — guidance from a higher view that transcends both options.`
+      : `選項A方面：優勢是${cardName(aPro.cid)}${revLabel(aPro.rev)}帶來的「${aPro.kw.slice(0,2).join('、')}」，挑戰則是${cardName(aCon.cid)}${revLabel(aCon.rev)}所指的「${aCon.kw.slice(0,2).join('、')}」。`
+      + `選項B方面：優勢是${cardName(bPro.cid)}${revLabel(bPro.rev)}的「${bPro.kw.slice(0,2).join('、')}」，挑戰則是${cardName(bCon.cid)}${revLabel(bCon.rev)}的「${bCon.kw.slice(0,2).join('、')}」。`
+      + `而整體建議位置的${cardName(advice.cid)}${revLabel(advice.rev)}提醒你：「${advice.kw.slice(0,3).join('、')}」——這是超越兩個選項本身、更高視角的指引。`;
   } else {
-    // three 或 custom：依位置順序串成時間／脈絡敘事
     storyText = cards.map((c,i)=>{
-      const posIntro = c.posDesc ? `「${c.pos}」位置（${c.posDesc}）` : `「${c.pos}」位置`;
-      return `${posIntro}出現${c.card.zh}${c.rev?'逆位':''}，指向「${c.data.kw.slice(0,3).join('、')}」`;
-    }).join('；') + '。';
+      return en
+        ? `In the "${c.pos}" position${c.posDesc?` (${c.posDesc})`:''}, ${cardName(c.cid)}${c.rev?' reversed':''} points to ${kwq(c.kw,3)}`
+        : `${c.posDesc?`「${c.pos}」位置（${c.posDesc}）`:`「${c.pos}」位置`}出現${cardName(c.cid)}${c.rev?'逆位':''}，指向「${c.kw.slice(0,3).join('、')}」`;
+    }).join(en?'. ':'；') + (en?'.':'。');
     if(S.type==='three'){
-      storyText += `從時間軸來看：過去的能量奠定了現在的處境，而現在的狀態正在形塑未來的走向——三張牌連起來，就是「${S.q}」這個問題的發展脈絡。`;
+      storyText += en
+        ? ` On the timeline: the past laid the ground for the present, and the present is shaping where the future heads — read together, the three cards trace how "${S.q}" is developing.`
+        : `從時間軸來看：過去的能量奠定了現在的處境，而現在的狀態正在形塑未來的走向——三張牌連起來，就是「${S.q}」這個問題的發展脈絡。`;
     }
     if(S.type==='triangle'){
-      storyText += `聖三角的關鍵在於「落差」：比較第一張與第二張牌的差異——「我以為」與「真實」之間的距離，正是你的盲點所在。而建言位置的牌，就是跨越這個落差的鑰匙。`;
+      storyText += en
+        ? ` The Holy Triangle turns on the "gap": compare card one and card two — the distance between "what I assume" and "the truth" is exactly your blind spot. The advice card is the key to crossing that gap.`
+        : `聖三角的關鍵在於「落差」：比較第一張與第二張牌的差異——「我以為」與「真實」之間的距離，正是你的盲點所在。而建言位置的牌，就是跨越這個落差的鑰匙。`;
     }
   }
 
-  // 整體基調（位置解法不用重點牌，只看整體牌義輕重與正逆比例）
   let toneText = '';
   if(revCount===n && n>1){
-    toneText = `牌組全數逆位，提示這個問題的能量目前多處於受阻、內化或需要調整的狀態，先放慢腳步、處理內在，比急著行動更重要。`;
+    toneText = L('牌組全數逆位，提示這個問題的能量目前多處於受阻、內化或需要調整的狀態，先放慢腳步、處理內在，比急著行動更重要。','The whole spread is reversed, suggesting the energy here is mostly blocked, internalized, or in need of adjustment. Slowing down and tending to the inner work matters more than rushing to act.');
   } else if(revCount>0 && n>1){
-    toneText = `牌陣中有 ${revCount} 張逆位，代表部分能量受阻或正在轉化中，留意這些位置所對應的面向。`;
+    toneText = en?`${revCount} card(s) are reversed, meaning some energy is blocked or in transition — pay attention to those positions.`:`牌陣中有 ${revCount} 張逆位，代表部分能量受阻或正在轉化中，留意這些位置所對應的面向。`;
   }
   if(isHeavy){
-    toneText += `整體牌義偏向辛苦與考驗，表示關於「${S.q}」，眼前有實際的課題要面對——但牌陣把問題攤開來給你看，正是為了讓你能清楚地應對。`;
+    toneText += en
+      ? ` Overall the meanings lean toward hardship and testing — regarding "${S.q}", there are real tasks ahead. But the spread lays the problem out plainly so you can meet it clearly.`
+      : `整體牌義偏向辛苦與考驗，表示關於「${S.q}」，眼前有實際的課題要面對——但牌陣把問題攤開來給你看，正是為了讓你能清楚地應對。`;
   } else if(!toneText){
-    toneText = `整體牌面能量流暢，關於「${S.q}」，你所需要的資源與方向都已在牌中顯現。`;
+    toneText = en?`The overall energy flows smoothly — regarding "${S.q}", the resources and direction you need are already showing in the cards.`:`整體牌面能量流暢，關於「${S.q}」，你所需要的資源與方向都已在牌中顯現。`;
   }
 
   const topicIdx = S.type==='choice' && S.picked.length>=5 ? [S.picked[0],S.picked[2],S.picked[4]] : S.picked;
   const topicHtml = buildTopicHtml(detectTopic(S.q), topicIdx);
+  const intro = en
+    ? `For your question "${S.q}", the ${spreadNameOf(S.type)||'spread'} drew ${cardNames.join(', ')}.`
+    : `針對你的問題「${S.q}」，${spreadNameOf(S.type)||'牌陣'}抽出了 ${cardNames.join('、')}。`;
+  const foot = L('以上是依照牌陣位置所做的初步梳理，詳細牌義請見下方單牌解析。若想獲得結合感情連結牌組、數字象徵與個人問題脈絡的深度 AI 解析，可以解鎖 AI 解牌功能。','This is an initial reading by card position; see the card-by-card section below for full meanings. For a deeper AI analysis weaving in card-combos, numerology, and your personal context, unlock AI readings.');
 
   return `
-    <p class="interp-p">針對你的問題「${S.q}」，${spread?spread.name:'牌陣'}抽出了 ${cardNames.join('、')}。</p>
+    <p class="interp-p">${intro}</p>
     <div style="margin:14px 0 10px;padding:12px 14px;background:rgba(42,22,96,.25);border-radius:8px;border:1px solid rgba(212,175,55,.12)">
-      <div style="font-family:'Cinzel',serif;font-size:.72rem;color:rgba(212,175,55,.6);letter-spacing:.12em;margin-bottom:8px">牌陣總覽 · ${revRatio}</div>
+      <div style="font-family:'Cinzel',serif;font-size:.72rem;color:rgba(212,175,55,.6);letter-spacing:.12em;margin-bottom:8px">${L('牌陣總覽','Spread Overview')} · ${revRatio}</div>
       ${rowsHtml}
     </div>
     <p class="interp-p">${storyText}</p>
     ${topicHtml}
     <p class="interp-p">${toneText}</p>
-    <p class="interp-p" style="font-size:.82rem;color:rgba(212,175,55,.55);margin-top:6px">以上是依照牌陣位置所做的初步梳理，詳細牌義請見下方單牌解析。若想獲得結合感情連結牌組、數字象徵與個人問題脈絡的深度 AI 解析，可以解鎖 AI 解牌功能。</p>`;
+    <p class="interp-p" style="font-size:.82rem;color:rgba(212,175,55,.55);margin-top:6px">${foot}</p>`;
 }
 
 function buildDetails(){
-  const spread = SPREADS[S.type];
   const topic = detectTopic(S.q);
+  const en=LANG==='en';
+  const pd=spreadPosDesc(S.type);
   return S.picked.map((di,i)=>{
-    const {cid,rev}=S.deck[di]; const card=C[cid]; const data=rev?card.r:card.u;
-    const lore=LORE[cid];
+    const {cid,rev}=S.deck[di];
+    const kw=cardKw(cid,rev); const fullM=cardMeaning(cid,rev);
+    const lore=loreOf(cid);
     const pid=`lore-${i}`;
-    const posDesc = spread && spread.posDesc ? spread.posDesc[i] : '';
+    const posDesc = pd ? pd[i] : '';
     const imgUrl=IMG_BASE+CARD_IMG_FILES[cid]+'&width=300';
+    const firstSentence = m => en ? (m.split('. ')[0].replace(/\.$/,'')+'.') : (m.split('。')[0]+'。');
     // 有明確主題時只顯示「總述第一句＋主題段落」，不顯示其他主題的牌義
     let meaning;
     if(topic==='general'){
-      meaning=data.m;
+      meaning=fullM;
     } else {
-      const first=data.m.split('。')[0]+'。';
-      const seg=topicSentence(data.m,topic,cid,rev);
-      meaning=(seg.startsWith(first)?'':first)+seg
-        +`<span style="display:block;margin-top:6px;font-size:.74rem;color:rgba(212,175,55,.5)">✦ 已聚焦「${TOPIC_LABEL[topic]}」主題，完整牌義可展開下方牌面學習</span>`;
+      const first=firstSentence(fullM);
+      const seg=topicSentence(topic,cid,rev);
+      meaning=(seg.startsWith(first)?'':first+' ')+seg
+        +`<span style="display:block;margin-top:6px;font-size:.74rem;color:rgba(212,175,55,.5)">${en?`✦ Focused on the "${topicLabel(topic)}" theme — expand the card lore below for the full meaning`:`✦ 已聚焦「${topicLabel(topic)}」主題，完整牌義可展開下方牌面學習`}</span>`;
     }
     return `<div class="card-block">
       <div style="display:flex;gap:14px;align-items:flex-start;margin-bottom:12px">
         <div style="flex-shrink:0;width:72px">
-          <img src="${imgUrl}" alt="${card.zh}" loading="lazy"
+          <img src="${imgUrl}" alt="${cardName(cid)}" loading="lazy"
             style="width:72px;border-radius:6px;display:block;box-shadow:0 2px 12px rgba(0,0,0,.5);${rev?'transform:rotate(180deg)':''}"
             onerror="this.style.display='none'">
         </div>
         <div style="flex:1;min-width:0">
-          <div class="card-block-title" style="margin-bottom:6px">${S.pos[i]}：${card.zh}${rev?` <span style="color:var(--red);font-size:.75rem">(逆位)</span>`:''}
-            <span style="color:var(--muted);font-size:.72rem;margin-left:6px">${card.pl}</span></div>
-          <div class="kw-list" style="margin-bottom:8px">${data.kw.map(k=>`<span class="kw">${k}</span>`).join('')}</div>
+          <div class="card-block-title" style="margin-bottom:6px">${S.pos[i]}：${cardName(cid)}${rev?` <span style="color:var(--red);font-size:.75rem">(${L('逆位','reversed')})</span>`:''}
+            <span style="color:var(--muted);font-size:.72rem;margin-left:6px">${cardPL(cid)}</span></div>
+          <div class="kw-list" style="margin-bottom:8px">${kw.map(k=>`<span class="kw">${k}</span>`).join('')}</div>
         </div>
       </div>
       <div class="interp-p">${meaning}</div>
-      <div class="lore-toggle" onclick="toggleLore('${pid}',this)"><i class="lore-arr">›</i> 牌面學習：完整牌義 &amp; 圖像星象解析</div>
+      <div class="lore-toggle" onclick="toggleLore('${pid}',this)"><i class="lore-arr">›</i> ${L('牌面學習：完整牌義 &amp; 圖像星象解析','Card lore: full meaning &amp; imagery / astrology')}</div>
       <div class="lore-panel" id="${pid}">
-        ${topic!=='general'?`<div class="lore-pos-desc" style="font-style:normal">✦ 完整牌義：${data.m}</div>`:''}
-        ${posDesc?`<div class="lore-pos-desc">✦ 此位置「${S.pos[i]}」代表：${posDesc}</div>`:''}
+        ${topic!=='general'?`<div class="lore-pos-desc" style="font-style:normal">${L('✦ 完整牌義：','✦ Full meaning: ')}${fullM}</div>`:''}
+        ${posDesc?`<div class="lore-pos-desc">${en?`✦ The "${S.pos[i]}" position represents: ${posDesc}`:`✦ 此位置「${S.pos[i]}」代表：${posDesc}`}</div>`:''}
         <div class="lore-meta">
-          <div class="lore-meta-item"><span class="lore-meta-lbl">元素</span><span class="lore-meta-val">${lore.elem}</span></div>
-          <div class="lore-meta-item"><span class="lore-meta-lbl">星象</span><span class="lore-meta-val">${lore.astro}</span></div>
-          ${lore.myth?`<div class="lore-meta-item" style="width:100%"><span class="lore-meta-lbl">神話原型</span><span class="lore-meta-val">${lore.myth}</span></div>`:''}
+          <div class="lore-meta-item"><span class="lore-meta-lbl">${L('元素','Element')}</span><span class="lore-meta-val">${lore.elem}</span></div>
+          <div class="lore-meta-item"><span class="lore-meta-lbl">${L('星象','Astrology')}</span><span class="lore-meta-val">${lore.astro}</span></div>
+          ${lore.myth?`<div class="lore-meta-item" style="width:100%"><span class="lore-meta-lbl">${L('神話原型','Myth')}</span><span class="lore-meta-val">${lore.myth}</span></div>`:''}
         </div>
-        <div class="lore-img-title">✦ 牌面圖像象徵</div>
-        <div class="lore-img-grid">${lore.img.map(([n,m])=>`<div class="lore-img-item"><div class="lore-img-name">${n}</div><div class="lore-img-meaning">${m}</div></div>`).join('')}</div>
+        <div class="lore-img-title">${L('✦ 牌面圖像象徵','✦ Imagery Symbolism')}</div>
+        <div class="lore-img-grid">${lore.img.map(([nm,mn])=>`<div class="lore-img-item"><div class="lore-img-name">${nm}</div><div class="lore-img-meaning">${mn}</div></div>`).join('')}</div>
       </div>
     </div>`;
   }).join('');
@@ -2155,7 +2209,7 @@ async function sendChat(){
         const r=await fetchRetry(()=>fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent',
           {method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':cleanKey},body:JSON.stringify(geminiBody)}));
         const data=await r.json();
-        ans=data.candidates?.[0]?.content?.parts?.[0]?.text||'無法取得回應';
+        ans=data.candidates?.[0]?.content?.parts?.[0]?.text||L('無法取得回應','No response received');
       }
     }
     S.chatHistory.push({role:'ai',text:ans.replace(/\*\*(.+?)\*\*/g,'$1').replace(/\*(.+?)\*/g,'$1').replace(/[*#`_~]/g,'')});
@@ -2185,17 +2239,17 @@ function toggleLore(id,btn){
 //  SAVE READING
 // ══════════════════════════════════════════
 function saveReading(){
-  const spreadName = S.type==='custom'?'自訂牌陣':SPREADS[S.type].name;
+  const spreadName = S.type==='custom'?L('自訂牌陣','Custom Spread'):spreadNameOf(S.type);
   const rec = {
     id:Date.now(),
-    date:new Date().toLocaleString('zh-TW'),
+    date:new Date().toLocaleString(LANG==='en'?'en-US':'zh-TW'),
     q:S.q, spread:spreadName, pos:S.pos,
     cards:S.picked.map(di=>({cid:S.deck[di].cid, rev:S.deck[di].rev})),
     interp: S.lastInterpText,
     chat: S.chatHistory ? [...S.chatHistory] : []
   };
   // Save lightweight list for history index
-  S.readings.unshift({id:rec.id,date:rec.date,q:rec.q,spread:spreadName,cards:S.picked.map((di,i)=>({name:C[S.deck[di].cid].zh,pos:S.pos[i],rev:S.deck[di].rev}))});
+  S.readings.unshift({id:rec.id,date:rec.date,q:rec.q,spread:spreadName,cards:S.picked.map((di,i)=>({name:cardName(S.deck[di].cid),pos:S.pos[i],rev:S.deck[di].rev}))});
   if(S.readings.length>60)S.readings.pop();
   localStorage.setItem('tr_readings',JSON.stringify(S.readings));
   // Save full record (with interp + chat) to separate store
@@ -2208,7 +2262,7 @@ function saveReading(){
   if(proj){
     proj.readings.push(rec);
     saveProjects();
-    toast(`✦ 已儲存至專案「${proj.name}」`);
+    toast(LANG==='en'?`✦ Saved to project "${proj.name}"`:`✦ 已儲存至專案「${proj.name}」`);
   } else {
     toast(L('✦ 占卜記錄已儲存','✦ Reading saved'));
   }
