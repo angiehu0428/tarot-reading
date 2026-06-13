@@ -1,6 +1,10 @@
 // Tarot Reading — Cloudflare Worker
 // KV namespace: TAROT_KV
-// Env vars: GEMINI_KEY, GUMROAD_SELLER_ID
+// Env vars: GEMINI_KEY, GUMROAD_SELLER_ID, STATS_TOKEN
+
+// 每日 AI 解牌上限（成本煞車）。超過就暫停當天的 AI 解牌。
+const DAILY_CAP = 300;
+function todayKey() { return 'count:' + new Date().toISOString().slice(0, 10); }
 
 const ALLOWED_ORIGINS = [
   'https://angiehu0428.github.io',
@@ -51,6 +55,11 @@ export default {
     // History sync — paid users sync reading history across devices
     if (url.pathname === '/sync' && request.method === 'POST') {
       return handleSync(request, env);
+    }
+
+    // Usage stats — private, view AI-reading counts (key in query)
+    if (url.pathname === '/stats' && request.method === 'GET') {
+      return handleStats(request, env);
     }
 
     return new Response('Not found', { status: 404 });
@@ -124,6 +133,22 @@ async function handleSync(request, env) {
   return json({ error: 'bad action' }, 400, request);
 }
 
+// ── Usage stats (private) ────────────────────────────────────
+async function handleStats(request, env) {
+  const url = new URL(request.url);
+  if (!env.STATS_TOKEN || url.searchParams.get('key') !== env.STATS_TOKEN) {
+    return new Response('Forbidden', { status: 403 });
+  }
+  const days = [];
+  const now = new Date();
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(now.getTime() - i * 86400000).toISOString().slice(0, 10);
+    const n = parseInt((await env.TAROT_KV.get('count:' + d)) || '0', 10);
+    days.push({ date: d, aiReadings: n });
+  }
+  return json({ dailyCap: DAILY_CAP, today: days[0], last7days: days }, 200, request);
+}
+
 // ── Gemini proxy ─────────────────────────────────────────────
 async function handleGemini(request, env) {
   const { email, body: geminiBody } = await request.json().catch(() => ({}));
@@ -136,6 +161,15 @@ async function handleGemini(request, env) {
   }
 
   if (!geminiBody) return json({ error: '缺少請求內容' }, 400, request);
+
+  // 成本煞車：超過每日上限就暫停，當天用戶改用內建解讀
+  const dk = todayKey();
+  const used = parseInt((await env.TAROT_KV.get(dk)) || '0', 10);
+  if (used >= DAILY_CAP) {
+    return json({ error: '今日 AI 解牌已額滿，請明天再來 / Today\'s AI readings are full, please try again tomorrow.', capped: true }, 429, request);
+  }
+  // 計入今日用量（3 天後自動過期）
+  await env.TAROT_KV.put(dk, String(used + 1), { expirationTtl: 60 * 60 * 24 * 3 });
 
   const resp = await fetch(
     'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent',
