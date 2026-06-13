@@ -30,29 +30,35 @@
   <rect x="34" y="34" width="444" height="444" rx="74" fill="none" stroke="#d4af37" stroke-width="1.5" opacity=".25"/>
 
   <!-- 光暈 -->
-  <circle cx="256" cy="238" r="190" fill="url(#halo)"/>
+  <circle cx="256" cy="196" r="170" fill="url(#halo)"/>
 
   <!-- 小星點 -->
   <g fill="#f0d878">
-    <circle cx="120" cy="120" r="4" opacity=".8"/>
-    <circle cx="400" cy="96" r="3" opacity=".6"/>
-    <circle cx="430" cy="200" r="2.5" opacity=".5"/>
-    <circle cx="90" cy="300" r="2.5" opacity=".5"/>
-    <circle cx="150" cy="412" r="3" opacity=".55"/>
-    <circle cx="392" cy="392" r="4" opacity=".7"/>
+    <circle cx="116" cy="104" r="4" opacity=".8"/>
+    <circle cx="402" cy="92" r="3" opacity=".6"/>
+    <circle cx="436" cy="186" r="2.5" opacity=".5"/>
+    <circle cx="80" cy="240" r="2.5" opacity=".5"/>
+    <circle cx="100" cy="330" r="3" opacity=".5"/>
+    <circle cx="420" cy="318" r="3.5" opacity=".6"/>
   </g>
   <g fill="#fff" opacity=".85">
-    <path d="M392 132 l4 12 12 4 -12 4 -4 12 -4-12 -12-4 12-4 Z"/>
-    <path d="M116 360 l3 9 9 3 -9 3 -3 9 -3-9 -9-3 9-3 Z"/>
+    <path d="M398 138 l4 12 12 4 -12 4 -4 12 -4-12 -12-4 12-4 Z"/>
+    <path d="M96 300 l3 9 9 3 -9 3 -3 9 -3-9 -9-3 9-3 Z"/>
   </g>
 
   <!-- 月牙 -->
-  <path d="M150 168 a64 64 0 1 0 70 96 a52 52 0 1 1 -70 -96 Z" fill="url(#gold)" opacity=".5" filter="url(#glow)"/>
+  <path d="M146 130 a58 58 0 1 0 64 88 a47 47 0 1 1 -64 -88 Z" fill="url(#gold)" opacity=".5" filter="url(#glow)"/>
 
   <!-- 主星 -->
-  <g transform="translate(276 248)" filter="url(#glow)">
-    <path d="M0-128 L24-34 L118-34 L43 24 L72 118 L0 60 L-72 118 L-43 24 L-118-34 L-24-34 Z" fill="url(#gold)"/>
-    <circle r="23" fill="#1c0e44"/>
-    <circle r="12" fill="#f6e27a"/>
+  <g transform="translate(272 196)" filter="url(#glow)">
+    <path d="M0-112 L21-30 L103-30 L38 21 L63 103 L0 53 L-63 103 L-38 21 L-103-30 L-21-30 Z" fill="url(#gold)"/>
+    <circle r="20" fill="#1c0e44"/>
+    <circle r="10" fill="#f6e27a"/>
   </g>
+
+  <!-- 中文標題 -->
+  <text x="256" y="406" text-anchor="middle"
+    font-family="'Noto Serif TC','Songti TC','STSong',serif" font-size="92" font-weight="700"
+    fill="url(#gold)" filter="url(#glow)"
+    letter-spacing="6">塔羅神諭</text>
 </svg>
