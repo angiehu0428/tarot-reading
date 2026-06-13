@@ -409,6 +409,7 @@ textarea.inp{resize:vertical;min-height:90px}
   </div>
 
   <div style="margin-top:32px;font-size:.68rem;color:rgba(154,141,181,.3);letter-spacing:.08em;text-align:center;line-height:2">
+    <a href="javascript:void(0)" onclick="showChangelog()" style="color:rgba(212,175,55,.45);text-decoration:none;transition:color .3s" onmouseover="this.style.color='rgba(212,175,55,.8)'" onmouseout="this.style.color='rgba(212,175,55,.45)'" data-i18n="w.changelog">✦ 更新紀錄</a><br>
     <span data-i18n="w.copyright">© 2026 塔羅神諭 · All Rights Reserved</span><br>
     <a href="javascript:void(0)" onclick="window.location.href='mai'+'lto:'+'angiehu'+'@'+'gmail.com'" style="color:rgba(212,175,55,.35);text-decoration:none;transition:color .3s" onmouseover="this.style.color='rgba(212,175,55,.7)'" onmouseout="this.style.color='rgba(212,175,55,.35)'" data-i18n="w.contact">聯繫我們</a>
   </div>
@@ -612,6 +613,15 @@ textarea.inp{resize:vertical;min-height:90px}
   <button class="btn btn-ghost" onclick="goBack()" style="margin-top:16px" data-i18n="nav.back2">返回</button>
 </div>
 
+<!-- ══ CHANGELOG ══ -->
+<div id="s-changelog" class="screen">
+  <h2 class="t-section t-gold" data-i18n="cl.title">更新紀錄</h2>
+  <div class="t-divider">— ✦ —</div>
+  <p class="t-muted" style="max-width:560px;margin-bottom:22px;font-size:.84rem" data-i18n="cl.intro">塔羅神諭持續進化中，這裡記錄每一次的更新。</p>
+  <div id="changelog-list" style="max-width:620px;width:100%;text-align:left"></div>
+  <button class="btn btn-ghost" onclick="goBack()" style="margin-top:20px" data-i18n="nav.back2">返回</button>
+</div>
+
 <script>
 // ══════════════════════════════════════════
 //  付費解鎖設定（網站管理員填入）
@@ -647,6 +657,7 @@ function onLangChange(){
   if(!cur) return;
   if(cur.id==='s-history') showHistory();
   if(cur.id==='s-projects' && typeof renderProjectList==='function') renderProjectList();
+  if(cur.id==='s-changelog' && typeof showChangelog==='function') showChangelog();
   if(typeof updateProjectBanners==='function') updateProjectBanners();
   if(typeof updateApiStatus==='function' && document.getElementById('settings-modal').classList.contains('on')) updateApiStatus();
 }
@@ -685,6 +696,9 @@ Object.assign(T, {
   'w.start':{zh:'✦ 開始占卜 ✦',en:'✦ Begin Reading ✦'},
   'w.project':{zh:'✦ 專案占卜 ✦',en:'✦ Project Reading ✦'},
   'w.history':{zh:'歷史記錄',en:'History'},
+  'w.changelog':{zh:'✦ 更新紀錄',en:'✦ Changelog'},
+  'cl.title':{zh:'更新紀錄',en:'Changelog'},
+  'cl.intro':{zh:'塔羅神諭持續進化中，這裡記錄每一次的更新。',en:'Tarot Oracle keeps evolving — every update is logged here.'},
   'w.addhome':{zh:'⭐ 加入書籤 / 手機桌面',en:'⭐ Bookmark / Add to Home'},
   'w.tagline':{zh:'大阿爾克那 · 22張主牌 · 偉特圖像 · 加密隨機',en:'Major & Minor Arcana · 78 cards · Rider–Waite · Crypto-random'},
   'w.ai.q':{zh:'✦ 如何啟用 AI 個人化解牌？',en:'✦ How to enable personalized AI readings?'},
@@ -2850,6 +2864,35 @@ function toggleAiInfo(){
   const open=panel.style.display==='none';
   panel.style.display=open?'block':'none';
   arr.style.transform=open?'rotate(90deg)':'';
+}
+
+// ══════════════════════════════════════════
+//  更新紀錄 CHANGELOG（新項目加在最上面；中英務必同步）
+// ══════════════════════════════════════════
+const CHANGELOG = [
+  { date:'2026-06-13',
+    zh:['新增「更新紀錄」頁面，記錄每次更新','五張無視論牌陣標示為「最推薦」全方位解牌','追問區加入提示，引導如何向 AI 追問細節','付費會員新增跨裝置雲端同步歷史記錄'],
+    en:['Added this Changelog page to track every update','Marked the Five-Card Wuxi spread as the recommended all-around reading','Added hints in the follow-up area on how to ask the AI for details','Paid members get cross-device cloud history sync'] },
+  { date:'2026-06-12',
+    zh:['推出完整英文版，瀏覽器語言自動偵測 + 右上角一鍵切換','78 張牌的英文牌義、關鍵字、圖像星象資料庫','首頁加入星雲、流星、牌扇動畫與書籤／加入主畫面功能','新增聖三角牌陣；每個牌陣加上「適合占卜什麼」說明'],
+    en:['Launched the full English version with browser-language auto-detect and a one-tap toggle','English database of all 78 cards: meanings, keywords, imagery & astrology','Home page nebula / shooting-star / card-fan animations, plus bookmark / add-to-home','Added the Holy Triangle spread; each spread now notes what it is best for'] },
+  { date:'2026-06-11',
+    zh:['導入靜心音場：海浪聲＋theta 腦波音','支援 OpenAI 金鑰（與 Gemini 自動辨識）；AI 連線失敗自動重試','解牌依問題主題（感情／事業／財務／健康／學業）聚焦回覆','歷史記錄加入關鍵字搜尋與主題分類'],
+    en:['Added the meditation soundscape: ocean waves + theta brainwave tone','OpenAI key support (auto-detected alongside Gemini); auto-retry on AI errors','Readings now focus on the question topic (love / career / money / health / study)','History gained keyword search and topic categories'] },
+  { date:'2026-06-10',
+    zh:['上線 Gumroad 購買 → 自動解鎖 AI 深度解牌','以 Cloudflare Worker 安全代理金鑰，購買 email 驗證解鎖','無視論解牌邏輯校正：重點牌只用於五張牌陣，正逆位不等於吉凶','塔羅神諭正式上線，78 張偉特牌、加密隨機洗牌'],
+    en:['Launched Gumroad purchase → automatic AI deep-reading unlock','Cloudflare Worker securely proxies the API key; unlock by verifying purchase email','Refined Wuxi logic: key-card method only for the five-card spread; upright ≠ good','Tarot Oracle went live with all 78 Rider–Waite cards and crypto-random shuffling'] },
+];
+function showChangelog(){
+  const el=document.getElementById('changelog-list');
+  el.innerHTML=CHANGELOG.map(e=>{
+    const items=(LANG==='en'?e.en:e.zh).map(t=>`<li style="margin-bottom:6px;line-height:1.7">${t}</li>`).join('');
+    return `<div style="border-left:2px solid rgba(212,175,55,.35);padding:4px 0 4px 16px;margin-bottom:22px">
+      <div style="font-family:'Cinzel',serif;font-size:.82rem;color:var(--gold);letter-spacing:.08em;margin-bottom:8px">${e.date}</div>
+      <ul style="margin:0;padding-left:18px;font-size:.85rem;color:var(--silver)">${items}</ul>
+    </div>`;
+  }).join('');
+  go('s-changelog');
 }
 
 // ── INIT ──
