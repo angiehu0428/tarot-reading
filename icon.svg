@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#150830"/>
+  <rect x="24" y="24" width="464" height="464" rx="80" fill="none" stroke="#d4af37" stroke-width="6" opacity=".5"/>
+  <g transform="translate(256 248)">
+    <path d="M0-150 L28-40 L138-40 L50 28 L84 138 L0 70 L-84 138 L-50 28 L-138-40 L-28-40 Z" fill="#d4af37"/>
+    <circle r="26" fill="#150830"/>
+    <circle r="14" fill="#f0d878"/>
+  </g>
+  <text x="256" y="448" text-anchor="middle" font-family="serif" font-size="64" fill="#d4af37">塔羅神諭</text>
+</svg>

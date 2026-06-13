@@ -4,6 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>✦ 塔羅神諭 ✦</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<meta name="theme-color" content="#150830">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="塔羅神諭">
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Noto+Serif+TC:wght@300;400;700&display=swap" rel="stylesheet">
 <script src="https://gumroad.com/js/gumroad.js"></script>
 <style>
@@ -375,8 +382,9 @@ textarea.inp{resize:vertical;min-height:90px}
     <button class="btn" onclick="startNoProject()">✦ 開始占卜 ✦</button>
     <button class="btn" onclick="go('s-projects')">✦ 專案占卜 ✦</button>
   </div>
-  <div style="margin-top:14px">
+  <div style="margin-top:14px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
     <button class="btn btn-ghost btn-sm" onclick="showHistory()">歷史記錄</button>
+    <button class="btn btn-ghost btn-sm" onclick="addToHome()">⭐ 加入書籤 / 手機桌面</button>
   </div>
   <p style="margin-top:36px;font-size:.72rem;color:rgba(154,141,181,.35);letter-spacing:.12em">大阿爾克那 · 22張主牌 · 偉特圖像 · 加密隨機</p>
 
@@ -2251,6 +2259,43 @@ function toast(msg){
   document.querySelectorAll('.toast').forEach(e=>e.remove());
   const el=document.createElement('div');el.className='toast';el.textContent=msg;
   document.body.appendChild(el);setTimeout(()=>el.remove(),3000);
+}
+
+// ── 加入書籤 / 手機桌面 ──
+let deferredInstall=null;
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredInstall=e;});
+function addToHome(){
+  // Android / 桌面 Chrome：直接跳出安裝提示
+  if(deferredInstall){deferredInstall.prompt();deferredInstall=null;return;}
+  const ua=navigator.userAgent;
+  const isIOS=/iPhone|iPad|iPod/.test(ua);
+  const isAndroid=/Android/.test(ua);
+  const isMac=/Macintosh/.test(ua);
+  let msg;
+  if(isIOS){
+    msg=`<strong style="color:var(--gold)">iPhone / iPad 加入主畫面：</strong><br>
+      1. 點 Safari 下方的 <strong style="color:var(--silver)">分享按鈕</strong>（□↑）<br>
+      2. 往下捲，點「<strong style="color:var(--silver)">加入主畫面</strong>」<br>
+      3. 點右上角「加入」——完成！主畫面就有塔羅神諭的圖示了`;
+  } else if(isAndroid){
+    msg=`<strong style="color:var(--gold)">Android 加入主畫面：</strong><br>
+      1. 點瀏覽器右上角 <strong style="color:var(--silver)">⋮ 選單</strong><br>
+      2. 點「<strong style="color:var(--silver)">加到主畫面</strong>」或「安裝應用程式」<br>
+      3. 確認——完成！`;
+  } else {
+    msg=`<strong style="color:var(--gold)">加入書籤：</strong><br>
+      按 <strong style="color:var(--silver)">${isMac?'⌘ Cmd + D':'Ctrl + D'}</strong> 即可將本站加入書籤<br><br>
+      <span style="color:var(--muted);font-size:.78rem">手機用戶：用手機瀏覽器開啟本站，再點此按鈕會有「加入主畫面」教學</span>`;
+  }
+  const overlay=document.createElement('div');
+  overlay.className='modal-overlay on';
+  overlay.onclick=e=>{if(e.target===overlay)overlay.remove();};
+  overlay.innerHTML=`<div class="modal" style="max-width:420px">
+    <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">✕</button>
+    <h3>⭐ 收藏塔羅神諭</h3>
+    <p style="font-size:.85rem;color:var(--muted);line-height:2.1;margin-top:14px;text-align:left">${msg}</p>
+  </div>`;
+  document.body.appendChild(overlay);
 }
 
 function toggleSoundInfo(){

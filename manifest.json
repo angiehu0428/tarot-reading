@@ -1,0 +1,13 @@
+{
+  "name": "塔羅神諭",
+  "short_name": "塔羅神諭",
+  "description": "讓牌卡引領你走向內心的真相",
+  "start_url": "/tarot-reading/",
+  "scope": "/tarot-reading/",
+  "display": "standalone",
+  "background_color": "#08031a",
+  "theme_color": "#150830",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
