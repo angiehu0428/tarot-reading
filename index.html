@@ -93,6 +93,8 @@ html,body{min-height:100vh;background:var(--dp);color:var(--white);font-family:'
 .spread-opt:hover{border-color:var(--gold);transform:translateY(-6px);box-shadow:0 12px 36px rgba(212,175,55,.2)}
 .spread-icon{font-size:2.2rem;margin-bottom:14px;display:block}
 .spread-name{font-family:'Cinzel',serif;font-size:1.1rem;color:var(--gold);margin-bottom:8px}
+.spread-opt.rec{border-color:rgba(212,175,55,.6);background:rgba(212,175,55,.08);box-shadow:0 0 22px rgba(212,175,55,.15)}
+.spread-rec-badge{position:absolute;top:0;right:0;background:linear-gradient(135deg,var(--gl),var(--gold));color:#1a0a2e;font-family:'Cinzel',serif;font-size:.62rem;font-weight:700;letter-spacing:.06em;padding:4px 12px;border-bottom-left-radius:10px}
 .spread-desc{font-size:.8rem;color:var(--muted);line-height:1.7}
 .spread-fit{font-size:.72rem;color:rgba(212,175,55,.55);line-height:1.7;margin-top:8px;padding-top:8px;border-top:1px dashed rgba(212,175,55,.15)}
 
@@ -472,7 +474,8 @@ textarea.inp{resize:vertical;min-height:90px}
       <div class="spread-desc" data-i18n-html="sp.tri.desc">我以為的狀況 · 真實的狀況 · 建言<br>看見事件的真相與盲點</div>
       <div class="spread-fit" data-i18n="sp.tri.fit">適合：卡關、想不通的事，如「在現在的事件中，有我沒注意到的盲點嗎」</div>
     </div>
-    <div class="spread-opt" onclick="pickSpread('five')">
+    <div class="spread-opt rec" onclick="pickSpread('five')">
+      <span class="spread-rec-badge" data-i18n="sp.rec">★ 最推薦</span>
       <span class="spread-icon">✦✦✦✦✦</span>
       <div class="spread-name" data-i18n="sp.five.name">五張無視論</div>
       <div class="spread-desc" data-i18n-html="sp.five.desc">無視論五牌陣<br>重點牌 · 輔助牌 · 元素分析</div>
@@ -576,7 +579,8 @@ textarea.inp{resize:vertical;min-height:90px}
     </div>
     <div id="chat-area" style="display:none">
       <div class="chat-box">
-        <div class="interp-h" style="padding:20px 24px 14px;margin-bottom:0;border-bottom:1px solid rgba(212,175,55,.15)" data-i18n="rd.chat">✦ 繼續提問</div>
+        <div class="interp-h" style="padding:20px 24px 8px;margin-bottom:0" data-i18n="rd.chat">✦ 繼續提問</div>
+        <div style="padding:0 24px 14px;border-bottom:1px solid rgba(212,175,55,.15);font-size:.78rem;color:var(--muted);line-height:1.7" data-i18n="rd.chat.hint">✦ 可以追問任何細節，例如「為什麼是這張牌？」「具體該怎麼做？」「時間點大概是什麼時候？」——AI 會根據這次解牌延伸回答。</div>
         <div class="chat-msgs" id="chat-msgs"></div>
         <div class="chat-input-row">
           <input class="chat-input" id="chat-input" data-i18n-ph="rd.chat.ph" placeholder="針對這次解牌繼續提問..." onkeydown="if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing&&event.keyCode!==229){event.preventDefault();sendChat()}">
@@ -657,7 +661,7 @@ Object.assign(T, {
   // ── Settings modal ──
   'set.title':{zh:'✦ AI 深度解牌',en:'✦ AI Deep Reading'},
   'set.buy.head':{zh:'✦ 購買解鎖 · 支持創作',en:'✦ Unlock by Purchase · Support the Creator'},
-  'set.buy.desc':{zh:'購買後即可解鎖 AI 深度解牌功能，獲得針對你問題的個人化塔羅分析、感情連結牌組解讀與追問對話。',en:'Purchase to unlock AI deep readings — personalized analysis of your question, relationship card-combo insights, and unlimited follow-up chat.'},
+  'set.buy.desc':{zh:'購買後即可解鎖 AI 深度解牌功能：針對你問題的個人化塔羅分析、感情連結牌組解讀、無限追問對話，以及跨裝置雲端同步歷史記錄。',en:'Purchase to unlock AI deep readings: personalized analysis of your question, relationship card-combo insights, unlimited follow-up chat, and cloud history sync across devices.'},
   'set.buy.btn':{zh:'✦ 前往購買解鎖',en:'✦ Purchase to Unlock'},
   'set.buy.note':{zh:'支援信用卡 · PayPal · 購買後以購買時填寫的 email 驗證',en:'Credit card · PayPal · Verify with the email used at checkout'},
   'set.buy.label':{zh:'已購買？輸入購買時的 Email 驗證',en:'Already purchased? Enter your checkout email'},
@@ -701,8 +705,9 @@ Object.assign(T, {
   'sp.tri.desc':{zh:'我以為的狀況 · 真實的狀況 · 建言<br>看見事件的真相與盲點',en:'What I assume · The truth · Advice<br>See the reality and your blind spots'},
   'sp.tri.fit':{zh:'適合：卡關、想不通的事，如「在現在的事件中，有我沒注意到的盲點嗎」',en:'Best for: feeling stuck — e.g. "Is there a blind spot I\'m missing in this situation?"'},
   'sp.five.name':{zh:'五張無視論',en:'Five-Card Wuxi'},
-  'sp.five.desc':{zh:'無視論五牌陣<br>重點牌 · 輔助牌 · 元素分析',en:'Wuxi method<br>Key card · supporting cards · elements'},
-  'sp.five.fit':{zh:'適合：想深入了解單一主題的整體能量，如「接下來這段感情的走向」',en:'Best for: the overall energy of one theme — e.g. "Where is this relationship heading?"'},
+  'sp.rec':{zh:'★ 最推薦',en:'★ Top Pick'},
+  'sp.five.desc':{zh:'全方位解牌 · 無視論五牌陣<br>重點牌 · 輔助牌 · 元素分析',en:'All-around reading · Wuxi method<br>Key card · supporting cards · elements'},
+  'sp.five.fit':{zh:'最推薦！全方位解讀單一主題的整體能量，層次最豐富，如「接下來這段感情的走向」',en:'Most recommended! The richest, most all-around reading of a single theme — e.g. "Where is this relationship heading?"'},
   'sp.choice.name':{zh:'二擇一牌陣',en:'Either-Or Spread'},
   'sp.choice.desc':{zh:'兩條路的深度分析<br>幫你看清選擇',en:'Deep analysis of two paths<br>See your options clearly'},
   'sp.choice.fit':{zh:'適合：在兩個選項間猶豫，如「該留在現職還是接受新工作」',en:'Best for: choosing between two options — e.g. "Stay in my job or take the new offer?"'},
@@ -729,6 +734,7 @@ Object.assign(T, {
   // ── Reading ──
   'rd.interp':{zh:'✦ 整體解讀',en:'✦ Overall Reading'},
   'rd.chat':{zh:'✦ 繼續提問',en:'✦ Follow-up Questions'},
+  'rd.chat.hint':{zh:'✦ 可以追問任何細節，例如「為什麼是這張牌？」「具體該怎麼做？」「時間點大概是什麼時候？」——AI 會根據這次解牌延伸回答。',en:'✦ Ask for any detail — e.g. "Why this card?", "What exactly should I do?", "Roughly when?" — the AI answers based on this reading.'},
   'rd.chat.ph':{zh:'針對這次解牌繼續提問...',en:'Ask a follow-up about this reading...'},
   'rd.chat.send':{zh:'送出',en:'Send'},
   'rd.detail':{zh:'✦ 單牌解析',en:'✦ Card-by-Card'},
@@ -2524,6 +2530,7 @@ function saveReading(){
   } else {
     toast(L('✦ 占卜記錄已儲存','✦ Reading saved'));
   }
+  syncPush();
 }
 
 // ══════════════════════════════════════════
@@ -2592,6 +2599,7 @@ function deleteReading(id){
   localStorage.setItem('tr_full',JSON.stringify(fullRecs));
   showHistory();
   toast(L('已刪除該筆記錄','Record deleted'));
+  syncPush();
 }
 function clearAllReadings(){
   if(!confirm(L('確定要清除「全部」占卜記錄嗎？此動作無法復原。','Clear ALL reading history? This cannot be undone.')))return;
@@ -2600,6 +2608,7 @@ function clearAllReadings(){
   localStorage.removeItem('tr_full');
   showHistory();
   toast(L('已清除全部記錄','All history cleared'));
+  syncPush();
 }
 
 // ══════════════════════════════════════════
@@ -2620,6 +2629,8 @@ async function verifyEmail(){
       localStorage.setItem('tr_verified_email',email);
       ubar.className='api-status api-ok';ubar.textContent=L('✓ 驗證成功！已解鎖 AI 解牌','✓ Verified! AI reading unlocked');
       updateApiStatus();toast(L('✦ 驗證成功！AI 解牌已解鎖','✦ Verified! AI reading unlocked'));closeSettings();
+      // 驗證後拉回雲端歷史並合併，再推回（跨裝置同步）
+      syncPull().then(merged=>{ if(merged) toast(L('☁ 已同步雲端歷史記錄','☁ Cloud history synced')); syncPush(); });
     } else {
       ubar.textContent=L('✗ 此 Email 尚未有購買記錄，請確認使用 Gumroad 購買時填寫的 Email','✗ No purchase found for this email. Please use the email from your Gumroad checkout.');
     }
@@ -2632,6 +2643,34 @@ function clearVerifiedEmail(){
 }
 function isVerified(){return !!localStorage.getItem('tr_verified_email')&&!!WORKER_URL;}
 function getVerifiedEmail(){return localStorage.getItem('tr_verified_email')||'';}
+
+// ── 跨裝置歷史同步（付費驗證 email 專屬） ──
+async function syncPush(){
+  if(!isVerified())return;
+  try{
+    await fetch(WORKER_URL+'/sync',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({email:getVerifiedEmail(),action:'push',
+        readings:S.readings, full:JSON.parse(localStorage.getItem('tr_full')||'[]')})});
+  }catch(e){/* 靜默失敗，本地仍保留 */}
+}
+async function syncPull(){
+  if(!isVerified())return false;
+  try{
+    const r=await fetch(WORKER_URL+'/sync',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({email:getVerifiedEmail(),action:'pull'})});
+    if(!r.ok)return false;
+    const cloud=await r.json();
+    if(!cloud||!Array.isArray(cloud.readings))return false;
+    // 以 id 聯集合併本地與雲端（id 為時間戳，新的在前）
+    const mergeById=(a,b)=>{const m={};[...a,...b].forEach(x=>{if(x&&x.id!=null)m[x.id]=x;});return Object.values(m).sort((x,y)=>y.id-x.id).slice(0,60);};
+    S.readings=mergeById(S.readings, cloud.readings);
+    const localFull=JSON.parse(localStorage.getItem('tr_full')||'[]');
+    const mergedFull=mergeById(localFull, cloud.full||[]);
+    localStorage.setItem('tr_readings',JSON.stringify(S.readings));
+    localStorage.setItem('tr_full',JSON.stringify(mergedFull));
+    return true;
+  }catch(e){return false;}
+}
 
 function getApiKey(){
   return (localStorage.getItem('gemini_key')||'').replace(/[^\x20-\x7E]/g,'');
@@ -2821,6 +2860,8 @@ function toggleAiInfo(){
 })();
 applyLang();
 go('s-welcome');
+// 已驗證 email → 啟動時靜默拉回雲端歷史
+if(isVerified()) syncPull();
 </script>
 </body>
 </html>

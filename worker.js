@@ -40,6 +40,11 @@ export default {
       return handleCheck(request, env);
     }
 
+    // History sync — paid users sync reading history across devices
+    if (url.pathname === '/sync' && request.method === 'POST') {
+      return handleSync(request, env);
+    }
+
     return new Response('Not found', { status: 404 });
   },
 };
@@ -82,6 +87,33 @@ async function handleCheck(request, env) {
 
   const record = await env.TAROT_KV.get(`email:${email.toLowerCase().trim()}`);
   return json({ verified: !!record });
+}
+
+// ── History sync (paid users only) ───────────────────────────
+async function handleSync(request, env) {
+  const { email, action, readings, full } = await request.json().catch(() => ({}));
+  const e = email && email.toLowerCase().trim();
+  if (!e) return json({ error: 'no email' }, 400);
+
+  // Only verified (paid) emails may sync
+  const record = await env.TAROT_KV.get(`email:${e}`);
+  if (!record) return json({ error: 'email not verified' }, 403);
+
+  const key = `hist:${e}`;
+  if (action === 'pull') {
+    const stored = await env.TAROT_KV.get(key);
+    return json(stored ? JSON.parse(stored) : { readings: [], full: [] });
+  }
+  if (action === 'push') {
+    const payload = JSON.stringify({
+      readings: Array.isArray(readings) ? readings.slice(0, 60) : [],
+      full: Array.isArray(full) ? full.slice(0, 60) : [],
+      updated: new Date().toISOString(),
+    });
+    await env.TAROT_KV.put(key, payload, { expirationTtl: 60 * 60 * 24 * 730 });
+    return json({ ok: true });
+  }
+  return json({ error: 'bad action' }, 400);
 }
 
 // ── Gemini proxy ─────────────────────────────────────────────
