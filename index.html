@@ -1411,14 +1411,7 @@ function pickSpread(type) {
 function renderCustomPos(){
   const n=Math.min(12,Math.max(1,parseInt(document.getElementById('custom-n').value)||3));
   const c=document.getElementById('custom-pos-list');c.innerHTML='';
-  // 12 張時預設帶入十二個月份，方便排「整年每月運勢」（仍可自行修改）
-  const months=n===12?(LANG==='en'
-    ?['January','February','March','April','May','June','July','August','September','October','November','December']
-    :['一月','二月','三月','四月','五月','六月','七月','八月','九月','十月','十一月','十二月']):null;
-  for(let i=0;i<n;i++){
-    const val=months?months[i]:`${L('位置','Position')} ${i+1}`;
-    c.innerHTML+=`<label class="lbl">${L('位置','Position')} ${i+1} ${L('名稱','name')}</label><input class="inp cp-inp" placeholder="${L('例：當前情況','e.g. Current situation')}" value="${val}">`;
-  }
+  for(let i=0;i<n;i++)c.innerHTML+=`<label class="lbl">${L('位置','Position')} ${i+1} ${L('名稱','name')}</label><input class="inp cp-inp" placeholder="${L('例：當前情況','e.g. Current situation')}" value="${L('位置','Position')} ${i+1}">`;
 }
 
 // ══════════════════════════════════════════
