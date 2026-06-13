@@ -146,7 +146,51 @@ async function handleStats(request, env) {
     const n = parseInt((await env.TAROT_KV.get('count:' + d)) || '0', 10);
     days.push({ date: d, aiReadings: n });
   }
-  return json({ dailyCap: DAILY_CAP, today: days[0], last7days: days }, 200, request);
+  // JSON if explicitly requested; otherwise a friendly HTML page
+  if (url.searchParams.get('format') === 'json') {
+    return json({ dailyCap: DAILY_CAP, today: days[0], last7days: days }, 200, request);
+  }
+  const today = days[0];
+  const pct = Math.min(100, Math.round((today.aiReadings / DAILY_CAP) * 100));
+  const max = Math.max(DAILY_CAP, ...days.map(d => d.aiReadings)) || 1;
+  const rows = days.map(d => {
+    const w = Math.round((d.aiReadings / max) * 100);
+    return `<div class="row"><span class="date">${d.date}</span><div class="bar"><div class="fill" style="width:${w}%"></div></div><span class="num">${d.aiReadings}</span></div>`;
+  }).join('');
+  const html = `<!DOCTYPE html><html lang="zh-TW"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>用量統計 · 塔羅神諭</title>
+<style>
+  body{margin:0;background:#08031a;color:#b8b0c8;font-family:'Noto Serif TC',serif;padding:32px 18px;line-height:1.6}
+  .wrap{max-width:560px;margin:0 auto}
+  h1{font-family:Georgia,serif;color:#d4af37;font-size:1.4rem;text-align:center;letter-spacing:.08em}
+  .sub{text-align:center;color:#9a8db5;font-size:.82rem;margin-bottom:26px}
+  .card{background:rgba(42,22,96,.25);border:1px solid rgba(212,175,55,.2);border-radius:14px;padding:22px;margin-bottom:18px}
+  .big{font-size:2.6rem;color:#f0d878;font-weight:700;text-align:center;line-height:1.1}
+  .cap{text-align:center;color:#9a8db5;font-size:.9rem;margin-top:4px}
+  .meter{height:12px;background:rgba(255,255,255,.07);border-radius:6px;overflow:hidden;margin-top:16px}
+  .meter>div{height:100%;background:linear-gradient(90deg,#d4af37,#f0d878);width:${pct}%}
+  .pct{text-align:center;color:${pct >= 90 ? '#e05555' : '#d4af37'};font-size:.82rem;margin-top:8px}
+  h2{color:#d4af37;font-size:.9rem;letter-spacing:.08em;margin:0 0 12px}
+  .row{display:flex;align-items:center;gap:10px;margin-bottom:9px;font-size:.85rem}
+  .date{color:#9a8db5;width:88px;flex-shrink:0}
+  .bar{flex:1;height:10px;background:rgba(255,255,255,.06);border-radius:5px;overflow:hidden}
+  .fill{height:100%;background:rgba(212,175,55,.65)}
+  .num{color:#fff;width:34px;text-align:right;flex-shrink:0}
+</style></head><body><div class="wrap">
+  <h1>✦ AI 解牌用量 ✦</h1>
+  <div class="sub">塔羅神諭 · 成本監控（世界時間 UTC）</div>
+  <div class="card">
+    <div class="big">${today.aiReadings} <span style="font-size:1rem;color:#9a8db5">/ ${DAILY_CAP}</span></div>
+    <div class="cap">今日已用 / 每日上限</div>
+    <div class="meter"><div></div></div>
+    <div class="pct">${pct}% ${pct >= 90 ? '· 接近上限！' : pct >= 50 ? '· 用量偏高' : '· 安全'}</div>
+  </div>
+  <div class="card">
+    <h2>近 7 天</h2>
+    ${rows}
+  </div>
+  <div style="text-align:center;color:#6a5d85;font-size:.72rem">超過每日上限會自動暫停 AI 解牌，用戶改用免費內建解讀，成本不會爆量。</div>
+</div></body></html>`;
+  return new Response(html, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
 }
 
 // ── Gemini proxy ─────────────────────────────────────────────
