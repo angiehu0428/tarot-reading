@@ -375,11 +375,16 @@ textarea.inp{resize:vertical;min-height:90px}
     <div style="background:rgba(212,175,55,.07);border:1px solid rgba(212,175,55,.25);border-radius:12px;padding:16px;margin-bottom:16px">
       <div style="font-family:'Cinzel',serif;font-size:.8rem;color:var(--gold);letter-spacing:.1em;margin-bottom:8px" data-i18n="set.buy.head">✦ 訂閱解鎖 · 支持創作</div>
       <p class="hint" style="margin:0 0 12px" data-i18n="set.buy.desc">訂閱（每月 US$5）即可解鎖 AI 深度解牌功能，獲得針對你問題的個人化塔羅分析、感情連結牌組解讀與追問對話。可隨時取消。</p>
-      <a href="https://huisangie.gumroad.com/l/tarotreading?wanted=true" data-gumroad-overlay-checkout="true"
-        style="display:inline-flex;align-items:center;gap:8px;background:var(--gold);color:#1a0a2e;padding:10px 20px;border-radius:50px;font-size:.85rem;font-weight:700;text-decoration:none;margin-bottom:14px;transition:opacity .2s"
+      <a href="https://huisangie.gumroad.com/l/tarotmonthly?wanted=true" data-gumroad-overlay-checkout="true"
+        style="display:inline-flex;align-items:center;gap:8px;background:var(--gold);color:#1a0a2e;padding:10px 20px;border-radius:50px;font-size:.85rem;font-weight:700;text-decoration:none;margin-bottom:10px;transition:opacity .2s"
         onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'" data-i18n="set.buy.btn">
         ✦ 訂閱解鎖 · US$5/月
       </a>
+      <!-- 新開張限時優惠：舊的一次性買斷產品，過了 6/30 由 JS 自動隱藏 -->
+      <div id="launch-offer" style="display:none;margin-bottom:12px">
+        <a href="https://huisangie.gumroad.com/l/tarotreading?wanted=true" data-gumroad-overlay-checkout="true" class="btn btn-sm btn-ghost" style="text-decoration:none" data-i18n="set.buy.launch">🎉 新開張優惠 · 一次買斷（限時到 6/30）</a>
+        <div style="font-size:.72rem;color:rgba(212,175,55,.7);margin-top:6px" data-i18n="set.buy.launchnote">限時新開張：一次付清、不需每月續訂（僅到 6/30）</div>
+      </div>
       <div style="font-size:.75rem;color:var(--muted);margin-bottom:12px" data-i18n="set.buy.note">每月 US$5 · 可隨時取消 · 以訂閱時填寫的 email 驗證</div>
       <div id="unlock-status-bar" style="margin-bottom:10px;display:none"></div>
       <label class="lbl" data-i18n="set.buy.label">已訂閱？輸入訂閱時的 Email 驗證</label>
@@ -673,7 +678,7 @@ textarea.inp{resize:vertical;min-height:90px}
 // ══════════════════════════════════════════
 //  付費解鎖設定（網站管理員填入）
 // ══════════════════════════════════════════
-const GUMROAD_URL = 'https://huisangie.gumroad.com/l/tarotreading';
+const GUMROAD_URL = 'https://huisangie.gumroad.com/l/tarotmonthly';
 const WORKER_URL = 'https://tarot-worker.angiehu.workers.dev';
 
 // ══════════════════════════════════════════
@@ -724,6 +729,8 @@ Object.assign(T, {
   'set.buy.head':{zh:'✦ 訂閱解鎖 · 支持創作',en:'✦ Unlock by Subscription · Support the Creator'},
   'set.buy.desc':{zh:'訂閱（每月 US$5）即可解鎖 AI 深度解牌功能：針對你問題的個人化塔羅分析、感情連結牌組解讀、無限追問對話，以及跨裝置雲端同步歷史記錄。可隨時取消。',en:'Subscribe (US$5/month) to unlock AI deep readings: personalized analysis of your question, relationship card-combo insights, unlimited follow-up chat, and cloud history sync across devices. Cancel anytime.'},
   'set.buy.btn':{zh:'✦ 訂閱解鎖 · US$5/月',en:'✦ Subscribe to Unlock · US$5/mo'},
+  'set.buy.launch':{zh:'🎉 新開張優惠 · 一次買斷（限時到 6/30）',en:'🎉 Launch offer · one-time unlock (until Jun 30)'},
+  'set.buy.launchnote':{zh:'限時新開張：一次付清、不需每月續訂（僅到 6/30）',en:'Limited launch deal: pay once, no monthly renewal (until Jun 30)'},
   'set.buy.note':{zh:'每月 US$5 · 可隨時取消 · 以訂閱時填寫的 email 驗證',en:'US$5/month · cancel anytime · verify with your checkout email'},
   'set.buy.label':{zh:'已訂閱？輸入訂閱時的 Email 驗證',en:'Already subscribed? Enter your checkout email'},
   'set.buy.verify':{zh:'驗證解鎖',en:'Verify & Unlock'},
@@ -3000,6 +3007,8 @@ function showChangelog(){
 })();
 applyLang();
 go('s-welcome');
+// 新開張一次性買斷優惠：只在 6/30 前顯示，之後自動隱藏（毋須手動改站）
+(function(){ const el=document.getElementById('launch-offer'); if(el && new Date() < new Date('2026-07-01T00:00:00')) el.style.display='block'; })();
 // 已驗證 email → 啟動時靜默拉回雲端歷史（syncPull 內部會在需要時推回收斂）
 if(isVerified()) syncPull().then(merged=>{
   if(!merged) return;
