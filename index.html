@@ -421,6 +421,9 @@ textarea.inp{resize:vertical;min-height:90px}
     <hr class="divider-line" style="margin-top:20px">
     <h3 style="margin-top:16px" data-i18n="set.fair.title">✦ 關於抽牌公平性</h3>
     <p class="hint" style="margin-top:10px" data-i18n-html="set.fair.body"></p>
+    <div style="text-align:center;margin-top:18px">
+      <a href="javascript:void(0)" onclick="reportProblem('settings')" style="font-size:.8rem;color:rgba(212,175,55,.7);text-decoration:none;border-bottom:1px dashed rgba(212,175,55,.4);padding-bottom:1px" data-i18n="set.report">🐞 遇到問題？點此回報</a>
+    </div>
   </div>
 </div>
 
@@ -780,6 +783,7 @@ Object.assign(T, {
   'w.ai.foot':{zh:'✦ 訂閱每月 US$5，解鎖跨裝置 AI 解牌，可隨時取消<br>✦ 自備 Key 完全免費，每分鐘可解牌 15 次<br>✦ 兩種方式皆不會對外傳送個人資料',en:'✦ Subscribe for US$5/month to unlock AI readings across devices — cancel anytime<br>✦ Your own key is free, ~15 readings per minute<br>✦ Neither method sends your personal data anywhere'},
   'w.copyright':{zh:'© 2026 塔羅神諭 · All Rights Reserved',en:'© 2026 Tarot Oracle · All Rights Reserved'},
   'w.contact':{zh:'聯繫我們',en:'Contact Us'},
+  'set.report':{zh:'🐞 遇到問題？點此回報',en:'🐞 Hit a problem? Report it'},
   // ── Spread select ──
   'sp.title':{zh:'選擇牌陣',en:'Choose a Spread'},
   'sp.three.name':{zh:'三張牌陣',en:'Three-Card Spread'},
@@ -1550,15 +1554,14 @@ function unlockCtaHtml(){
         <div style="font-family:'Cinzel',serif;font-size:.78rem;color:var(--gold);letter-spacing:.1em;margin-bottom:8px">${L('✦ 解鎖 AI 深度解牌','✦ Unlock AI Deep Reading')}</div>
         <p class="hint" style="margin:0 0 10px;font-size:.82rem">${L(`獲得針對「${S.q}」的個人化深度解析、感情連結牌組判讀，以及無限追問對話。`,`Get a personalized deep reading of "${S.q}", relationship card-combo insights, and unlimited follow-up chat.`)}</p>
         <div style="display:flex;justify-content:center;gap:18px;font-size:.76rem;color:var(--muted);margin-bottom:14px;flex-wrap:wrap">
-          <span>${L('① 點下方按鈕購買','① Tap below to purchase')}</span>
+          <span>${L('① 點下方「前往解鎖方案」','① Tap "See unlock options"')}</span>
           <span style="color:rgba(212,175,55,.35)">→</span>
-          <span>${L('② 購買完成後','② After checkout')}</span>
+          <span>${L('② 在跳出的視窗選方案購買','② Pick a plan in the popup')}</span>
           <span style="color:rgba(212,175,55,.35)">→</span>
-          <span>${L('③ 點左方按鈕輸入購買 email 驗證','③ Verify with your purchase email')}</span>
+          <span>${L('③ 用購買 email 驗證即可','③ Verify with your purchase email')}</span>
         </div>
         <div style="display:flex;justify-content:center;gap:10px;flex-wrap:wrap">
-          ${inPromo()?`<a href="${GUMROAD_ONCE_URL}?wanted=true" data-gumroad-overlay-checkout="true" class="btn btn-sm" style="text-decoration:none">${L('🎉 一次買斷 · 2 年（限時到 6/30）','🎉 One-time · 2-yr access (until Jun 30)')}</a>`:''}
-          <a href="${GUMROAD_URL}?wanted=true" data-gumroad-overlay-checkout="true" class="btn btn-sm btn-ghost" style="text-decoration:none">${L('月訂閱 US$5／月（自動續扣）','Monthly US$5/mo (auto-renews)')}</a>
+          <button class="btn btn-sm" onclick="openSettings()">${L('✦ 前往解鎖方案','✦ See unlock options')}</button>
           <button class="btn btn-sm btn-ghost" onclick="openSettings()">${L('已購買？驗證 Email','Purchased? Verify')}</button>
         </div>
       </div>`;
@@ -1638,7 +1641,8 @@ function showReading(){
       const fb = buildInterpBuiltin();
       S.lastInterpText = fb.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();
       document.getElementById('interp-main').innerHTML=`${fb}${unlockCtaHtml()}
-        <div style="font-size:.72rem;color:var(--red);margin-top:10px;opacity:.7">${L('（AI 暫時無法連線：','(AI temporarily unavailable: ')}${err.message}）</div>`;
+        <div style="font-size:.72rem;color:var(--red);margin-top:10px;opacity:.7">${L('（AI 暫時無法連線：','(AI temporarily unavailable: ')}${err.message}）
+          <a href="javascript:void(0)" onclick="reportProblem('ai-fail')" style="color:rgba(212,175,55,.7);margin-left:6px">${L('回報問題','Report')}</a></div>`;
     });
   } else {
     const fb = buildInterpBuiltin();
@@ -2945,6 +2949,18 @@ function openSettings(){
   document.getElementById('settings-modal').classList.add('on');
 }
 function closeSettings(){document.getElementById('settings-modal').classList.remove('on');}
+// 回報問題：開啟預填主旨/內文的 email（信箱以 base64 隱藏，避免被爬蟲抓取）
+function reportProblem(ctx){
+  const subj=encodeURIComponent(L('塔羅神諭・問題回報','Tarot Oracle · issue report'));
+  const lines=[
+    L('請描述你遇到的問題：','Please describe the issue:'),'',
+    '',
+    '— — —',
+    (ctx?('['+ctx+'] '):'')+'lang='+LANG+' · '+navigator.userAgent
+  ];
+  const body=encodeURIComponent(lines.join('\n'));
+  window.location.href='mailto:'+atob('YW5naWVodUBnbWFpbC5jb20=')+'?subject='+subj+'&body='+body;
+}
 
 // ══════════════════════════════════════════
 //  靜心音樂 — Web Audio 即時生成，零下載
@@ -3077,8 +3093,8 @@ function toggleAiInfo(){
 // ══════════════════════════════════════════
 const CHANGELOG = [
   { date:'2026-06-14',
-    zh:['購買區改為兩個清楚並列的選項——「🎉 一次買斷（限時到 6/30）」與「月訂閱 US$5／月（每月自動續扣）」，各自標明時限與扣款方式，避免誤點','設定頁新增「☁ 立即同步歷史記錄」按鈕，可手動同步並顯示同步筆數，不再只是默默在背景跑','改為每月 US$5 訂閱制（新開張限時保留一次買斷優惠到 6/30）','訂閱到期會自動提示並引導續訂，不再卡在「看似解鎖卻無法解牌」','五張無視論牌陣也加上醒目的「關鍵結論」判讀','牌陣選擇版面優化：視窗變小時換行的卡片置中對齊','修正英文版部分按鈕文字過長破框'],
-    en:['Purchase area now shows two clearly-labeled options — "🎉 One-time unlock (until Jun 30)" and "Monthly US$5/mo (auto-renews)" — each stating its time limit and billing, so no one picks the wrong one','Added a "☁ Sync history now" button in settings — sync on demand and see how many records synced, instead of it only running silently','Switched to a US$5/month subscription (one-time launch deal kept until Jun 30)','Lapsed subscriptions now prompt you to resubscribe instead of silently failing to read','Added the prominent "Key Verdict" to the Five-Card Wuxi spread too','Spread picker layout: wrapped cards now center-align on smaller windows','Fixed a few English buttons whose text overflowed their frame'] },
+    zh:['設定頁新增「🐞 回報問題」聯絡連結，AI 連線失敗時也能一鍵回報','解牌頁的「解鎖方案」改為跳出設定小視窗（站內彈窗結帳），不再開新分頁','購買區改為兩個清楚並列的選項——「🎉 一次買斷（限時到 6/30）」與「月訂閱 US$5／月（每月自動續扣）」，各自標明時限與扣款方式，避免誤點','設定頁新增「☁ 立即同步歷史記錄」按鈕，可手動同步並顯示同步筆數，不再只是默默在背景跑','改為每月 US$5 訂閱制（新開張限時保留一次買斷優惠到 6/30）','訂閱到期會自動提示並引導續訂，不再卡在「看似解鎖卻無法解牌」','五張無視論牌陣也加上醒目的「關鍵結論」判讀','牌陣選擇版面優化：視窗變小時換行的卡片置中對齊','修正英文版部分按鈕文字過長破框'],
+    en:['Added a "🐞 Report a problem" contact link in settings (and on AI-connection errors)','Reading-page unlock now opens the in-page settings popup (on-site overlay checkout) instead of a new tab','Purchase area now shows two clearly-labeled options — "🎉 One-time unlock (until Jun 30)" and "Monthly US$5/mo (auto-renews)" — each stating its time limit and billing, so no one picks the wrong one','Added a "☁ Sync history now" button in settings — sync on demand and see how many records synced, instead of it only running silently','Switched to a US$5/month subscription (one-time launch deal kept until Jun 30)','Lapsed subscriptions now prompt you to resubscribe instead of silently failing to read','Added the prominent "Key Verdict" to the Five-Card Wuxi spread too','Spread picker layout: wrapped cards now center-align on smaller windows','Fixed a few English buttons whose text overflowed their frame'] },
   { date:'2026-06-13',
     zh:['解牌新增「關鍵結論」：針對現在→未來給出明確趨勢判讀（例如低谷會不會過去），結論更清楚','提問前加入「面向聚焦」提示，引導先鎖定感情／事業／財運／健康／學業，問得更準、解得更貼切','購買後解鎖更順：從購買連結回到網站會自動開啟解鎖視窗並引導輸入購買 Email','自訂牌陣張數上限提升至 12 張（適合占算一整年每月運勢）','強化跨裝置同步：開啟網站即自動雙向同步，另一台裝置的記錄更即時呈現','啟用專屬網址 tarot.angiehu.com','新增「更新紀錄」頁面，記錄每次更新','五張無視論牌陣標示為「最推薦」全方位解牌','追問區加入提示，引導如何向 AI 追問細節','付費會員新增跨裝置雲端同步歷史記錄','強化 SEO 與結構化資料，讓 Google 與 AI 更容易找到本站'],
     en:['New "Key Verdict" in readings: a clear trend call from Present → Future (e.g. whether the low point will pass), so conclusions feel definite','Added a "focus your question" prompt before drawing — pick love / career / money / health / study first for sharper, more on-point readings','Smoother post-purchase unlock: returning from the purchase link auto-opens the unlock prompt and guides you to enter your email','Custom spread now supports up to 12 cards (great for a month-by-month year-ahead reading)','Stronger cross-device sync: two-way sync runs automatically on load, so another device\'s readings show up sooner','Launched the custom address tarot.angiehu.com','Added this Changelog page to track every update','Marked the Five-Card Wuxi spread as the recommended all-around reading','Added hints in the follow-up area on how to ask the AI for details','Paid members get cross-device cloud history sync','Improved SEO and structured data so Google and AI can find the site more easily'] },
