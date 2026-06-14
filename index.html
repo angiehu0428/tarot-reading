@@ -659,6 +659,7 @@ textarea.inp{resize:vertical;min-height:90px}
 <div id="s-history" class="screen">
   <h2 class="t-section t-gold" data-i18n="h.title">占卜記錄</h2>
   <div class="t-divider">— ✦ —</div>
+  <div id="hist-sync-bar" style="display:none;max-width:660px;width:100%;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;flex-wrap:wrap"></div>
   <div style="max-width:660px;width:100%;margin-bottom:6px">
     <input class="inp" id="hist-search" data-i18n-ph="h.search.ph" placeholder="🔍 搜尋關鍵字（問題、牌名、解讀內容）..." oninput="renderHistList()" style="margin-bottom:10px">
     <div id="hist-topics" style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-bottom:14px"></div>
@@ -2693,8 +2694,27 @@ function showHistory(){
         border:1px solid ${on?'var(--gold)':'rgba(212,175,55,.25)'};
         color:${on?'var(--gold)':'var(--muted)'}">${t('h.topic.'+k)} ${k==='all'?counts.all:counts[k]||0}</button>`;
     }).join('');
+  renderSyncBar();
   renderHistList();
   go('s-history');
+}
+// 歷史頁頂端同步列（僅驗證後顯示）：上次同步時間 + 立即同步按鈕
+function fmtSyncTime(iso){
+  const d=new Date(iso); if(isNaN(d.getTime())) return iso;
+  const diff=(Date.now()-d.getTime())/1000;
+  if(diff<60) return L('剛剛','just now');
+  if(diff<3600) return L(`${Math.floor(diff/60)} 分鐘前`,`${Math.floor(diff/60)} min ago`);
+  if(diff<86400) return L(`${Math.floor(diff/3600)} 小時前`,`${Math.floor(diff/3600)} hr ago`);
+  return d.toLocaleString(LANG==='en'?'en-US':'zh-TW',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
+}
+function renderSyncBar(){
+  const sb=document.getElementById('hist-sync-bar'); if(!sb) return;
+  if(!isVerified()){ sb.style.display='none'; return; }
+  const last=localStorage.getItem('tr_last_sync');
+  const lastTxt=last?fmtSyncTime(last):L('尚未同步','not synced yet');
+  sb.style.display='flex';
+  sb.innerHTML=`<span style="font-size:.74rem;color:var(--muted)">☁ ${L('上次同步','Last synced')}：${lastTxt}</span>
+    <button class="btn btn-sm btn-ghost" style="margin:0" onclick="manualSync()">${L('☁ 立即同步','☁ Sync now')}</button>`;
 }
 function setHistTopic(k){histTopic=k;showHistory();}
 function renderHistList(){
@@ -2806,9 +2826,10 @@ async function revalidateAccess(){
 async function syncPush(){
   if(!isVerified())return;
   try{
-    await fetch(WORKER_URL+'/sync',{method:'POST',headers:{'Content-Type':'application/json'},
+    const r=await fetch(WORKER_URL+'/sync',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({email:getVerifiedEmail(),action:'push',
         readings:S.readings, full:JSON.parse(localStorage.getItem('tr_full')||'[]')})});
+    if(r&&r.ok) localStorage.setItem('tr_last_sync', new Date().toISOString());
   }catch(e){/* 靜默失敗，本地仍保留 */}
 }
 async function syncPull(){
@@ -2819,6 +2840,7 @@ async function syncPull(){
     if(!r.ok)return false;
     const cloud=await r.json();
     if(!cloud||!Array.isArray(cloud.readings))return false;
+    localStorage.setItem('tr_last_sync', new Date().toISOString()); // 成功連上雲端 → 記錄同步時間
     // 以 id 聯集合併本地與雲端（id 為時間戳，新的在前）
     const mergeById=(a,b)=>{const m={};[...a,...b].forEach(x=>{if(x&&x.id!=null)m[x.id]=x;});return Object.values(m).sort((x,y)=>y.id-x.id).slice(0,60);};
     const beforeR=S.readings.length;
