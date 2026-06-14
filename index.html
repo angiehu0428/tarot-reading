@@ -394,6 +394,7 @@ textarea.inp{resize:vertical;min-height:90px}
         <button class="btn btn-sm" onclick="verifyEmail()" data-i18n="set.buy.verify">驗證解鎖</button>
         <button class="btn btn-sm btn-ghost" onclick="clearVerifiedEmail()" data-i18n="set.buy.clear">清除驗證</button>
       </div>
+      <button id="sync-now-btn" class="btn btn-sm btn-ghost" style="display:none;margin-top:8px;width:100%" onclick="manualSync()" data-i18n="set.buy.sync">☁ 立即同步歷史記錄</button>
     </div>
 
     <!-- ② 自備 API Key -->
@@ -737,6 +738,7 @@ Object.assign(T, {
   'set.buy.label':{zh:'已訂閱？輸入訂閱時的 Email 驗證',en:'Already subscribed? Enter your checkout email'},
   'set.buy.verify':{zh:'驗證解鎖',en:'Verify & Unlock'},
   'set.buy.clear':{zh:'清除驗證',en:'Clear'},
+  'set.buy.sync':{zh:'☁ 立即同步歷史記錄',en:'☁ Sync history now'},
   'set.key.head':{zh:'✦ 使用自己的 API Key',en:'✦ Use Your Own API Key'},
   'set.key.why':{zh:'為什麼在這裡用自己的 Key，比直接貼給 AI 更好？',en:'Why use your own key here instead of pasting it into a chatbot?'},
   'set.key.b1':{zh:'✦ 本站已針對塔羅深度調教 AI 提示詞，包含無視論解牌法、重點牌 vs 輔助牌邏輯、元素分析架構',en:'✦ Prompts fine-tuned for tarot — Wuxi method, key vs. supporting cards, elemental analysis'},
@@ -2831,6 +2833,31 @@ async function syncPull(){
     return S.readings.length>beforeR || mergedFull.length>localFull.length;
   }catch(e){return false;}
 }
+// 手動同步：明確上傳 + 拉回合併，並回報結果（讓使用者看得到同步有在運作）
+async function manualSync(){
+  if(!isVerified()){ toast(L('請先驗證購買 / 訂閱 Email 才能同步','Verify your purchase/subscription email first to sync')); return; }
+  const btn=document.getElementById('sync-now-btn');
+  if(btn){ btn.disabled=true; }
+  toast(L('☁ 同步中...','☁ Syncing...'));
+  const before=S.readings.length;
+  try{
+    // 先確認雲端可連線（也驗證 email 仍有效）
+    const probe=await fetch(WORKER_URL+'/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:getVerifiedEmail(),action:'pull'})});
+    if(probe.status===403){ toast(L('此 Email 尚未驗證或訂閱已到期，無法同步','This email isn\'t verified or the subscription has lapsed — can\'t sync')); return; }
+    if(!probe.ok){ toast(L('雲端暫時無法連線，請稍後再試','Cloud sync unavailable, please try again later')); return; }
+    await syncPull();   // 拉回合併（內部會在本地有新東西時自動推回）
+    await syncPush();   // 再確保本地完整上傳一次
+    const gained=S.readings.length-before;
+    const cur=document.querySelector('.screen.on'); if(cur&&cur.id==='s-history') showHistory();
+    toast(gained>0
+      ? L(`☁ 同步完成，從雲端拉回 ${gained} 筆記錄（共 ${S.readings.length} 筆）`,`☁ Synced — pulled ${gained} record(s) from cloud (${S.readings.length} total)`)
+      : L(`☁ 同步完成，目前共 ${S.readings.length} 筆，已是最新`,`☁ Synced — ${S.readings.length} record(s), already up to date`));
+  }catch(e){
+    toast(L('同步失敗：','Sync failed: ')+(e.message||'').slice(0,60));
+  }finally{
+    if(btn){ btn.disabled=false; }
+  }
+}
 
 function getApiKey(){
   return (localStorage.getItem('gemini_key')||'').replace(/[^\x20-\x7E]/g,'');
@@ -2867,6 +2894,8 @@ function clearApiKey(){
 function updateApiStatus(){
   const bar=document.getElementById('api-status-bar');
   const ubar=document.getElementById('unlock-status-bar');
+  const syncBtn=document.getElementById('sync-now-btn');
+  if(syncBtn) syncBtn.style.display=isVerified()?'block':'none'; // 同步按鈕僅驗證後顯示
   if(isVerified()){
     bar.className='api-status api-ok';bar.textContent=L('✦ 已解鎖 AI 深度解牌（','✦ AI deep reading unlocked (')+getVerifiedEmail()+'）';bar.style.display='block';
     if(ubar){ubar.style.display='block';ubar.className='api-status api-ok';ubar.textContent=L('✓ Email 驗證有效','✓ Email verified');}
@@ -3017,8 +3046,8 @@ function toggleAiInfo(){
 // ══════════════════════════════════════════
 const CHANGELOG = [
   { date:'2026-06-14',
-    zh:['改為每月 US$5 訂閱制（新開張限時保留一次買斷優惠到 6/30）','訂閱到期會自動提示並引導續訂，不再卡在「看似解鎖卻無法解牌」','五張無視論牌陣也加上醒目的「關鍵結論」判讀','牌陣選擇版面優化：視窗變小時換行的卡片置中對齊','修正英文版部分按鈕文字過長破框'],
-    en:['Switched to a US$5/month subscription (one-time launch deal kept until Jun 30)','Lapsed subscriptions now prompt you to resubscribe instead of silently failing to read','Added the prominent "Key Verdict" to the Five-Card Wuxi spread too','Spread picker layout: wrapped cards now center-align on smaller windows','Fixed a few English buttons whose text overflowed their frame'] },
+    zh:['設定頁新增「☁ 立即同步歷史記錄」按鈕，可手動同步並顯示同步筆數，不再只是默默在背景跑','改為每月 US$5 訂閱制（新開張限時保留一次買斷優惠到 6/30）','訂閱到期會自動提示並引導續訂，不再卡在「看似解鎖卻無法解牌」','五張無視論牌陣也加上醒目的「關鍵結論」判讀','牌陣選擇版面優化：視窗變小時換行的卡片置中對齊','修正英文版部分按鈕文字過長破框'],
+    en:['Added a "☁ Sync history now" button in settings — sync on demand and see how many records synced, instead of it only running silently','Switched to a US$5/month subscription (one-time launch deal kept until Jun 30)','Lapsed subscriptions now prompt you to resubscribe instead of silently failing to read','Added the prominent "Key Verdict" to the Five-Card Wuxi spread too','Spread picker layout: wrapped cards now center-align on smaller windows','Fixed a few English buttons whose text overflowed their frame'] },
   { date:'2026-06-13',
     zh:['解牌新增「關鍵結論」：針對現在→未來給出明確趨勢判讀（例如低谷會不會過去），結論更清楚','提問前加入「面向聚焦」提示，引導先鎖定感情／事業／財運／健康／學業，問得更準、解得更貼切','購買後解鎖更順：從購買連結回到網站會自動開啟解鎖視窗並引導輸入購買 Email','自訂牌陣張數上限提升至 12 張（適合占算一整年每月運勢）','強化跨裝置同步：開啟網站即自動雙向同步，另一台裝置的記錄更即時呈現','啟用專屬網址 tarot.angiehu.com','新增「更新紀錄」頁面，記錄每次更新','五張無視論牌陣標示為「最推薦」全方位解牌','追問區加入提示，引導如何向 AI 追問細節','付費會員新增跨裝置雲端同步歷史記錄','強化 SEO 與結構化資料，讓 Google 與 AI 更容易找到本站'],
     en:['New "Key Verdict" in readings: a clear trend call from Present → Future (e.g. whether the low point will pass), so conclusions feel definite','Added a "focus your question" prompt before drawing — pick love / career / money / health / study first for sharper, more on-point readings','Smoother post-purchase unlock: returning from the purchase link auto-opens the unlock prompt and guides you to enter your email','Custom spread now supports up to 12 cards (great for a month-by-month year-ahead reading)','Stronger cross-device sync: two-way sync runs automatically on load, so another device\'s readings show up sooner','Launched the custom address tarot.angiehu.com','Added this Changelog page to track every update','Marked the Five-Card Wuxi spread as the recommended all-around reading','Added hints in the follow-up area on how to ask the AI for details','Paid members get cross-device cloud history sync','Improved SEO and structured data so Google and AI can find the site more easily'] },
