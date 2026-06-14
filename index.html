@@ -1593,7 +1593,7 @@ function unlockCtaHtml(){
       </div>`;
 }
 function showReading(){
-  S.lastInterpText = ''; S.chatHistory=[];
+  S.lastInterpText = ''; S.chatHistory=[]; S.currentReadingId=null;
   document.getElementById('chat-area').style.display='none';
   document.getElementById('chat-msgs').innerHTML='';
   go('s-reading');
@@ -1648,40 +1648,84 @@ function showReading(){
   });
 
   document.getElementById('card-details').innerHTML=buildDetails();
+  runAIReading();
+}
+
+// AI 解讀（可重用：首次解讀 + 重試）。失敗/暫停時自動保留抽牌並提供重試。
+function runAIReading(){
   const key=getApiKey();
   const verified=isVerified();
-  // 付費 AI（worker 代理）暫停中，且使用者沒有自備 API key → 顯示暫停通知 + 內建解讀
+  const fbRender = ()=>{ const fb=buildInterpBuiltin(); S.lastInterpText=fb.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim(); return fb; };
+  // 付費 AI 暫停且無自備 key → 暫停通知 + 內建 + 保留抽牌 + 重試
   if(AI_PAUSED && verified && !key){
-    const fb = buildInterpBuiltin();
-    S.lastInterpText = fb.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();
-    document.getElementById('interp-main').innerHTML=`${pauseNoticeHtml()}${fb}`;
-  } else if(key||verified){
-    // 暫停期間若有自備 key，改用自己的 key（不走付費代理，不耗站方配額）
-    const proxyEmail = (verified && !AI_PAUSED) ? getVerifiedEmail() : null;
-    document.getElementById('interp-main').innerHTML=`
-      <div class="ai-loading">
-        <div class="ai-dots"><div class="ai-dot"></div><div class="ai-dot"></div><div class="ai-dot"></div></div>
-        <div style="font-size:.85rem;color:var(--muted);letter-spacing:.1em">${getActiveProject()?L('AI 正在結合過去脈絡解讀牌陣...','AI is reading your spread with past context...'):L('AI 正在解讀牌陣...','AI is reading your spread...')}</div>
-      </div>`;
-    callGemini(key,proxyEmail).then(text=>{
-      S.lastInterpText = text;
-      S.chatHistory = [];
-      const formatted=text.replace(/\*\*(.+?)\*\*/g,'$1').replace(/\*(.+?)\*/g,'$1').replace(/[*#`_~]/g,'').replace(/\n{2,}/g,'</p><p class="interp-p">').replace(/\n/g,'<br>');
-      document.getElementById('interp-main').innerHTML=`<p class="interp-p">${formatted}</p>`;
-      document.getElementById('chat-area').style.display='block';
-    }).catch(err=>{
-      console.error(err);
-      const fb = buildInterpBuiltin();
-      S.lastInterpText = fb.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();
-      document.getElementById('interp-main').innerHTML=`${fb}${unlockCtaHtml()}
-        <div style="font-size:.72rem;color:var(--red);margin-top:10px;opacity:.7">${L('（AI 暫時無法連線：','(AI temporarily unavailable: ')}${err.message}）
-          <a href="javascript:void(0)" onclick="reportProblem('ai-fail')" style="color:rgba(212,175,55,.7);margin-left:6px">${L('回報問題','Report')}</a></div>`;
-    });
-  } else {
-    const fb = buildInterpBuiltin();
-    S.lastInterpText = fb.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();
-    document.getElementById('interp-main').innerHTML=`${fb}${unlockCtaHtml()}`;
+    const fb=fbRender();
+    document.getElementById('interp-main').innerHTML=`${pauseNoticeHtml()}${fb}${retryBarHtml()}`;
+    autoSaveDraw();
+    return;
   }
+  // 既沒驗證也沒自備 key → 內建 + 解鎖 CTA
+  if(!(key||verified)){
+    const fb=fbRender();
+    document.getElementById('interp-main').innerHTML=`${fb}${unlockCtaHtml()}`;
+    return;
+  }
+  // 暫停期間若有自備 key，改用自己的 key（不走付費代理）
+  const proxyEmail=(verified && !AI_PAUSED)?getVerifiedEmail():null;
+  document.getElementById('interp-main').innerHTML=`
+    <div class="ai-loading">
+      <div class="ai-dots"><div class="ai-dot"></div><div class="ai-dot"></div><div class="ai-dot"></div></div>
+      <div style="font-size:.85rem;color:var(--muted);letter-spacing:.1em">${getActiveProject()?L('AI 正在結合過去脈絡解讀牌陣...','AI is reading your spread with past context...'):L('AI 正在解讀牌陣...','AI is reading your spread...')}</div>
+    </div>`;
+  callGemini(key,proxyEmail).then(text=>{
+    S.lastInterpText=text; S.chatHistory=[];
+    const formatted=text.replace(/\*\*(.+?)\*\*/g,'$1').replace(/\*(.+?)\*/g,'$1').replace(/[*#`_~]/g,'').replace(/\n{2,}/g,'</p><p class="interp-p">').replace(/\n/g,'<br>');
+    document.getElementById('interp-main').innerHTML=`<p class="interp-p">${formatted}</p>`;
+    document.getElementById('chat-area').style.display='block';
+    if(S.currentReadingId) saveReading(true, true); // 先前因失敗已保存 → 更新該筆的解讀
+  }).catch(err=>{
+    console.error(err);
+    const fb=fbRender();
+    document.getElementById('interp-main').innerHTML=`${fb}${unlockCtaHtml()}${retryBarHtml()}
+      <div style="font-size:.72rem;color:var(--red);margin-top:10px;opacity:.7">${L('（AI 暫時無法連線：','(AI temporarily unavailable: ')}${err.message}）
+        <a href="javascript:void(0)" onclick="reportProblem('ai-fail')" style="color:rgba(212,175,55,.7);margin-left:6px">${L('回報問題','Report')}</a></div>`;
+    autoSaveDraw();
+  });
+}
+// 保留抽牌的提示 + 立即重試按鈕
+function retryBarHtml(){
+  return `<div style="margin-top:14px;padding:12px 14px;background:rgba(212,175,55,.07);border:1px solid rgba(212,175,55,.25);border-radius:10px;text-align:center">
+    <div style="font-size:.8rem;color:var(--silver);margin-bottom:9px;line-height:1.6">${L('✦ 已自動保留這次抽牌結果，不用重抽。AI 恢復後也可到「占卜記錄」用 AI 重新解析。','✦ Your draw is saved automatically — no need to redraw. When AI is back, re-analyze it from "History".')}</div>
+    <button class="btn btn-sm" onclick="runAIReading()">${L('🔄 重試 AI 解析','🔄 Retry AI reading')}</button>
+  </div>`;
+}
+// AI 無法解析時自動保存目前抽牌（只存歷史、去重；不重複加入專案）
+function autoSaveDraw(){
+  if(S.currentReadingId) return;
+  saveReading(true, true);
+}
+// 從「占卜記錄」用 AI 重新解析某一筆（重建牌局後呼叫 AI，成功後更新該筆解讀）
+function analyzeWithAI(id){
+  const arr=JSON.parse(localStorage.getItem('tr_full')||'[]');
+  const rec=arr.find(r=>r.id===id);
+  if(!rec||!rec.cards||!rec.cards.length||!rec.type){ toast(L('這筆記錄無法重新解析（缺少牌局資料）','This record can\'t be re-analyzed (missing draw data)')); return; }
+  const key=getApiKey(), verified=isVerified();
+  if(AI_PAUSED && verified && !key){ toast(L('AI 解牌暫停服務中，請稍後再試 🙏','AI readings are paused right now, please try again later 🙏')); return; }
+  if(!(key||verified)){ toast(L('請先解鎖 AI 解牌或設定自己的 API Key','Unlock AI readings or set your own API key first')); return; }
+  // 把這筆牌局載回 S 供 callGemini 使用
+  S.type=rec.type;
+  S.deck=rec.cards.map(c=>({cid:c.cid,rev:c.rev}));
+  S.picked=rec.cards.map((_,i)=>i);
+  S.pos=rec.pos||spreadPos(rec.type);
+  S.q=rec.q;
+  toast(L('☁ AI 正在解析這次占卜...','☁ AI is analyzing this reading...'));
+  const proxyEmail=(verified && !AI_PAUSED)?getVerifiedEmail():null;
+  callGemini(key,proxyEmail).then(text=>{
+    const full=JSON.parse(localStorage.getItem('tr_full')||'[]');
+    const i=full.findIndex(r=>r.id===id);
+    if(i>=0){ full[i].interp=text; localStorage.setItem('tr_full',JSON.stringify(full)); }
+    showHistory(); syncPush();
+    toast(L('✦ AI 解析完成，已更新這筆記錄','✦ AI reading done — record updated'));
+  }).catch(err=>{ toast(L('AI 解析失敗：','AI failed: ')+(err.message||'').slice(0,50)); });
 }
 
 // ══════════════════════════════════════════
@@ -2732,32 +2776,40 @@ function toggleLore(id,btn){
 // ══════════════════════════════════════════
 //  SAVE READING
 // ══════════════════════════════════════════
-function saveReading(){
+function saveReading(silent, skipProject){
   const spreadName = S.type==='custom'?L('自訂牌陣','Custom Spread'):spreadNameOf(S.type);
+  const id = S.currentReadingId || Date.now();
+  S.currentReadingId = id;
   const rec = {
-    id:Date.now(),
+    id, type:S.type, // type 供日後「用 AI 重新解析」重建牌局
     date:new Date().toLocaleString(LANG==='en'?'en-US':'zh-TW'),
     q:S.q, spread:spreadName, pos:S.pos,
     cards:S.picked.map(di=>({cid:S.deck[di].cid, rev:S.deck[di].rev})),
     interp: S.lastInterpText,
     chat: S.chatHistory ? [...S.chatHistory] : []
   };
-  // Save lightweight list for history index
-  S.readings.unshift({id:rec.id,date:rec.date,q:rec.q,spread:spreadName,cards:S.picked.map((di,i)=>({name:cardName(S.deck[di].cid),pos:S.pos[i],rev:S.deck[di].rev}))});
+  const lite = {id, date:rec.date, q:rec.q, spread:spreadName, cards:S.picked.map((di,i)=>({name:cardName(S.deck[di].cid),pos:S.pos[i],rev:S.deck[di].rev}))};
+  // 以 id upsert（去重，避免自動保存 + 手動保存 重複）
+  S.readings = S.readings.filter(r=>r.id!==id);
+  S.readings.unshift(lite);
   if(S.readings.length>60)S.readings.pop();
   localStorage.setItem('tr_readings',JSON.stringify(S.readings));
-  // Save full record (with interp + chat) to separate store
-  const fullRecs = JSON.parse(localStorage.getItem('tr_full')||'[]');
+  let fullRecs = JSON.parse(localStorage.getItem('tr_full')||'[]').filter(r=>r.id!==id);
   fullRecs.unshift(rec);
   if(fullRecs.length>60)fullRecs.pop();
   localStorage.setItem('tr_full',JSON.stringify(fullRecs));
-  // Save to project if active
-  const proj = getActiveProject();
-  if(proj){
-    proj.readings.push(rec);
-    saveProjects();
-    toast(LANG==='en'?`✦ Saved to project "${proj.name}"`:`✦ 已儲存至專案「${proj.name}」`);
-  } else {
+  // 專案（自動保存時略過，避免重複加入）
+  if(!skipProject){
+    const proj = getActiveProject();
+    if(proj){
+      if(proj.readings.some(r=>r.id===id)) proj.readings = proj.readings.map(r=>r.id===id?rec:r);
+      else proj.readings.push(rec);
+      saveProjects();
+      if(!silent) toast(LANG==='en'?`✦ Saved to project "${proj.name}"`:`✦ 已儲存至專案「${proj.name}」`);
+    } else if(!silent){
+      toast(L('✦ 占卜記錄已儲存','✦ Reading saved'));
+    }
+  } else if(!silent){
     toast(L('✦ 占卜記錄已儲存','✦ Reading saved'));
   }
   syncPush();
@@ -2820,6 +2872,8 @@ function renderHistList(){
   el.innerHTML=list.length
     ?list.map(r=>{
         const full=fullMap[r.id]||{};
+        const canAI = full.type && full.cards && full.cards.length;
+        const aiBtn = canAI ? `<div style="margin-top:10px"><button class="btn btn-sm btn-ghost" style="margin:0" onclick="analyzeWithAI(${r.id})">${full.interp?L('🔄 用 AI 重新解析','🔄 Re-analyze with AI'):L('✦ 用 AI 解析這次占卜','✦ Analyze with AI')}</button></div>` : '';
         const interpHtml=full.interp?`<div style="margin-top:10px;font-size:.82rem;color:var(--muted);line-height:1.7;border-top:1px solid rgba(212,175,55,.12);padding-top:10px">${full.interp.replace(/\n/g,'<br>')}</div>`:'';
         const chatHtml=(full.chat&&full.chat.length)?`<div style="margin-top:10px;border-top:1px solid rgba(212,175,55,.1);padding-top:10px">${full.chat.map(m=>m.role==='user'?`<div style="font-size:.78rem;color:var(--gold);margin-bottom:4px">▶ ${m.text}</div>`:`<div style="font-size:.78rem;color:var(--muted);margin-bottom:8px;line-height:1.6">${m.text.replace(/\n/g,'<br>')}</div>`).join('')}</div>`:'';
         return `<div style="border:1px solid rgba(212,175,55,.18);background:rgba(42,22,96,.18);padding:18px 20px;margin-bottom:12px;position:relative">
@@ -2830,7 +2884,7 @@ function renderHistList(){
           <div style="font-size:.72rem;color:var(--muted);margin-bottom:5px;padding-right:30px">${r.date} · ${r.spread}</div>
           <div style="font-size:.92rem;color:var(--white)">「${r.q}」</div>
           <div style="font-size:.78rem;color:var(--gold);margin-top:7px">${r.cards.map(c=>`${c.name}${c.rev?'↓':''}`).join(' · ')}</div>
-          ${interpHtml}${chatHtml}
+          ${interpHtml}${chatHtml}${aiBtn}
         </div>`;
       }).join('')
       + `<div style="text-align:center;margin-top:18px">
@@ -3181,8 +3235,8 @@ function toggleAiInfo(){
 // ══════════════════════════════════════════
 const CHANGELOG = [
   { date:'2026-06-14',
-    zh:['三張／聖三角／二擇一的基本解讀也改為逐張分析每張牌；解讀文字與 AI 一律避免預設性別（不用「她／妳」），降低性別誤判','五張無視論的基本解讀改為「逐張」分析全部 5 張（標示重點/輔助），不再只講重點牌','設定頁新增「🐞 回報問題」聯絡連結，AI 連線失敗時也能一鍵回報','解牌頁的「解鎖方案」改為跳出設定小視窗（站內彈窗結帳），不再開新分頁','購買區改為兩個清楚並列的選項——「🎉 一次買斷（限時到 6/30）」與「月訂閱 US$5／月（每月自動續扣）」，各自標明時限與扣款方式，避免誤點','設定頁新增「☁ 立即同步歷史記錄」按鈕，可手動同步並顯示同步筆數，不再只是默默在背景跑','改為每月 US$5 訂閱制（新開張限時保留一次買斷優惠到 6/30）','訂閱到期會自動提示並引導續訂，不再卡在「看似解鎖卻無法解牌」','五張無視論牌陣也加上醒目的「關鍵結論」判讀','牌陣選擇版面優化：視窗變小時換行的卡片置中對齊','修正英文版部分按鈕文字過長破框'],
-    en:['Three-Card / Holy Triangle / Either-Or basic readings now analyze each card too; readings and AI avoid assuming gender (no gendered pronouns) to prevent mis-gendering','Five-Card Wuxi basic reading now analyzes all five cards one by one (key/support marked), not just the key cards','Added a "🐞 Report a problem" contact link in settings (and on AI-connection errors)','Reading-page unlock now opens the in-page settings popup (on-site overlay checkout) instead of a new tab','Purchase area now shows two clearly-labeled options — "🎉 One-time unlock (until Jun 30)" and "Monthly US$5/mo (auto-renews)" — each stating its time limit and billing, so no one picks the wrong one','Added a "☁ Sync history now" button in settings — sync on demand and see how many records synced, instead of it only running silently','Switched to a US$5/month subscription (one-time launch deal kept until Jun 30)','Lapsed subscriptions now prompt you to resubscribe instead of silently failing to read','Added the prominent "Key Verdict" to the Five-Card Wuxi spread too','Spread picker layout: wrapped cards now center-align on smaller windows','Fixed a few English buttons whose text overflowed their frame'] },
+    zh:['AI 當機或暫停時自動保留這次抽牌結果，可在「占卜記錄」用 AI 重新解析同一組牌，不必重抽；解牌失敗也新增「重試 AI 解析」按鈕','三張／聖三角／二擇一的基本解讀也改為逐張分析每張牌；解讀文字與 AI 一律避免預設性別（不用「她／妳」），降低性別誤判','五張無視論的基本解讀改為「逐張」分析全部 5 張（標示重點/輔助），不再只講重點牌','設定頁新增「🐞 回報問題」聯絡連結，AI 連線失敗時也能一鍵回報','解牌頁的「解鎖方案」改為跳出設定小視窗（站內彈窗結帳），不再開新分頁','購買區改為兩個清楚並列的選項——「🎉 一次買斷（限時到 6/30）」與「月訂閱 US$5／月（每月自動續扣）」，各自標明時限與扣款方式，避免誤點','設定頁新增「☁ 立即同步歷史記錄」按鈕，可手動同步並顯示同步筆數，不再只是默默在背景跑','改為每月 US$5 訂閱制（新開張限時保留一次買斷優惠到 6/30）','訂閱到期會自動提示並引導續訂，不再卡在「看似解鎖卻無法解牌」','五張無視論牌陣也加上醒目的「關鍵結論」判讀','牌陣選擇版面優化：視窗變小時換行的卡片置中對齊','修正英文版部分按鈕文字過長破框'],
+    en:['If AI is down or paused, your draw is saved automatically — re-analyze the same cards later from "History", no need to redraw; failed readings also gain a "Retry AI" button','Three-Card / Holy Triangle / Either-Or basic readings now analyze each card too; readings and AI avoid assuming gender (no gendered pronouns) to prevent mis-gendering','Five-Card Wuxi basic reading now analyzes all five cards one by one (key/support marked), not just the key cards','Added a "🐞 Report a problem" contact link in settings (and on AI-connection errors)','Reading-page unlock now opens the in-page settings popup (on-site overlay checkout) instead of a new tab','Purchase area now shows two clearly-labeled options — "🎉 One-time unlock (until Jun 30)" and "Monthly US$5/mo (auto-renews)" — each stating its time limit and billing, so no one picks the wrong one','Added a "☁ Sync history now" button in settings — sync on demand and see how many records synced, instead of it only running silently','Switched to a US$5/month subscription (one-time launch deal kept until Jun 30)','Lapsed subscriptions now prompt you to resubscribe instead of silently failing to read','Added the prominent "Key Verdict" to the Five-Card Wuxi spread too','Spread picker layout: wrapped cards now center-align on smaller windows','Fixed a few English buttons whose text overflowed their frame'] },
   { date:'2026-06-13',
     zh:['解牌新增「關鍵結論」：針對現在→未來給出明確趨勢判讀（例如低谷會不會過去），結論更清楚','提問前加入「面向聚焦」提示，引導先鎖定感情／事業／財運／健康／學業，問得更準、解得更貼切','購買後解鎖更順：從購買連結回到網站會自動開啟解鎖視窗並引導輸入購買 Email','自訂牌陣張數上限提升至 12 張（適合占算一整年每月運勢）','強化跨裝置同步：開啟網站即自動雙向同步，另一台裝置的記錄更即時呈現','啟用專屬網址 tarot.angiehu.com','新增「更新紀錄」頁面，記錄每次更新','五張無視論牌陣標示為「最推薦」全方位解牌','追問區加入提示，引導如何向 AI 追問細節','付費會員新增跨裝置雲端同步歷史記錄','強化 SEO 與結構化資料，讓 Google 與 AI 更容易找到本站'],
     en:['New "Key Verdict" in readings: a clear trend call from Present → Future (e.g. whether the low point will pass), so conclusions feel definite','Added a "focus your question" prompt before drawing — pick love / career / money / health / study first for sharper, more on-point readings','Smoother post-purchase unlock: returning from the purchase link auto-opens the unlock prompt and guides you to enter your email','Custom spread now supports up to 12 cards (great for a month-by-month year-ahead reading)','Stronger cross-device sync: two-way sync runs automatically on load, so another device\'s readings show up sooner','Launched the custom address tarot.angiehu.com','Added this Changelog page to track every update','Marked the Five-Card Wuxi spread as the recommended all-around reading','Added hints in the follow-up area on how to ask the AI for details','Paid members get cross-device cloud history sync','Improved SEO and structured data so Google and AI can find the site more easily'] },
