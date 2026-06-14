@@ -2,8 +2,11 @@
 // KV namespace: TAROT_KV
 // Env vars: GEMINI_KEY, GUMROAD_SELLER_ID, STATS_TOKEN
 
-// 每日 AI 解牌上限（成本煞車）。超過就暫停當天的 AI 解牌。想再高/再低就改這個數字。
+// 全站每日 AI 解牌上限（成本總閘）。想再高/再低就改這個數字。
 const DAILY_CAP = 2000;
+// 每位付費用戶每日上限（防單一用戶狂刷成本）。30 次對正常使用很夠，可自行調整。
+const USER_DAILY_CAP = 30;
+function userDayKey(email) { return 'ucount:' + email + ':' + new Date().toISOString().slice(0, 10); }
 // 付費 AI 解牌暫停開關（API 配額已滿時設 true；恢復服務時改回 false 並重新部署）
 const AI_PAUSED = false;
 function todayKey() { return 'count:' + new Date().toISOString().slice(0, 10); }
@@ -220,21 +223,26 @@ async function handleGemini(request, env) {
 
   if (!email) return json({ error: '請提供 email' }, 400, request);
 
-  const record = await env.TAROT_KV.get(`email:${email.toLowerCase().trim()}`);
+  const e = email.toLowerCase().trim();
+  const record = await env.TAROT_KV.get(`email:${e}`);
   if (!record) {
     return json({ error: '此 email 尚未驗證付款。請確認使用 Gumroad 購買時的 email。' }, 403, request);
   }
 
   if (!geminiBody) return json({ error: '缺少請求內容' }, 400, request);
 
-  // 成本煞車：超過每日上限就暫停，當天用戶改用內建解讀
+  // 全站成本總閘
   const dk = todayKey();
   const used = parseInt((await env.TAROT_KV.get(dk)) || '0', 10);
   if (used >= DAILY_CAP) {
     return json({ error: '今日 AI 解牌已額滿，請明天再來 / Today\'s AI readings are full, please try again tomorrow.', capped: true }, 429, request);
   }
-  // 計入今日用量（3 天後自動過期）
-  await env.TAROT_KV.put(dk, String(used + 1), { expirationTtl: 60 * 60 * 24 * 3 });
+  // 單一用戶每日上限（防狂刷）
+  const uk = userDayKey(e);
+  const uUsed = parseInt((await env.TAROT_KV.get(uk)) || '0', 10);
+  if (uUsed >= USER_DAILY_CAP) {
+    return json({ error: `你今天的 AI 解牌已達上限（${USER_DAILY_CAP} 次），明天會重置；想立即使用可在設定改用自己的 API Key。/ You've reached today's AI reading limit (${USER_DAILY_CAP}); it resets tomorrow. You can use your own API key to continue now.`, capped: true, userCapped: true }, 429, request);
+  }
 
   const resp = await fetch(
     'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent',
@@ -249,5 +257,10 @@ async function handleGemini(request, env) {
   );
 
   const data = await resp.json();
+  // 只在「成功」時才計入用量（失敗 / 重試不浪費額度，數字也更貼近真實成本）
+  if (resp.ok && !data.error) {
+    await env.TAROT_KV.put(dk, String(used + 1), { expirationTtl: 60 * 60 * 24 * 3 });
+    await env.TAROT_KV.put(uk, String(uUsed + 1), { expirationTtl: 60 * 60 * 24 * 2 });
+  }
   return json(data, resp.status, request);
 }
