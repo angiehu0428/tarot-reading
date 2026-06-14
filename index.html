@@ -427,6 +427,22 @@ textarea.inp{resize:vertical;min-height:90px}
   </div>
 </div>
 
+<!-- ══ REPORT A PROBLEM ══ -->
+<div class="modal-overlay" id="report-modal" style="z-index:600" onclick="if(event.target===this)closeReport()">
+  <div class="modal" style="max-width:430px">
+    <button class="modal-close" onclick="closeReport()">✕</button>
+    <h3 data-i18n="report.title">🐞 回報問題</h3>
+    <p class="hint" style="margin-top:10px" data-i18n="report.desc">遇到問題或有建議嗎？把情況描述寄到下面這個信箱，我會盡快處理 🙏</p>
+    <div style="display:flex;align-items:center;gap:8px;margin:14px 0;padding:11px 13px;background:rgba(212,175,55,.08);border:1px solid rgba(212,175,55,.25);border-radius:8px">
+      <span id="report-email" style="flex:1;color:var(--gold);font-size:.92rem;word-break:break-all;user-select:all"></span>
+      <button class="btn btn-sm btn-ghost" style="margin:0;white-space:nowrap" onclick="copyReportEmail()" data-i18n="report.copy">複製</button>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center">
+      <button class="btn btn-sm" onclick="mailReport()" data-i18n="report.mail">開啟郵件 App 寄出</button>
+    </div>
+  </div>
+</div>
+
 <!-- ══ WELCOME ══ -->
 <div id="s-welcome" class="screen on">
   <div class="w-divider"><span class="wline"></span><span class="wgem">✦</span><span class="wgem" style="animation-delay:.5s;font-size:.95rem">◆</span><span class="wgem" style="animation-delay:1s">✦</span><span class="wline"></span></div>
@@ -784,6 +800,10 @@ Object.assign(T, {
   'w.copyright':{zh:'© 2026 塔羅神諭 · All Rights Reserved',en:'© 2026 Tarot Oracle · All Rights Reserved'},
   'w.contact':{zh:'聯繫我們',en:'Contact Us'},
   'set.report':{zh:'🐞 遇到問題？點此回報',en:'🐞 Hit a problem? Report it'},
+  'report.title':{zh:'🐞 回報問題',en:'🐞 Report a Problem'},
+  'report.desc':{zh:'遇到問題或有建議嗎？把情況描述寄到下面這個信箱，我會盡快處理 🙏',en:'Hit a problem or have a suggestion? Email the details to the address below and I\'ll get on it 🙏'},
+  'report.copy':{zh:'複製',en:'Copy'},
+  'report.mail':{zh:'開啟郵件 App 寄出',en:'Open mail app'},
   // ── Spread select ──
   'sp.title':{zh:'選擇牌陣',en:'Choose a Spread'},
   'sp.three.name':{zh:'三張牌陣',en:'Three-Card Spread'},
@@ -2949,17 +2969,25 @@ function openSettings(){
   document.getElementById('settings-modal').classList.add('on');
 }
 function closeSettings(){document.getElementById('settings-modal').classList.remove('on');}
-// 回報問題：開啟預填主旨/內文的 email（信箱以 base64 隱藏，避免被爬蟲抓取）
+// 回報問題：先跳站內小視窗（顯示信箱＋複製＋開郵件），不直接依賴 mailto（無郵件 App 時會無反應）
+let reportCtx='';
+function reportEmailAddr(){ return atob('YW5naWVodUBnbWFpbC5jb20='); } // base64 隱藏，避免爬蟲抓取
 function reportProblem(ctx){
+  reportCtx=ctx||'';
+  const el=document.getElementById('report-email'); if(el) el.textContent=reportEmailAddr();
+  document.getElementById('report-modal').classList.add('on');
+}
+function closeReport(){ document.getElementById('report-modal').classList.remove('on'); }
+function copyReportEmail(){
+  const email=reportEmailAddr();
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(email).then(()=>toast(L('✦ 已複製信箱','✦ Email copied')),()=>toast(email));
+  } else { toast(email); }
+}
+function mailReport(){
   const subj=encodeURIComponent(L('塔羅神諭・問題回報','Tarot Oracle · issue report'));
-  const lines=[
-    L('請描述你遇到的問題：','Please describe the issue:'),'',
-    '',
-    '— — —',
-    (ctx?('['+ctx+'] '):'')+'lang='+LANG+' · '+navigator.userAgent
-  ];
-  const body=encodeURIComponent(lines.join('\n'));
-  window.location.href='mailto:'+atob('YW5naWVodUBnbWFpbC5jb20=')+'?subject='+subj+'&body='+body;
+  const body=encodeURIComponent([L('請描述你遇到的問題：','Please describe the issue:'),'','','— — —',(reportCtx?('['+reportCtx+'] '):'')+'lang='+LANG+' · '+navigator.userAgent].join('\n'));
+  window.location.href='mailto:'+reportEmailAddr()+'?subject='+subj+'&body='+body;
 }
 
 // ══════════════════════════════════════════
