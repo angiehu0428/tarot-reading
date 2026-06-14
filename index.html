@@ -129,6 +129,10 @@ html,body{min-height:100vh;background:var(--dp);color:var(--white);font-family:'
 .btn-ghost:hover{border-color:var(--silver);color:var(--silver);background:rgba(255,255,255,.03)}
 .btn-sm{padding:8px 20px;font-size:.78rem;letter-spacing:.12em;margin:4px}
 .btn-glow{animation:btn-pulse 2s ease-in-out infinite}
+.buy-opt{display:block;width:100%;box-sizing:border-box;text-decoration:none;text-align:center;border:1px solid var(--gold);background:rgba(212,175,55,.1);border-radius:12px;padding:12px 16px;margin-bottom:10px;transition:all .2s;cursor:pointer}
+.buy-opt:hover{background:rgba(212,175,55,.2);transform:translateY(-2px)}
+.buy-opt .t{font-family:'Cinzel',serif;font-size:.92rem;font-weight:700;color:var(--gold);letter-spacing:.03em;line-height:1.4}
+.buy-opt .s{font-size:.72rem;color:var(--silver);margin-top:5px;line-height:1.55}
 @keyframes btn-pulse{0%,100%{box-shadow:0 0 15px rgba(212,175,55,.4)}50%{box-shadow:0 0 40px rgba(212,175,55,.8)}}
 
 /* ── Spread Selection ── */
@@ -375,17 +379,17 @@ textarea.inp{resize:vertical;min-height:90px}
     <div style="background:rgba(212,175,55,.07);border:1px solid rgba(212,175,55,.25);border-radius:12px;padding:16px;margin-bottom:16px">
       <div style="font-family:'Cinzel',serif;font-size:.8rem;color:var(--gold);letter-spacing:.1em;margin-bottom:8px" data-i18n="set.buy.head">✦ 訂閱解鎖 · 支持創作</div>
       <p class="hint" style="margin:0 0 12px" data-i18n="set.buy.desc">訂閱（每月 US$5）即可解鎖 AI 深度解牌功能，獲得針對你問題的個人化塔羅分析、感情連結牌組解讀與追問對話。可隨時取消。</p>
-      <a href="https://huisangie.gumroad.com/l/tarotmonthly?wanted=true" data-gumroad-overlay-checkout="true"
-        style="display:inline-flex;align-items:center;gap:8px;background:var(--gold);color:#1a0a2e;padding:10px 20px;border-radius:50px;font-size:.85rem;font-weight:700;text-decoration:none;margin-bottom:10px;transition:opacity .2s"
-        onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'" data-i18n="set.buy.btn">
-        ✦ 訂閱解鎖 · US$5/月
+      <!-- 一次買斷（限時新開張優惠，過了 6/30 由 JS 自動隱藏）。促銷期間與月訂閱同等並列 -->
+      <a id="launch-offer" href="https://huisangie.gumroad.com/l/tarotreading?wanted=true" data-gumroad-overlay-checkout="true" class="buy-opt" style="display:none;border-color:var(--gl)">
+        <div class="t" data-i18n="set.buy.once.t">🎉 一次買斷 · 限時優惠</div>
+        <div class="s" data-i18n="set.buy.once.s">付一次、之後不再扣款 · 限時只到 6/30</div>
       </a>
-      <!-- 新開張限時優惠：舊的一次性買斷產品，過了 6/30 由 JS 自動隱藏 -->
-      <div id="launch-offer" style="display:none;margin-bottom:12px">
-        <a href="https://huisangie.gumroad.com/l/tarotreading?wanted=true" data-gumroad-overlay-checkout="true" class="btn btn-sm btn-ghost" style="display:block;box-sizing:border-box;width:100%;margin:0;text-align:center;white-space:normal;font-size:.7rem;letter-spacing:.05em;line-height:1.5;padding:9px 12px;text-decoration:none" data-i18n="set.buy.launch">🎉 新開張優惠 · 一次買斷</a>
-        <div style="font-size:.72rem;color:rgba(212,175,55,.7);margin-top:6px" data-i18n="set.buy.launchnote">限時新開張：一次付清、不需每月續訂（僅到 6/30）</div>
-      </div>
-      <div style="font-size:.75rem;color:var(--muted);margin-bottom:12px" data-i18n="set.buy.note">每月 US$5 · 可隨時取消 · 以訂閱時填寫的 email 驗證</div>
+      <!-- 月訂閱 -->
+      <a href="https://huisangie.gumroad.com/l/tarotmonthly?wanted=true" data-gumroad-overlay-checkout="true" class="buy-opt">
+        <div class="t" data-i18n="set.buy.sub.t">✦ 月訂閱 · US$5／月</div>
+        <div class="s" data-i18n="set.buy.sub.s">每月自動續扣，可隨時取消</div>
+      </a>
+      <div style="font-size:.75rem;color:var(--muted);margin:2px 0 12px" data-i18n="set.buy.note">以購買 / 訂閱時填寫的 email 驗證解鎖</div>
       <div style="font-size:.68rem;color:rgba(154,141,181,.7);margin-bottom:12px;line-height:1.7" data-i18n="set.buy.fx">※ 全部以美金（USD）計價。非美國地區看到的當地幣別（如 NT$）為即時換算僅供參考；信用卡實際以美金扣款，部分發卡銀行可能另收一筆外幣交易手續費。</div>
       <div id="unlock-status-bar" style="margin-bottom:10px;display:none"></div>
       <label class="lbl" data-i18n="set.buy.label">已訂閱？輸入訂閱時的 Email 驗證</label>
@@ -682,6 +686,9 @@ textarea.inp{resize:vertical;min-height:90px}
 //  付費解鎖設定（網站管理員填入）
 // ══════════════════════════════════════════
 const GUMROAD_URL = 'https://huisangie.gumroad.com/l/tarotmonthly';
+const GUMROAD_ONCE_URL = 'https://huisangie.gumroad.com/l/tarotreading'; // 限時一次買斷
+const PROMO_END = new Date('2026-07-01T00:00:00'); // 買斷優惠到 6/30
+function inPromo(){ return new Date() < PROMO_END; }
 const WORKER_URL = 'https://tarot-worker.angiehu.workers.dev';
 
 // ══════════════════════════════════════════
@@ -732,10 +739,14 @@ Object.assign(T, {
   'set.buy.head':{zh:'✦ 訂閱解鎖 · 支持創作',en:'✦ Unlock by Subscription · Support the Creator'},
   'set.buy.desc':{zh:'訂閱（每月 US$5）即可解鎖 AI 深度解牌功能：針對你問題的個人化塔羅分析、感情連結牌組解讀、無限追問對話，以及跨裝置雲端同步歷史記錄。可隨時取消。',en:'Subscribe (US$5/month) to unlock AI deep readings: personalized analysis of your question, relationship card-combo insights, unlimited follow-up chat, and cloud history sync across devices. Cancel anytime.'},
   'set.buy.btn':{zh:'✦ 訂閱解鎖 · US$5/月',en:'✦ Subscribe to Unlock · US$5/mo'},
+  'set.buy.once.t':{zh:'🎉 一次買斷 · 限時優惠',en:'🎉 One-time unlock · limited offer'},
+  'set.buy.once.s':{zh:'付一次、之後不再扣款 · 限時只到 6/30',en:'Pay once, never charged again · only until Jun 30'},
+  'set.buy.sub.t':{zh:'✦ 月訂閱 · US$5／月',en:'✦ Monthly · US$5/mo'},
+  'set.buy.sub.s':{zh:'每月自動續扣，可隨時取消',en:'Auto-renews monthly, cancel anytime'},
   'set.buy.launch':{zh:'🎉 新開張優惠 · 一次買斷',en:'🎉 Launch deal · one-time unlock'},
   'set.buy.launchnote':{zh:'限時新開張：一次付清、不需每月續訂（僅到 6/30）',en:'Limited launch deal: pay once, no monthly renewal (until Jun 30)'},
   'set.buy.fx':{zh:'※ 全部以美金（USD）計價。非美國地區看到的當地幣別（如 NT$）為即時換算僅供參考；信用卡實際以美金扣款，部分發卡銀行可能另收一筆外幣交易手續費。',en:'※ All prices are in USD. Local-currency amounts shown outside the US (e.g. NT$) are real-time conversions for reference only; your card is charged in USD, and some banks may add a foreign-transaction fee.'},
-  'set.buy.note':{zh:'每月 US$5 · 可隨時取消 · 以訂閱時填寫的 email 驗證',en:'US$5/month · cancel anytime · verify with your checkout email'},
+  'set.buy.note':{zh:'以購買 / 訂閱時填寫的 email 驗證解鎖',en:'Unlock by verifying with your checkout email'},
   'set.buy.label':{zh:'已訂閱？輸入訂閱時的 Email 驗證',en:'Already subscribed? Enter your checkout email'},
   'set.buy.verify':{zh:'驗證解鎖',en:'Verify & Unlock'},
   'set.buy.clear':{zh:'清除驗證',en:'Clear'},
@@ -1549,8 +1560,9 @@ function unlockCtaHtml(){
           <span>${L('③ 點左方按鈕輸入購買 email 驗證','③ Verify with your purchase email')}</span>
         </div>
         <div style="display:flex;justify-content:center;gap:10px;flex-wrap:wrap">
-          <button class="btn btn-sm" onclick="openSettings()">${L('已購買？點此驗證 Email','Purchased? Verify email')}</button>
-          <a href="${GUMROAD_URL}?wanted=true" data-gumroad-overlay-checkout="true" class="btn btn-sm btn-ghost" style="text-decoration:none">${L('✦ 訂閱解鎖 · US$5/月','✦ Subscribe · US$5/mo')}</a>
+          ${inPromo()?`<a href="${GUMROAD_ONCE_URL}?wanted=true" data-gumroad-overlay-checkout="true" class="btn btn-sm" style="text-decoration:none">${L('🎉 一次買斷（限時到 6/30）','🎉 One-time unlock (until Jun 30)')}</a>`:''}
+          <a href="${GUMROAD_URL}?wanted=true" data-gumroad-overlay-checkout="true" class="btn btn-sm btn-ghost" style="text-decoration:none">${L('月訂閱 US$5／月（自動續扣）','Monthly US$5/mo (auto-renews)')}</a>
+          <button class="btn btn-sm btn-ghost" onclick="openSettings()">${L('已購買？驗證 Email','Purchased? Verify')}</button>
         </div>
       </div>`;
 }
@@ -3068,8 +3080,8 @@ function toggleAiInfo(){
 // ══════════════════════════════════════════
 const CHANGELOG = [
   { date:'2026-06-14',
-    zh:['設定頁新增「☁ 立即同步歷史記錄」按鈕，可手動同步並顯示同步筆數，不再只是默默在背景跑','改為每月 US$5 訂閱制（新開張限時保留一次買斷優惠到 6/30）','訂閱到期會自動提示並引導續訂，不再卡在「看似解鎖卻無法解牌」','五張無視論牌陣也加上醒目的「關鍵結論」判讀','牌陣選擇版面優化：視窗變小時換行的卡片置中對齊','修正英文版部分按鈕文字過長破框'],
-    en:['Added a "☁ Sync history now" button in settings — sync on demand and see how many records synced, instead of it only running silently','Switched to a US$5/month subscription (one-time launch deal kept until Jun 30)','Lapsed subscriptions now prompt you to resubscribe instead of silently failing to read','Added the prominent "Key Verdict" to the Five-Card Wuxi spread too','Spread picker layout: wrapped cards now center-align on smaller windows','Fixed a few English buttons whose text overflowed their frame'] },
+    zh:['購買區改為兩個清楚並列的選項——「🎉 一次買斷（限時到 6/30）」與「月訂閱 US$5／月（每月自動續扣）」，各自標明時限與扣款方式，避免誤點','設定頁新增「☁ 立即同步歷史記錄」按鈕，可手動同步並顯示同步筆數，不再只是默默在背景跑','改為每月 US$5 訂閱制（新開張限時保留一次買斷優惠到 6/30）','訂閱到期會自動提示並引導續訂，不再卡在「看似解鎖卻無法解牌」','五張無視論牌陣也加上醒目的「關鍵結論」判讀','牌陣選擇版面優化：視窗變小時換行的卡片置中對齊','修正英文版部分按鈕文字過長破框'],
+    en:['Purchase area now shows two clearly-labeled options — "🎉 One-time unlock (until Jun 30)" and "Monthly US$5/mo (auto-renews)" — each stating its time limit and billing, so no one picks the wrong one','Added a "☁ Sync history now" button in settings — sync on demand and see how many records synced, instead of it only running silently','Switched to a US$5/month subscription (one-time launch deal kept until Jun 30)','Lapsed subscriptions now prompt you to resubscribe instead of silently failing to read','Added the prominent "Key Verdict" to the Five-Card Wuxi spread too','Spread picker layout: wrapped cards now center-align on smaller windows','Fixed a few English buttons whose text overflowed their frame'] },
   { date:'2026-06-13',
     zh:['解牌新增「關鍵結論」：針對現在→未來給出明確趨勢判讀（例如低谷會不會過去），結論更清楚','提問前加入「面向聚焦」提示，引導先鎖定感情／事業／財運／健康／學業，問得更準、解得更貼切','購買後解鎖更順：從購買連結回到網站會自動開啟解鎖視窗並引導輸入購買 Email','自訂牌陣張數上限提升至 12 張（適合占算一整年每月運勢）','強化跨裝置同步：開啟網站即自動雙向同步，另一台裝置的記錄更即時呈現','啟用專屬網址 tarot.angiehu.com','新增「更新紀錄」頁面，記錄每次更新','五張無視論牌陣標示為「最推薦」全方位解牌','追問區加入提示，引導如何向 AI 追問細節','付費會員新增跨裝置雲端同步歷史記錄','強化 SEO 與結構化資料，讓 Google 與 AI 更容易找到本站'],
     en:['New "Key Verdict" in readings: a clear trend call from Present → Future (e.g. whether the low point will pass), so conclusions feel definite','Added a "focus your question" prompt before drawing — pick love / career / money / health / study first for sharper, more on-point readings','Smoother post-purchase unlock: returning from the purchase link auto-opens the unlock prompt and guides you to enter your email','Custom spread now supports up to 12 cards (great for a month-by-month year-ahead reading)','Stronger cross-device sync: two-way sync runs automatically on load, so another device\'s readings show up sooner','Launched the custom address tarot.angiehu.com','Added this Changelog page to track every update','Marked the Five-Card Wuxi spread as the recommended all-around reading','Added hints in the follow-up area on how to ask the AI for details','Paid members get cross-device cloud history sync','Improved SEO and structured data so Google and AI can find the site more easily'] },
@@ -3104,7 +3116,7 @@ function showChangelog(){
 applyLang();
 go('s-welcome');
 // 新開張一次性買斷優惠：只在 6/30 前顯示，之後自動隱藏（毋須手動改站）
-(function(){ const el=document.getElementById('launch-offer'); if(el && new Date() < new Date('2026-07-01T00:00:00')) el.style.display='block'; })();
+(function(){ const el=document.getElementById('launch-offer'); if(el && inPromo()) el.style.display='block'; })();
 // 已驗證 email → 先確認訂閱仍有效（可能已到期），再靜默拉回雲端歷史
 if(isVerified()) revalidateAccess().then(ok=>{
   if(!ok) return;
