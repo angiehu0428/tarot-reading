@@ -304,6 +304,8 @@ textarea.inp{resize:vertical;min-height:90px}
 #lang-btn:hover{border-color:var(--gold);background:rgba(212,175,55,.12)}
 @media (max-width:480px){#lang-btn{right:64px;top:18px}}
 #music-btn{position:fixed;bottom:18px;right:18px;z-index:200;width:46px;height:46px;border-radius:50%;background:rgba(8,3,26,.8);border:1px solid rgba(212,175,55,.45);color:rgba(212,175,55,.55);font-size:1.15rem;cursor:pointer;transition:all .3s;backdrop-filter:blur(4px);box-shadow:0 2px 14px rgba(212,175,55,.1)}
+#font-btn{position:fixed;bottom:18px;left:18px;z-index:200;width:46px;height:46px;border-radius:50%;background:rgba(8,3,26,.8);border:1px solid rgba(212,175,55,.45);color:var(--gold);font-family:'Cinzel',serif;font-weight:700;font-size:17px;cursor:pointer;transition:all .3s;backdrop-filter:blur(4px);box-shadow:0 2px 14px rgba(212,175,55,.1)}
+#font-btn:hover{background:rgba(212,175,55,.18)}
 #music-btn:hover{border-color:var(--gold);background:rgba(212,175,55,.12)}
 #music-btn.on{color:var(--gold);border-color:var(--gold);box-shadow:0 0 18px rgba(212,175,55,.4);animation:musicPulse 2.4s ease-in-out infinite}
 @keyframes musicPulse{0%,100%{box-shadow:0 0 12px rgba(212,175,55,.3)}50%{box-shadow:0 0 24px rgba(212,175,55,.6)}}
@@ -364,6 +366,7 @@ textarea.inp{resize:vertical;min-height:90px}
 <button id="settings-btn" onclick="openSettings()" data-i18n-title="settings.btn.title">⚙ <span id="settings-btn-label" data-i18n="settings.btn.label">AI 解牌設定</span></button>
 <button id="lang-btn" onclick="toggleLang()" title="切換語言 / Switch language">EN</button>
 <button id="music-btn" onclick="toggleMusic()" data-i18n-title="music.btn.title">♪</button>
+<button id="font-btn" onclick="cycleFontLevel()" data-i18n-title="font.btn.title" aria-label="Text size">A⁺</button>
 
 <!-- ══ SETTINGS MODAL ══ -->
 <div class="modal-overlay" id="settings-modal" onclick="if(event.target===this)closeSettings()">
@@ -828,6 +831,7 @@ Object.assign(T, {
   'set.report':{zh:'🐞 遇到問題？點此回報',en:'🐞 Hit a problem? Report it'},
   'set.font.head':{zh:'✦ 字級大小（看不清楚可調大）',en:'✦ Text size (make it bigger if hard to read)'},
   'font.lv0':{zh:'標準',en:'Normal'},'font.lv1':{zh:'大',en:'Large'},'font.lv2':{zh:'特大',en:'X-Large'},'font.lv3':{zh:'超大',en:'XX-Large'},
+  'font.btn.title':{zh:'字級大小（點我放大）',en:'Text size (tap to enlarge)'},
   'ann.title':{zh:'✦ 服務通知',en:'✦ Service Update'},
   'ann.body':{zh:'剛剛因為 AI 服務商的 API 額度已滿，AI 深度解牌曾短暫暫停，造成不便很抱歉 🙏<br><br>目前已經<strong style="color:var(--gold)">提高流量額度、恢復服務</strong>。<br><br>已付費解鎖的朋友，歡迎再回來試試 AI 解牌 ✨',en:'AI deep readings were briefly paused because the AI provider\'s API quota was full — sorry for the hiccup 🙏<br><br>We\'ve now <strong style="color:var(--gold)">raised the quota and restored service</strong>.<br><br>If you\'ve unlocked AI readings, you\'re welcome to come back and try again ✨'},
   'ann.ok':{zh:'我知道了',en:'Got it'},
@@ -1730,18 +1734,32 @@ function autoSaveDraw(){
   saveReading(true, true);
 }
 // 從「占卜記錄」用 AI 重新解析某一筆（重建牌局後呼叫 AI，成功後更新該筆解讀）
+// 舊紀錄沒存 type 時，從牌陣名稱 / 張數反推，讓舊記錄也能重新 AI 解析
+function inferReadingType(rec){
+  if(rec.type) return rec.type;
+  const sp=rec.spread||'', n=(rec.cards||[]).length;
+  if(/聖三角|Holy Triangle/i.test(sp)) return 'triangle';
+  if(/二擇一|Either/i.test(sp)) return 'choice';
+  if(/無視論|Wuxi/i.test(sp)) return 'five';
+  if(/三張|Three/i.test(sp)) return 'three';
+  if(/單張|Single/i.test(sp)) return 'one';
+  if(/自訂|Custom/i.test(sp)) return 'custom';
+  if(n===1) return 'one'; if(n===3) return 'three'; if(n===5) return 'five';
+  return 'custom';
+}
 function analyzeWithAI(id){
   const arr=JSON.parse(localStorage.getItem('tr_full')||'[]');
   const rec=arr.find(r=>r.id===id);
-  if(!rec||!rec.cards||!rec.cards.length||!rec.type){ toast(L('這筆記錄無法重新解析（缺少牌局資料）','This record can\'t be re-analyzed (missing draw data)')); return; }
+  if(!rec||!rec.cards||!rec.cards.length){ toast(L('這筆記錄無法重新解析（缺少牌局資料）','This record can\'t be re-analyzed (missing draw data)')); return; }
+  const type=inferReadingType(rec);
   const key=getApiKey(), verified=isVerified();
   if(AI_PAUSED && verified && !key){ toast(L('AI 解牌暫停服務中，請稍後再試 🙏','AI readings are paused right now, please try again later 🙏')); return; }
   if(!(key||verified)){ toast(L('請先解鎖 AI 解牌或設定自己的 API Key','Unlock AI readings or set your own API key first')); return; }
   // 把這筆牌局載回 S 供 callGemini 使用
-  S.type=rec.type;
+  S.type=type;
   S.deck=rec.cards.map(c=>({cid:c.cid,rev:c.rev}));
   S.picked=rec.cards.map((_,i)=>i);
-  S.pos=rec.pos||spreadPos(rec.type);
+  S.pos=(rec.pos&&rec.pos.length)?rec.pos:spreadPos(type);
   S.q=rec.q;
   toast(L('☁ AI 正在解析這次占卜...','☁ AI is analyzing this reading...'));
   const proxyEmail=(verified && !AI_PAUSED)?getVerifiedEmail():null;
@@ -2959,7 +2977,7 @@ function renderHistList(){
   el.innerHTML=list.length
     ?list.map(r=>{
         const full=fullMap[r.id]||{};
-        const canAI = full.type && full.cards && full.cards.length;
+        const canAI = full.cards && full.cards.length; // 有牌面資料即可（type 缺漏會自動反推）
         const aiBtn = canAI ? `<div style="margin-top:10px"><button class="btn btn-sm btn-ghost" style="margin:0" onclick="analyzeWithAI(${r.id})">${full.interp?L('🔄 用 AI 重新解析','🔄 Re-analyze with AI'):L('✦ 用 AI 解析這次占卜','✦ Analyze with AI')}</button></div>` : '';
         const interpHtml=full.interp?`<div style="margin-top:10px;font-size:.82rem;color:var(--muted);line-height:1.7;border-top:1px solid rgba(212,175,55,.12);padding-top:10px">${full.interp.replace(/\n/g,'<br>')}</div>`:'';
         const chatHtml=(full.chat&&full.chat.length)?`<div style="margin-top:10px;border-top:1px solid rgba(212,175,55,.1);padding-top:10px">${full.chat.map(m=>m.role==='user'?`<div style="font-size:.78rem;color:var(--gold);margin-bottom:4px">▶ ${m.text}</div>`:`<div style="font-size:.78rem;color:var(--muted);margin-bottom:8px;line-height:1.6">${m.text.replace(/\n/g,'<br>')}</div>`).join('')}</div>`:'';
@@ -3178,6 +3196,12 @@ function applyFontScale(){
   renderFontBtns(lvl);
 }
 function setFontLevel(lvl){ localStorage.setItem('tr_fontlvl',String(lvl)); applyFontScale(); }
+// 首頁快速放大鈕：每點一次大一級，到頂回到標準，並提示目前字級
+function cycleFontLevel(){
+  const next=(getFontLevel()+1)%FONT_LEVELS.length;
+  setFontLevel(next);
+  toast(L('字級大小：','Text size: ')+t('font.lv'+next));
+}
 function renderFontBtns(lvl){
   const wrap=document.getElementById('fontsize-btns'); if(!wrap) return;
   const sample=[13,15,17,19];
@@ -3349,8 +3373,8 @@ function toggleAiInfo(){
 // ══════════════════════════════════════════
 const CHANGELOG = [
   { date:'2026-06-14',
-    zh:['新增「字級大小」調整（標準／大／特大／超大），看不清楚可在設定裡一鍵把全站文字放大','追問對話新增「每次占卜可追問次數上限」（預設 5 次），並清楚顯示「本次可追問幾次、還剩幾次」，避免無止境聊天','AI 當機或暫停時自動保留這次抽牌結果，可在「占卜記錄」用 AI 重新解析同一組牌，不必重抽；解牌失敗也新增「重試 AI 解析」按鈕','三張／聖三角／二擇一的基本解讀也改為逐張分析每張牌；解讀文字與 AI 一律避免預設性別（不用「她／妳」），降低性別誤判','五張無視論的基本解讀改為「逐張」分析全部 5 張（標示重點/輔助），不再只講重點牌','設定頁新增「🐞 回報問題」聯絡連結，AI 連線失敗時也能一鍵回報','解牌頁的「解鎖方案」改為跳出設定小視窗（站內彈窗結帳），不再開新分頁','購買區改為兩個清楚並列的選項——「🎉 一次買斷（限時到 6/30）」與「月訂閱 US$5／月（每月自動續扣）」，各自標明時限與扣款方式，避免誤點','設定頁新增「☁ 立即同步歷史記錄」按鈕，可手動同步並顯示同步筆數，不再只是默默在背景跑','改為每月 US$5 訂閱制（新開張限時保留一次買斷優惠到 6/30）','訂閱到期會自動提示並引導續訂，不再卡在「看似解鎖卻無法解牌」','五張無視論牌陣也加上醒目的「關鍵結論」判讀','牌陣選擇版面優化：視窗變小時換行的卡片置中對齊','修正英文版部分按鈕文字過長破框'],
-    en:['Added a Text size control (Normal / Large / X-Large / XX-Large) in settings to enlarge all text for easier reading','Follow-up chat now has a per-reading limit (default 5 questions) with a clear "X per reading · N left" indicator, to avoid endless chats','If AI is down or paused, your draw is saved automatically — re-analyze the same cards later from "History", no need to redraw; failed readings also gain a "Retry AI" button','Three-Card / Holy Triangle / Either-Or basic readings now analyze each card too; readings and AI avoid assuming gender (no gendered pronouns) to prevent mis-gendering','Five-Card Wuxi basic reading now analyzes all five cards one by one (key/support marked), not just the key cards','Added a "🐞 Report a problem" contact link in settings (and on AI-connection errors)','Reading-page unlock now opens the in-page settings popup (on-site overlay checkout) instead of a new tab','Purchase area now shows two clearly-labeled options — "🎉 One-time unlock (until Jun 30)" and "Monthly US$5/mo (auto-renews)" — each stating its time limit and billing, so no one picks the wrong one','Added a "☁ Sync history now" button in settings — sync on demand and see how many records synced, instead of it only running silently','Switched to a US$5/month subscription (one-time launch deal kept until Jun 30)','Lapsed subscriptions now prompt you to resubscribe instead of silently failing to read','Added the prominent "Key Verdict" to the Five-Card Wuxi spread too','Spread picker layout: wrapped cards now center-align on smaller windows','Fixed a few English buttons whose text overflowed their frame'] },
+    zh:['新增「字級大小」調整（標準／大／特大／超大）：畫面左下角「A⁺」鈕一鍵放大，或在設定裡選級距，全站文字隨之變大','占卜記錄即使當初沒跑出 AI 解析（例如遇到 API 當機），現在都能在記錄裡用 AI 補解析同一組牌（含先前存的舊紀錄）','追問對話新增「每次占卜可追問次數上限」（預設 5 次），並清楚顯示「本次可追問幾次、還剩幾次」，避免無止境聊天','AI 當機或暫停時自動保留這次抽牌結果，可在「占卜記錄」用 AI 重新解析同一組牌，不必重抽；解牌失敗也新增「重試 AI 解析」按鈕','三張／聖三角／二擇一的基本解讀也改為逐張分析每張牌；解讀文字與 AI 一律避免預設性別（不用「她／妳」），降低性別誤判','五張無視論的基本解讀改為「逐張」分析全部 5 張（標示重點/輔助），不再只講重點牌','設定頁新增「🐞 回報問題」聯絡連結，AI 連線失敗時也能一鍵回報','解牌頁的「解鎖方案」改為跳出設定小視窗（站內彈窗結帳），不再開新分頁','購買區改為兩個清楚並列的選項——「🎉 一次買斷（限時到 6/30）」與「月訂閱 US$5／月（每月自動續扣）」，各自標明時限與扣款方式，避免誤點','設定頁新增「☁ 立即同步歷史記錄」按鈕，可手動同步並顯示同步筆數，不再只是默默在背景跑','改為每月 US$5 訂閱制（新開張限時保留一次買斷優惠到 6/30）','訂閱到期會自動提示並引導續訂，不再卡在「看似解鎖卻無法解牌」','五張無視論牌陣也加上醒目的「關鍵結論」判讀','牌陣選擇版面優化：視窗變小時換行的卡片置中對齊','修正英文版部分按鈕文字過長破框'],
+    en:['Added a Text size control (Normal / Large / X-Large / XX-Large): tap the "A⁺" button at bottom-left, or pick a level in settings, to enlarge all text','Saved readings that never got an AI analysis (e.g. during an API outage) can now be analyzed with AI from History — including older saved records','Follow-up chat now has a per-reading limit (default 5 questions) with a clear "X per reading · N left" indicator, to avoid endless chats','If AI is down or paused, your draw is saved automatically — re-analyze the same cards later from "History", no need to redraw; failed readings also gain a "Retry AI" button','Three-Card / Holy Triangle / Either-Or basic readings now analyze each card too; readings and AI avoid assuming gender (no gendered pronouns) to prevent mis-gendering','Five-Card Wuxi basic reading now analyzes all five cards one by one (key/support marked), not just the key cards','Added a "🐞 Report a problem" contact link in settings (and on AI-connection errors)','Reading-page unlock now opens the in-page settings popup (on-site overlay checkout) instead of a new tab','Purchase area now shows two clearly-labeled options — "🎉 One-time unlock (until Jun 30)" and "Monthly US$5/mo (auto-renews)" — each stating its time limit and billing, so no one picks the wrong one','Added a "☁ Sync history now" button in settings — sync on demand and see how many records synced, instead of it only running silently','Switched to a US$5/month subscription (one-time launch deal kept until Jun 30)','Lapsed subscriptions now prompt you to resubscribe instead of silently failing to read','Added the prominent "Key Verdict" to the Five-Card Wuxi spread too','Spread picker layout: wrapped cards now center-align on smaller windows','Fixed a few English buttons whose text overflowed their frame'] },
   { date:'2026-06-13',
     zh:['解牌新增「關鍵結論」：針對現在→未來給出明確趨勢判讀（例如低谷會不會過去），結論更清楚','提問前加入「面向聚焦」提示，引導先鎖定感情／事業／財運／健康／學業，問得更準、解得更貼切','購買後解鎖更順：從購買連結回到網站會自動開啟解鎖視窗並引導輸入購買 Email','自訂牌陣張數上限提升至 12 張（適合占算一整年每月運勢）','強化跨裝置同步：開啟網站即自動雙向同步，另一台裝置的記錄更即時呈現','啟用專屬網址 tarot.angiehu.com','新增「更新紀錄」頁面，記錄每次更新','五張無視論牌陣標示為「最推薦」全方位解牌','追問區加入提示，引導如何向 AI 追問細節','付費會員新增跨裝置雲端同步歷史記錄','強化 SEO 與結構化資料，讓 Google 與 AI 更容易找到本站'],
     en:['New "Key Verdict" in readings: a clear trend call from Present → Future (e.g. whether the low point will pass), so conclusions feel definite','Added a "focus your question" prompt before drawing — pick love / career / money / health / study first for sharper, more on-point readings','Smoother post-purchase unlock: returning from the purchase link auto-opens the unlock prompt and guides you to enter your email','Custom spread now supports up to 12 cards (great for a month-by-month year-ahead reading)','Stronger cross-device sync: two-way sync runs automatically on load, so another device\'s readings show up sooner','Launched the custom address tarot.angiehu.com','Added this Changelog page to track every update','Marked the Five-Card Wuxi spread as the recommended all-around reading','Added hints in the follow-up area on how to ask the AI for details','Paid members get cross-device cloud history sync','Improved SEO and structured data so Google and AI can find the site more easily'] },
