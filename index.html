@@ -2992,6 +2992,27 @@ if(isVerified()) syncPull().then(merged=>{
   };
   tryCheck(0);
 })();
+
+// ── 購買後引導解鎖（?unlock=1）──
+// 沒有 Gumroad 自動轉址帶 email 時的退路：在 Gumroad 收據/內容放一個指向
+// https://tarot.angiehu.com/?unlock=1 的連結。帶這個參數進站就自動打開解鎖視窗、
+// 聚焦 Email 欄並給提示，使用者只要打一次購買 email 即可解鎖。
+(function deepLinkUnlock(){
+  const p=new URLSearchParams(location.search);
+  if(p.get('unlock')!=='1') return;
+  if(p.get('email')) return; // 有 email+sale_id 的真轉址交給上面的自動解鎖
+  history.replaceState(null,'',location.pathname); // 清掉參數
+  if(isVerified()) return;   // 已解鎖就不用再開
+  setTimeout(()=>{
+    if(typeof openSettings!=='function') return;
+    openSettings();
+    const inp=document.getElementById('unlock-input');
+    if(inp){ inp.value=''; inp.focus(); }
+    const bar=document.getElementById('unlock-status-bar');
+    if(bar){ bar.style.display='block'; bar.className='api-status api-none';
+      bar.textContent=L('輸入你購買時填寫的 Email 即可解鎖 ✦','Enter the email you used at checkout to unlock ✦'); }
+  }, 300);
+})();
 </script>
 </body>
 </html>
