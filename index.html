@@ -706,6 +706,12 @@ const GUMROAD_ONCE_URL = 'https://huisangie.gumroad.com/l/tarotreading'; // 限�
 const PROMO_END = new Date('2026-07-01T00:00:00'); // 買斷優惠到 6/30
 function inPromo(){ return new Date() < PROMO_END; }
 const WORKER_URL = 'https://tarot-worker.angiehu.workers.dev';
+// 付費 AI 解牌暫停開關（API 配額已滿時設 true；恢復服務時改回 false）
+const AI_PAUSED = true;
+// 付費 AI 暫停時顯示的通知橫幅（付費用戶看到，內建解讀照常）
+function pauseNoticeHtml(){
+  return `<div style="margin-bottom:14px;padding:13px 16px;background:rgba(224,85,85,.1);border:1px solid rgba(224,85,85,.4);border-radius:10px;font-size:.86rem;color:#f0b8b8;line-height:1.7">${L('⚠ AI 深度解牌暫時停用：目前 API 配額已滿，我們正在處理、很快會恢復，請稍後再試 🙏 以下先提供免費的內建牌義解讀。','⚠ AI deep readings are temporarily paused: the API quota is currently full. We\'re on it and will restore service shortly — please try again later 🙏 Here\'s the free built-in reading for now.')}</div>`;
+}
 
 // ══════════════════════════════════════════
 //  i18n 多語系（瀏覽器自動偵測 + 手動切換）
@@ -1644,13 +1650,20 @@ function showReading(){
   document.getElementById('card-details').innerHTML=buildDetails();
   const key=getApiKey();
   const verified=isVerified();
-  if(key||verified){
+  // 付費 AI（worker 代理）暫停中，且使用者沒有自備 API key → 顯示暫停通知 + 內建解讀
+  if(AI_PAUSED && verified && !key){
+    const fb = buildInterpBuiltin();
+    S.lastInterpText = fb.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();
+    document.getElementById('interp-main').innerHTML=`${pauseNoticeHtml()}${fb}`;
+  } else if(key||verified){
+    // 暫停期間若有自備 key，改用自己的 key（不走付費代理，不耗站方配額）
+    const proxyEmail = (verified && !AI_PAUSED) ? getVerifiedEmail() : null;
     document.getElementById('interp-main').innerHTML=`
       <div class="ai-loading">
         <div class="ai-dots"><div class="ai-dot"></div><div class="ai-dot"></div><div class="ai-dot"></div></div>
         <div style="font-size:.85rem;color:var(--muted);letter-spacing:.1em">${getActiveProject()?L('AI 正在結合過去脈絡解讀牌陣...','AI is reading your spread with past context...'):L('AI 正在解讀牌陣...','AI is reading your spread...')}</div>
       </div>`;
-    callGemini(key,verified?getVerifiedEmail():null).then(text=>{
+    callGemini(key,proxyEmail).then(text=>{
       S.lastInterpText = text;
       S.chatHistory = [];
       const formatted=text.replace(/\*\*(.+?)\*\*/g,'$1').replace(/\*(.+?)\*/g,'$1').replace(/[*#`_~]/g,'').replace(/\n{2,}/g,'</p><p class="interp-p">').replace(/\n/g,'<br>');
@@ -2643,6 +2656,15 @@ async function sendChat(){
   const key=getApiKey();
   const proxyEmail=isVerified()?getVerifiedEmail():null;
   if(!key&&!proxyEmail){toast(L('請先設定 API Key 或驗證購買 Email','Set an API key or verify your purchase email first'));return;}
+  // 付費 AI 暫停中（且無自備 key）→ 不呼叫，回覆暫停訊息
+  if(AI_PAUSED && proxyEmail && !key){
+    input.value='';
+    if(!S.chatHistory) S.chatHistory=[];
+    S.chatHistory.push({role:'user',text:q});
+    S.chatHistory.push({role:'ai',text:L('AI 解牌目前暫停服務中（API 配額已滿），很快會恢復，請稍後再試 🙏','AI readings are paused right now (quota full). Service will be back soon — please try again later 🙏')});
+    renderChat();
+    return;
+  }
   input.value='';
   if(!S.chatHistory) S.chatHistory=[];
   S.chatHistory.push({role:'user',text:q});
@@ -2984,7 +3006,12 @@ function updateApiStatus(){
   const syncBtn=document.getElementById('sync-now-btn');
   if(syncBtn) syncBtn.style.display=isVerified()?'block':'none'; // 同步按鈕僅驗證後顯示
   if(isVerified()){
-    bar.className='api-status api-ok';bar.textContent=L('✦ 已解鎖 AI 深度解牌（','✦ AI deep reading unlocked (')+getVerifiedEmail()+'）';bar.style.display='block';
+    if(AI_PAUSED){
+      bar.className='api-status api-none';bar.style.display='block';
+      bar.innerHTML=L('⚠ AI 深度解牌暫時停用（API 配額已滿），很快恢復；可改用自己的 API Key 立即使用','⚠ AI deep readings are temporarily paused (quota full); back soon. You can use your own API key to read right away');
+    } else {
+      bar.className='api-status api-ok';bar.textContent=L('✦ 已解鎖 AI 深度解牌（','✦ AI deep reading unlocked (')+getVerifiedEmail()+'）';bar.style.display='block';
+    }
     if(ubar){ubar.style.display='block';ubar.className='api-status api-ok';ubar.textContent=L('✓ Email 驗證有效','✓ Email verified');}
   } else if(getApiKey()){
     bar.className='api-status api-ok';bar.textContent=L('✓ 自備 ','✓ Your own ')+(apiProvider(getApiKey())==='openai'?'OpenAI':'Gemini')+L(' Key（AI 解牌啟用）',' key (AI reading enabled)');bar.style.display='block';

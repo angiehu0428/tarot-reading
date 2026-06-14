@@ -4,6 +4,8 @@
 
 // 每日 AI 解牌上限（成本煞車）。超過就暫停當天的 AI 解牌。
 const DAILY_CAP = 300;
+// 付費 AI 解牌暫停開關（API 配額已滿時設 true；恢復服務時改回 false 並重新部署）
+const AI_PAUSED = true;
 function todayKey() { return 'count:' + new Date().toISOString().slice(0, 10); }
 
 const ALLOWED_ORIGINS = [
@@ -209,6 +211,11 @@ async function handleStats(request, env) {
 
 // ── Gemini proxy ─────────────────────────────────────────────
 async function handleGemini(request, env) {
+  // 暫停付費 AI 解牌（配額已滿）：直接回覆暫停訊息，不呼叫 Gemini，停止消耗配額
+  if (AI_PAUSED) {
+    return json({ error: 'AI 解牌暫停服務：API 配額已滿，請稍後再試 / AI readings are paused: quota reached, please try again later.', paused: true }, 503, request);
+  }
+
   const { email, body: geminiBody } = await request.json().catch(() => ({}));
 
   if (!email) return json({ error: '請提供 email' }, 400, request);
