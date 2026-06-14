@@ -373,16 +373,16 @@ textarea.inp{resize:vertical;min-height:90px}
 
     <!-- ① Gumroad 購買解鎖區 -->
     <div style="background:rgba(212,175,55,.07);border:1px solid rgba(212,175,55,.25);border-radius:12px;padding:16px;margin-bottom:16px">
-      <div style="font-family:'Cinzel',serif;font-size:.8rem;color:var(--gold);letter-spacing:.1em;margin-bottom:8px" data-i18n="set.buy.head">✦ 購買解鎖 · 支持創作</div>
-      <p class="hint" style="margin:0 0 12px" data-i18n="set.buy.desc">購買後即可解鎖 AI 深度解牌功能，獲得針對你問題的個人化塔羅分析、感情連結牌組解讀與追問對話。</p>
+      <div style="font-family:'Cinzel',serif;font-size:.8rem;color:var(--gold);letter-spacing:.1em;margin-bottom:8px" data-i18n="set.buy.head">✦ 訂閱解鎖 · 支持創作</div>
+      <p class="hint" style="margin:0 0 12px" data-i18n="set.buy.desc">訂閱（每月 US$5）即可解鎖 AI 深度解牌功能，獲得針對你問題的個人化塔羅分析、感情連結牌組解讀與追問對話。可隨時取消。</p>
       <a href="https://huisangie.gumroad.com/l/tarotreading?wanted=true" data-gumroad-overlay-checkout="true"
         style="display:inline-flex;align-items:center;gap:8px;background:var(--gold);color:#1a0a2e;padding:10px 20px;border-radius:50px;font-size:.85rem;font-weight:700;text-decoration:none;margin-bottom:14px;transition:opacity .2s"
         onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'" data-i18n="set.buy.btn">
-        ✦ 前往購買解鎖
+        ✦ 訂閱解鎖 · US$5/月
       </a>
-      <div style="font-size:.75rem;color:var(--muted);margin-bottom:12px" data-i18n="set.buy.note">支援信用卡 · PayPal · 購買後以購買時填寫的 email 驗證</div>
+      <div style="font-size:.75rem;color:var(--muted);margin-bottom:12px" data-i18n="set.buy.note">每月 US$5 · 可隨時取消 · 以訂閱時填寫的 email 驗證</div>
       <div id="unlock-status-bar" style="margin-bottom:10px;display:none"></div>
-      <label class="lbl" data-i18n="set.buy.label">已購買？輸入購買時的 Email 驗證</label>
+      <label class="lbl" data-i18n="set.buy.label">已訂閱？輸入訂閱時的 Email 驗證</label>
       <input class="inp" type="email" id="unlock-input" placeholder="your@email.com" autocomplete="email">
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
         <button class="btn btn-sm" onclick="verifyEmail()" data-i18n="set.buy.verify">驗證解鎖</button>
@@ -721,11 +721,11 @@ Object.assign(T, {
   'music.btn.title':{zh:'靜心音場 開/關：海浪聲＋theta 靜心音波（建議戴耳機）',en:'Meditation sound on/off: ocean waves + theta soundwave (headphones recommended)'},
   // ── Settings modal ──
   'set.title':{zh:'✦ AI 深度解牌',en:'✦ AI Deep Reading'},
-  'set.buy.head':{zh:'✦ 購買解鎖 · 支持創作',en:'✦ Unlock by Purchase · Support the Creator'},
-  'set.buy.desc':{zh:'購買後即可解鎖 AI 深度解牌功能：針對你問題的個人化塔羅分析、感情連結牌組解讀、無限追問對話，以及跨裝置雲端同步歷史記錄。',en:'Purchase to unlock AI deep readings: personalized analysis of your question, relationship card-combo insights, unlimited follow-up chat, and cloud history sync across devices.'},
-  'set.buy.btn':{zh:'✦ 前往購買解鎖',en:'✦ Purchase to Unlock'},
-  'set.buy.note':{zh:'支援信用卡 · PayPal · 購買後以購買時填寫的 email 驗證',en:'Credit card · PayPal · Verify with the email used at checkout'},
-  'set.buy.label':{zh:'已購買？輸入購買時的 Email 驗證',en:'Already purchased? Enter your checkout email'},
+  'set.buy.head':{zh:'✦ 訂閱解鎖 · 支持創作',en:'✦ Unlock by Subscription · Support the Creator'},
+  'set.buy.desc':{zh:'訂閱（每月 US$5）即可解鎖 AI 深度解牌功能：針對你問題的個人化塔羅分析、感情連結牌組解讀、無限追問對話，以及跨裝置雲端同步歷史記錄。可隨時取消。',en:'Subscribe (US$5/month) to unlock AI deep readings: personalized analysis of your question, relationship card-combo insights, unlimited follow-up chat, and cloud history sync across devices. Cancel anytime.'},
+  'set.buy.btn':{zh:'✦ 訂閱解鎖 · US$5/月',en:'✦ Subscribe to Unlock · US$5/mo'},
+  'set.buy.note':{zh:'每月 US$5 · 可隨時取消 · 以訂閱時填寫的 email 驗證',en:'US$5/month · cancel anytime · verify with your checkout email'},
+  'set.buy.label':{zh:'已訂閱？輸入訂閱時的 Email 驗證',en:'Already subscribed? Enter your checkout email'},
   'set.buy.verify':{zh:'驗證解鎖',en:'Verify & Unlock'},
   'set.buy.clear':{zh:'清除驗證',en:'Clear'},
   'set.key.head':{zh:'✦ 使用自己的 API Key',en:'✦ Use Your Own API Key'},
@@ -754,10 +754,10 @@ Object.assign(T, {
   'w.ai.q':{zh:'✦ 如何啟用 AI 個人化解牌？',en:'✦ How to enable personalized AI readings?'},
   'w.ai.intro':{zh:'本程式支援 <strong style="color:var(--gold)">Google Gemini</strong> 與 <strong style="color:var(--gold)">OpenAI</strong> 解牌，針對你的問題與牌陣給出深度個人化分析。<br>未設定時也可正常使用，以內建牌義解讀。',en:'Supports <strong style="color:var(--gold)">Google Gemini</strong> and <strong style="color:var(--gold)">OpenAI</strong> for readings — deep personalized analysis of your question and spread.<br>Works without setup too, using built-in card meanings.'},
   'w.ai.m1':{zh:'方法一：購買解鎖（推薦）',en:'Option 1: Unlock by purchase (recommended)'},
-  'w.ai.m1.s':{zh:'1. 點右上角 <strong style="color:var(--silver)">⚙</strong> → 點「前往購買解鎖」<br>2. 在彈出視窗中完成購買<br>3. 輸入購買時填寫的 Email → 點「驗證解鎖」',en:'1. Tap <strong style="color:var(--silver)">⚙</strong> top-right → "Purchase to Unlock"<br>2. Complete checkout in the popup<br>3. Enter your checkout email → "Verify & Unlock"'},
+  'w.ai.m1.s':{zh:'1. 點右上角 <strong style="color:var(--silver)">⚙</strong> → 點「訂閱解鎖」<br>2. 在彈出視窗中完成訂閱<br>3. 輸入訂閱時填寫的 Email → 點「驗證解鎖」',en:'1. Tap <strong style="color:var(--silver)">⚙</strong> top-right → "Subscribe to Unlock"<br>2. Complete checkout in the popup<br>3. Enter your checkout email → "Verify & Unlock"'},
   'w.ai.m2':{zh:'方法二：自備 API Key（支援 Gemini / OpenAI）',en:'Option 2: Bring your own API key (Gemini / OpenAI)'},
   'w.ai.m2.s':{zh:'1. Gemini 免費取得：<a href="https://aistudio.google.com" target="_blank" style="color:var(--gold);text-decoration:none;border-bottom:1px solid rgba(212,175,55,.4)">aistudio.google.com</a>，或 OpenAI：<a href="https://platform.openai.com/api-keys" target="_blank" style="color:var(--gold);text-decoration:none;border-bottom:1px solid rgba(212,175,55,.4)">platform.openai.com</a><br>2. 點右上角 <strong style="color:var(--silver)">⚙</strong> → 貼上 API Key → 儲存（自動辨識種類）',en:'1. Get Gemini free at <a href="https://aistudio.google.com" target="_blank" style="color:var(--gold);text-decoration:none;border-bottom:1px solid rgba(212,175,55,.4)">aistudio.google.com</a>, or OpenAI at <a href="https://platform.openai.com/api-keys" target="_blank" style="color:var(--gold);text-decoration:none;border-bottom:1px solid rgba(212,175,55,.4)">platform.openai.com</a><br>2. Tap <strong style="color:var(--silver)">⚙</strong> top-right → paste key → save (auto-detected)'},
-  'w.ai.foot':{zh:'✦ 購買一次，永久解鎖本裝置<br>✦ 自備 Key 完全免費，每分鐘可解牌 15 次<br>✦ 兩種方式皆不會對外傳送個人資料',en:'✦ Buy once, unlocked forever on this device<br>✦ Your own key is free, ~15 readings per minute<br>✦ Neither method sends your personal data anywhere'},
+  'w.ai.foot':{zh:'✦ 訂閱每月 US$5，解鎖跨裝置 AI 解牌，可隨時取消<br>✦ 自備 Key 完全免費，每分鐘可解牌 15 次<br>✦ 兩種方式皆不會對外傳送個人資料',en:'✦ Subscribe for US$5/month to unlock AI readings across devices — cancel anytime<br>✦ Your own key is free, ~15 readings per minute<br>✦ Neither method sends your personal data anywhere'},
   'w.copyright':{zh:'© 2026 塔羅神諭 · All Rights Reserved',en:'© 2026 Tarot Oracle · All Rights Reserved'},
   'w.contact':{zh:'聯繫我們',en:'Contact Us'},
   // ── Spread select ──
@@ -1538,7 +1538,7 @@ function unlockCtaHtml(){
         </div>
         <div style="display:flex;justify-content:center;gap:10px;flex-wrap:wrap">
           <button class="btn btn-sm" onclick="openSettings()">${L('已購買？點此驗證 Email','Purchased? Verify email')}</button>
-          <a href="${GUMROAD_URL}?wanted=true" data-gumroad-overlay-checkout="true" class="btn btn-sm btn-ghost" style="text-decoration:none">${L('✦ 前往購買解鎖','✦ Purchase to Unlock')}</a>
+          <a href="${GUMROAD_URL}?wanted=true" data-gumroad-overlay-checkout="true" class="btn btn-sm btn-ghost" style="text-decoration:none">${L('✦ 訂閱解鎖 · US$5/月','✦ Subscribe · US$5/mo')}</a>
         </div>
       </div>`;
 }
