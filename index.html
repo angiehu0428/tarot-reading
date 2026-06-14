@@ -2552,6 +2552,38 @@ function buildVerdict(cards){
   return verdictBox(v, hook);
 }
 
+// ── 整體能量總結：用元素分布 + 正逆比例 + 關鍵字串聯，把整盤牌融會貫通 ──
+function buildOverallSummary(cards){
+  const en=LANG==='en';
+  const n=cards.length;
+  const revCount=cards.filter(c=>c.rev).length, uprCount=n-revCount;
+  const elemCount={};
+  cards.forEach(c=>{ const el=loreOf(c.cid).elem; if(el) elemCount[el]=(elemCount[el]||0)+1; });
+  const sorted=Object.entries(elemCount).sort((a,b)=>b[1]-a[1]);
+  const dom=sorted[0]?sorted[0][0]:'', domN=sorted[0]?sorted[0][1]:0;
+  const ELEM_THEME = en
+    ? {Fire:'action, passion and momentum', Water:'emotion, intuition and relationships', Air:'thinking, communication and clarity', Earth:'practicality, stability and tangible results'}
+    : {'火':'行動、熱情與動力', '水':'情感、直覺與關係', '風':'思考、溝通與理性', '土':'務實、穩定與落實'};
+  const allKw=[...new Set(cards.flatMap(c=>c.kw.slice(0,2)))];
+  const heavy=kwIsHeavy(allKw);
+  const kwStr=en?allKw.slice(0,4).join(', '):allKw.slice(0,4).join('、');
+  const elemSentence = (dom && domN>=2)
+    ? L(`這次牌組以「${dom}」元素為主（${domN} 張），整體能量圍繞${ELEM_THEME[dom]||''}。`,`This spread is led by the ${dom} element (${domN} cards), so the energy centers on ${ELEM_THEME[dom]||''}. `)
+    : L('這次牌組元素分布平均，能量較多元，需要綜合來看。',`The elements are evenly spread here, so the energy is multifaceted and best read as a whole. `);
+  const revSentence = revCount===0
+    ? L('牌面全數正位，能量直接展現、阻力較小。',`All cards are upright — the energy shows up directly with little resistance. `)
+    : revCount===n
+    ? L('牌面全數逆位，此刻更適合向內沉澱、調整，而非強行推進。',`All cards are reversed — a time to turn inward and adjust rather than push forward. `)
+    : L(`${uprCount} 正 ${revCount} 逆，部分順勢、部分需要修正，留意逆位牌所指的面向。`,`${uprCount} upright / ${revCount} reversed — partly flowing, partly needing adjustment; mind the reversed cards. `);
+  const synth = heavy
+    ? L(`把「${kwStr}」這幾股能量串起來看，關於「${S.q}」眼前有實際的課題要面對；但牌義都攤在檯面上，正視並一步步處理，方向就能穩住。`,`Weaving "${kwStr}" together, "${S.q}" brings real tasks to face — yet nothing is hidden, so meeting them step by step keeps your direction steady.`)
+    : L(`把「${kwStr}」這幾股能量串起來看，關於「${S.q}」你其實已具備所需的資源與方向，順著這股能量推進即可。`,`Weaving "${kwStr}" together, you already hold what "${S.q}" needs — keep moving with this momentum.`);
+  return `<div style="margin:14px 0 6px;padding:14px 16px;background:rgba(42,22,96,.28);border:1px solid rgba(212,175,55,.2);border-radius:10px">
+    <div style="font-family:'Cinzel',serif;font-size:.78rem;color:var(--gold);letter-spacing:.08em;margin-bottom:7px">${L('✦ 整體能量總結','✦ Overall Energy')}</div>
+    <p class="interp-p" style="margin:0">${elemSentence}${revSentence}${synth}</p>
+  </div>`;
+}
+
 // ── 其他牌陣：傳統位置解法，每張牌依其位置意義解讀 ──
 function buildInterpPositional(){
   const n = S.picked.length;
@@ -2655,7 +2687,7 @@ function buildInterpPositional(){
     ${buildVerdict(cards)}
     <p class="interp-p">${storyText}</p>
     ${topicHtml}
-    <p class="interp-p">${toneText}</p>
+    ${n>=2 ? buildOverallSummary(cards) : `<p class="interp-p">${toneText}</p>`}
     <p class="interp-p" style="font-size:.82rem;color:rgba(212,175,55,.55);margin-top:6px">${foot}</p>`;
 }
 
