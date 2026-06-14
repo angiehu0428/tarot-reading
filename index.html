@@ -2962,6 +2962,36 @@ if(isVerified()) syncPull().then(merged=>{
   const cur=document.querySelector('.screen.on');
   if(cur && cur.id==='s-history') showHistory(); // 正停在歷史頁才重繪
 });
+
+// ── Gumroad 購買後自動解鎖 ──
+// Gumroad「Redirect to a URL after purchase」會把買家資訊以 query 參數帶回
+// （email、sale_id…）。我們拿 email 去 /check 驗證（真正信任來源是 webhook 寫入的 KV，
+// 安全等級與手動貼信箱相同），確認後自動解鎖，免去使用者手動輸入。
+(function autoUnlockFromPurchase(){
+  if(!WORKER_URL) return;
+  const p=new URLSearchParams(location.search);
+  const email=(p.get('email')||'').trim().toLowerCase();
+  // 需同時帶 sale_id 才視為 Gumroad 購後轉址，避免誤觸
+  if(!email || !p.get('sale_id')) return;
+  // 立即把 email/sale_id 等參數從網址移除（隱私：別留在網址列或被分享）
+  history.replaceState(null,'',location.pathname);
+  const tryCheck=async(attempt)=>{
+    try{
+      const r=await fetch(WORKER_URL+'/check',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});
+      const d=await r.json();
+      if(d.verified){
+        localStorage.setItem('tr_verified_email',email);
+        updateApiStatus();
+        toast(L('✦ 付款成功，AI 解牌已自動解鎖！','✦ Payment confirmed — AI reading unlocked!'));
+        syncPull().then(merged=>{ if(!merged) return; const cur=document.querySelector('.screen.on'); if(cur&&cur.id==='s-history') showHistory(); });
+        return;
+      }
+    }catch(e){/* 連線失敗就重試 */}
+    // webhook 可能還沒處理完，遞增延遲重試幾次
+    if(attempt<4) setTimeout(()=>tryCheck(attempt+1), 1500*(attempt+1));
+  };
+  tryCheck(0);
+})();
 </script>
 </body>
 </html>
