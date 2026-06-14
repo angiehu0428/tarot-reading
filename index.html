@@ -129,8 +129,9 @@ html,body{min-height:100vh;background:var(--dp);color:var(--white);font-family:'
 .btn-ghost:hover{border-color:var(--silver);color:var(--silver);background:rgba(255,255,255,.03)}
 .btn-sm{padding:8px 20px;font-size:.78rem;letter-spacing:.12em;margin:4px}
 .btn-glow{animation:btn-pulse 2s ease-in-out infinite}
-.buy-opt{display:block;width:100%;box-sizing:border-box;text-decoration:none;text-align:center;border:1px solid rgba(212,175,55,.55);background:linear-gradient(135deg,rgba(212,175,55,.14),rgba(42,22,96,.4));border-radius:12px;padding:13px 16px;margin-bottom:10px;transition:all .2s;cursor:pointer}
-.buy-opt:hover{background:linear-gradient(135deg,rgba(212,175,55,.24),rgba(42,22,96,.5));transform:translateY(-2px);box-shadow:0 6px 20px rgba(212,175,55,.15)}
+.buy-opt{display:block;width:100%;box-sizing:border-box;text-decoration:none;text-align:center;border:1px solid rgba(212,175,55,.55);background:linear-gradient(135deg,rgba(212,175,55,.16),rgba(42,22,96,.55)),#1a0c30 !important;border-radius:12px;padding:13px 16px;margin-bottom:10px;transition:transform .2s,box-shadow .2s;cursor:pointer;position:relative;overflow:hidden;box-shadow:none !important}
+.buy-opt::before,.buy-opt::after{display:none !important;content:none !important}
+.buy-opt:hover{transform:translateY(-2px)}
 .buy-opt .t{font-family:'Cinzel',serif;font-size:.92rem;font-weight:700;color:var(--gold);letter-spacing:.03em;line-height:1.4}
 .buy-opt .s{font-size:.72rem;color:var(--silver);margin-top:5px;line-height:1.55}
 @keyframes btn-pulse{0%,100%{box-shadow:0 0 15px rgba(212,175,55,.4)}50%{box-shadow:0 0 40px rgba(212,175,55,.8)}}
@@ -740,7 +741,7 @@ Object.assign(T, {
   'set.buy.desc':{zh:'訂閱（每月 US$5）即可解鎖 AI 深度解牌功能：針對你問題的個人化塔羅分析、感情連結牌組解讀、無限追問對話，以及跨裝置雲端同步歷史記錄。可隨時取消。',en:'Subscribe (US$5/month) to unlock AI deep readings: personalized analysis of your question, relationship card-combo insights, unlimited follow-up chat, and cloud history sync across devices. Cancel anytime.'},
   'set.buy.btn':{zh:'✦ 訂閱解鎖 · US$5/月',en:'✦ Subscribe to Unlock · US$5/mo'},
   'set.buy.once.t':{zh:'🎉 一次買斷 · 限時優惠',en:'🎉 One-time unlock · limited offer'},
-  'set.buy.once.s':{zh:'付一次、之後不再扣款 · 限時只到 6/30',en:'Pay once, never charged again · only until Jun 30'},
+  'set.buy.once.s':{zh:'付一次、不再扣款 · 含 2 年使用權 · 限時只到 6/30',en:'Pay once, no further charges · 2-year access · only until Jun 30'},
   'set.buy.sub.t':{zh:'✦ 月訂閱 · US$5／月',en:'✦ Monthly · US$5/mo'},
   'set.buy.sub.s':{zh:'每月自動續扣，可隨時取消',en:'Auto-renews monthly, cancel anytime'},
   'set.buy.launch':{zh:'🎉 新開張優惠 · 一次買斷',en:'🎉 Launch deal · one-time unlock'},
@@ -1560,7 +1561,7 @@ function unlockCtaHtml(){
           <span>${L('③ 點左方按鈕輸入購買 email 驗證','③ Verify with your purchase email')}</span>
         </div>
         <div style="display:flex;justify-content:center;gap:10px;flex-wrap:wrap">
-          ${inPromo()?`<a href="${GUMROAD_ONCE_URL}?wanted=true" data-gumroad-overlay-checkout="true" class="btn btn-sm" style="text-decoration:none">${L('🎉 一次買斷（限時到 6/30）','🎉 One-time unlock (until Jun 30)')}</a>`:''}
+          ${inPromo()?`<a href="${GUMROAD_ONCE_URL}?wanted=true" data-gumroad-overlay-checkout="true" class="btn btn-sm" style="text-decoration:none">${L('🎉 一次買斷 · 2 年（限時到 6/30）','🎉 One-time · 2-yr access (until Jun 30)')}</a>`:''}
           <a href="${GUMROAD_URL}?wanted=true" data-gumroad-overlay-checkout="true" class="btn btn-sm btn-ghost" style="text-decoration:none">${L('月訂閱 US$5／月（自動續扣）','Monthly US$5/mo (auto-renews)')}</a>
           <button class="btn btn-sm btn-ghost" onclick="openSettings()">${L('已購買？驗證 Email','Purchased? Verify')}</button>
         </div>
