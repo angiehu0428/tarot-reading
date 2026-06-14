@@ -833,7 +833,7 @@ Object.assign(T, {
   'font.lv0':{zh:'標準',en:'Normal'},'font.lv1':{zh:'大',en:'Large'},'font.lv2':{zh:'特大',en:'X-Large'},'font.lv3':{zh:'超大',en:'XX-Large'},
   'font.btn.title':{zh:'字級大小（點我放大）',en:'Text size (tap to enlarge)'},
   'ann.title':{zh:'✦ 服務通知',en:'✦ Service Update'},
-  'ann.body':{zh:'剛剛因為 AI 服務商的 API 額度已滿，AI 深度解牌曾短暫暫停，造成不便很抱歉 🙏<br><br>目前已經<strong style="color:var(--gold)">提高流量額度、恢復服務</strong>。<br><br>已付費解鎖的朋友，歡迎再回來試試 AI 解牌 ✨',en:'AI deep readings were briefly paused because the AI provider\'s API quota was full — sorry for the hiccup 🙏<br><br>We\'ve now <strong style="color:var(--gold)">raised the quota and restored service</strong>.<br><br>If you\'ve unlocked AI readings, you\'re welcome to come back and try again ✨'},
+  'ann.body':{zh:'剛剛因為 AI 服務商的 API 額度已滿，AI 深度解牌曾短暫暫停，造成不便很抱歉 🙏<br><br>目前已經<strong style="color:var(--gold)">提高流量額度、恢復服務</strong>，已付費解鎖的朋友歡迎再回來試試 ✨<br><br>💡 <strong style="color:var(--gold)">已付費的朋友</strong>：如果當時 AI 深度解析跑不出來、但你有<strong>儲存那次占卜</strong>，可到「<strong>占卜記錄</strong>」找到那一筆 → 點「<strong>用 AI 解析</strong>」就能補跑，不用重抽 🔮',en:'AI deep readings were briefly paused because the AI provider\'s API quota was full — sorry for the hiccup 🙏<br><br>We\'ve now <strong style="color:var(--gold)">raised the quota and restored service</strong> — unlocked members are welcome to try again ✨<br><br>💡 <strong style="color:var(--gold)">If you\'ve unlocked AI</strong>: when a deep reading couldn\'t run earlier but you <strong>saved that reading</strong>, open "<strong>History</strong>", find it, and tap "<strong>Analyze with AI</strong>" to run it now — no need to redraw 🔮'},
   'ann.ok':{zh:'我知道了',en:'Got it'},
   'report.title':{zh:'🐞 回報問題',en:'🐞 Report a Problem'},
   'report.desc':{zh:'遇到問題或有建議嗎？把情況描述寄到下面這個信箱，我會盡快處理 🙏',en:'Hit a problem or have a suggestion? Email the details to the address below and I\'ll get on it 🙏'},
@@ -3221,7 +3221,7 @@ function reportProblem(ctx){
 }
 function closeReport(){ document.getElementById('report-modal').classList.remove('on'); }
 // 一次性公告（看過就不再跳；要再對所有人公告，換一個新的 ANNOUNCE_ID 即可）
-const ANNOUNCE_ID = '2026-06-14-quota-restored';
+const ANNOUNCE_ID = '2026-06-14-quota-restored-v2';
 function showAnnounce(){
   if(localStorage.getItem('tr_announce_'+ANNOUNCE_ID)) return;
   const m=document.getElementById('announce-modal'); if(m) m.classList.add('on');
