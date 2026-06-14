@@ -428,7 +428,7 @@ textarea.inp{resize:vertical;min-height:90px}
 </div>
 
 <!-- ══ REPORT A PROBLEM ══ -->
-<div class="modal-overlay" id="report-modal" style="z-index:600" onclick="if(event.target===this)closeReport()">
+<div class="modal-overlay" id="report-modal" style="z-index:600;backdrop-filter:none" onclick="if(event.target===this)closeReport()">
   <div class="modal" style="max-width:430px">
     <button class="modal-close" onclick="closeReport()">✕</button>
     <h3 data-i18n="report.title">🐞 回報問題</h3>
@@ -2974,6 +2974,7 @@ let reportCtx='';
 function reportEmailAddr(){ return atob('YW5naWVodUBnbWFpbC5jb20='); } // base64 隱藏，避免爬蟲抓取
 function reportProblem(ctx){
   reportCtx=ctx||'';
+  closeSettings(); // 關掉設定視窗，回報以獨立視窗呈現（避免兩層模糊疊加變慢）
   const el=document.getElementById('report-email'); if(el) el.textContent=reportEmailAddr();
   document.getElementById('report-modal').classList.add('on');
 }
