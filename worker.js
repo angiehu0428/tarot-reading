@@ -5,7 +5,7 @@
 // 每日 AI 解牌上限（成本煞車）。超過就暫停當天的 AI 解牌。想再高/再低就改這個數字。
 const DAILY_CAP = 2000;
 // 付費 AI 解牌暫停開關（API 配額已滿時設 true；恢復服務時改回 false 並重新部署）
-const AI_PAUSED = true;
+const AI_PAUSED = false;
 function todayKey() { return 'count:' + new Date().toISOString().slice(0, 10); }
 
 const ALLOWED_ORIGINS = [

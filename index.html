@@ -707,7 +707,7 @@ const PROMO_END = new Date('2026-07-01T00:00:00'); // 買斷優惠到 6/30
 function inPromo(){ return new Date() < PROMO_END; }
 const WORKER_URL = 'https://tarot-worker.angiehu.workers.dev';
 // 付費 AI 解牌暫停開關（API 配額已滿時設 true；恢復服務時改回 false）
-const AI_PAUSED = true;
+const AI_PAUSED = false;
 // 付費 AI 暫停時顯示的通知橫幅（付費用戶看到，內建解讀照常）
 function pauseNoticeHtml(){
   return `<div style="margin-bottom:14px;padding:13px 16px;background:rgba(224,85,85,.1);border:1px solid rgba(224,85,85,.4);border-radius:10px;font-size:.86rem;color:#f0b8b8;line-height:1.7">${L('⚠ AI 深度解牌暫時停用：目前 API 配額已滿，我們正在處理、很快會恢復，請稍後再試 🙏 以下先提供免費的內建牌義解讀。','⚠ AI deep readings are temporarily paused: the API quota is currently full. We\'re on it and will restore service shortly — please try again later 🙏 Here\'s the free built-in reading for now.')}</div>`;
