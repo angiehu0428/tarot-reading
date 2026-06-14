@@ -120,7 +120,7 @@ html,body{min-height:100vh;background:var(--dp);color:var(--white);font-family:'
 .t-divider{color:var(--gold);letter-spacing:.6em;margin-bottom:28px;font-size:1.1rem}
 .t-muted{color:var(--muted);font-size:.9rem;line-height:1.8}
 
-.btn{font-family:'Cinzel',serif;font-size:.9rem;letter-spacing:.18em;padding:13px 36px;border:1px solid var(--gold);background:transparent;color:var(--gold);cursor:pointer;transition:all .3s;position:relative;overflow:hidden;margin:6px}
+.btn{display:inline-block;white-space:normal;font-family:'Cinzel',serif;font-size:.9rem;letter-spacing:.18em;padding:13px 36px;border:1px solid var(--gold);background:transparent;color:var(--gold);cursor:pointer;transition:all .3s;position:relative;overflow:hidden;margin:6px}
 .btn::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(212,175,55,.15),transparent);transform:translateX(-100%);transition:transform .5s}
 .btn:hover::after{transform:translateX(100%)}
 .btn:hover{background:rgba(212,175,55,.08);box-shadow:0 0 22px rgba(212,175,55,.35);transform:translateY(-2px)}
@@ -132,8 +132,8 @@ html,body{min-height:100vh;background:var(--dp);color:var(--white);font-family:'
 @keyframes btn-pulse{0%,100%{box-shadow:0 0 15px rgba(212,175,55,.4)}50%{box-shadow:0 0 40px rgba(212,175,55,.8)}}
 
 /* ── Spread Selection ── */
-.spread-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:18px;max-width:860px;width:100%;margin-top:10px}
-.spread-opt{border:1px solid rgba(212,175,55,.25);background:rgba(42,22,96,.25);padding:28px 18px;cursor:pointer;transition:all .35s;position:relative;overflow:hidden}
+.spread-grid{display:flex;flex-wrap:wrap;justify-content:center;gap:18px;max-width:860px;width:100%;margin-top:10px}
+.spread-opt{flex:0 1 200px;box-sizing:border-box;border:1px solid rgba(212,175,55,.25);background:rgba(42,22,96,.25);padding:28px 18px;cursor:pointer;transition:all .35s;position:relative;overflow:hidden}
 .spread-opt::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(212,175,55,.07),transparent);opacity:0;transition:opacity .3s}
 .spread-opt:hover::before{opacity:1}
 .spread-opt:hover{border-color:var(--gold);transform:translateY(-6px);box-shadow:0 12px 36px rgba(212,175,55,.2)}
@@ -348,7 +348,7 @@ textarea.inp{resize:vertical;min-height:90px}
 ::-webkit-scrollbar-track{background:var(--dp)}
 ::-webkit-scrollbar-thumb{background:rgba(212,175,55,.3);border-radius:3px}
 .divider-line{width:100%;max-width:600px;border:none;border-top:1px solid rgba(212,175,55,.15);margin:12px 0}
-@media(max-width:580px){.flip-box{width:110px;height:185px}.spread-grid{grid-template-columns:1fr 1fr}.reading-spread{gap:12px}.modal{padding:24px 18px}}
+@media(max-width:580px){.flip-box{width:110px;height:185px}.spread-opt{flex-basis:42%}.reading-spread{gap:12px}.modal{padding:24px 18px}}
 </style>
 </head>
 <body>
@@ -2056,7 +2056,15 @@ ${refCtx}
       body:JSON.stringify({email:proxyEmail,body:geminiBody})
     }));
     data=await resp.json();
-    if(!resp.ok)throw new Error(data.error||`Worker ${resp.status}`);
+    if(!resp.ok){
+      if(resp.status===403){
+        // email 不再有效（訂閱到期/失效）→ 清掉本機解鎖狀態並給明確訊息
+        localStorage.removeItem('tr_verified_email');
+        if(typeof updateApiStatus==='function') updateApiStatus();
+        throw new Error(L('訂閱已到期或未生效，請續訂以繼續使用 AI 解牌','Your subscription has lapsed — please resubscribe to keep using AI readings'));
+      }
+      throw new Error(data.error||`Worker ${resp.status}`);
+    }
   } else {
     const cleanKey=key.split('').filter(c=>c.charCodeAt(0)>=32&&c.charCodeAt(0)<=126).join('');
     if(apiProvider(cleanKey)==='openai'){
@@ -2350,15 +2358,33 @@ function buildInterpWuxi(){
     : `針對你的問題「${S.q}」，這次牌組帶出了 ${cardNames.join('、')} 的組合能量。`;
   const foot = L('以上是依照無視論邏輯所做的初步梳理。若想獲得結合感情連結牌組、數字象徵與個人問題脈絡的深度 AI 解析，可以解鎖 AI 解牌功能。','This is an initial reading by the Wuxi method. For a deeper AI analysis that weaves in relationship card-combos, numerology, and your personal context, unlock AI readings.');
 
+  // 醒目「關鍵結論」：依重點牌的正逆與吉凶傾向給一句明確方向（與其他牌陣一致）
+  let wuxiV='', wuxiHook='';
+  if(keyRev){ wuxiV=L(`明確結論：核心能量偏向「內省與調整」。關於「${S.q}」，此刻更適合向內檢視、放慢腳步，而非強行推進——時機尚未成熟，但你可以先把方向校準好。`,`Clear verdict: the core energy leans toward reflection and adjustment. For "${S.q}", now favors looking inward and slowing down rather than forcing ahead — the timing isn't ripe yet, but you can recalibrate your direction first.`); wuxiHook=DEEP_HOOK(); }
+  else if(isHeavy){ wuxiV=L(`明確結論：能量直接、但偏向考驗。關於「${S.q}」，眼前有實際課題要面對；好消息是困難都攤在檯面上、沒有暗流，正面迎戰就是現在最好的策略。`,`Clear verdict: the energy is direct but leans toward testing. For "${S.q}", there are real tasks ahead — the good news is the challenges are all out in the open with no hidden undercurrents, so meeting them head-on is the best strategy now.`); wuxiHook=DEEP_HOOK(); }
+  else { wuxiV=L(`明確結論：整體走勢正向。關於「${S.q}」，你已具備所需的資源與動力，順著這股能量推進就對了。`,`Clear verdict: the overall trajectory is positive. For "${S.q}", you already have the resources and momentum you need — move with this energy.`); }
+
   return `
     <p class="interp-p">${intro}</p>
     <div style="margin:14px 0 10px;padding:12px 14px;background:rgba(42,22,96,.25);border-radius:8px;border:1px solid rgba(212,175,55,.12)">
       <div style="font-family:'Cinzel',serif;font-size:.72rem;color:rgba(212,175,55,.6);letter-spacing:.12em;margin-bottom:8px">${L('無視論分析','Wuxi Analysis')} · ${revRatio}</div>
       ${rowsHtml}
     </div>
+    ${verdictBox(wuxiV, wuxiHook)}
     <p class="interp-p">${conclusionText}</p>
     ${topicHtml}
     <p class="interp-p" style="font-size:.82rem;color:rgba(212,175,55,.55);margin-top:6px">${foot}</p>`;
+}
+
+// ── 關鍵結論：共用的醒目結論框 + 引導 hook ──
+const DEEP_HOOK = ()=>L('想知道針對你的處境具體該怎麼做？解鎖 AI 解牌可獲得 step-by-step 的個人化行動建議。','Want to know exactly what to do in your situation? Unlock AI readings for step-by-step, personalized guidance.');
+function verdictBox(v, hook){
+  return `
+    <div style="margin:14px 0;padding:14px 16px;background:linear-gradient(135deg,rgba(212,175,55,.13),rgba(42,22,96,.25));border:1px solid rgba(212,175,55,.38);border-radius:10px">
+      <div style="font-family:'Cinzel',serif;font-size:.74rem;color:var(--gold);letter-spacing:.12em;margin-bottom:7px">✦ ${L('關鍵結論','Key Verdict')} ✦</div>
+      <p style="margin:0;font-size:.92rem;color:var(--white);line-height:1.85">${v}</p>
+      ${hook?`<p style="margin:9px 0 0;font-size:.78rem;color:rgba(212,175,55,.8);line-height:1.7">→ ${hook}</p>`:''}
+    </div>`;
 }
 
 // ── 關鍵結論：給明確方向與「結論感」，強化使用者想深入了解的 hook ──
@@ -2367,7 +2393,7 @@ function buildVerdict(cards){
   const heavy=c=>kwIsHeavy(c.kw);
   const kw=(c,k=2)=>en?c.kw.slice(0,k).join(', '):c.kw.slice(0,k).join('、');
   const nm=c=>cardName(c.cid)+(c.rev?L('（逆位）',' reversed'):'');
-  const deepHook=L('想知道針對你的處境具體該怎麼做？解鎖 AI 解牌可獲得 step-by-step 的個人化行動建議。','Want to know exactly what to do in your situation? Unlock AI readings for step-by-step, personalized guidance.');
+  const deepHook=DEEP_HOOK();
   let v='', hook='';
 
   if(S.type==='one'){
@@ -2394,12 +2420,7 @@ function buildVerdict(cards){
     return ''; // 其他類型（如自訂）不額外下結論，交給逐位解析
   }
 
-  return `
-    <div style="margin:14px 0;padding:14px 16px;background:linear-gradient(135deg,rgba(212,175,55,.13),rgba(42,22,96,.25));border:1px solid rgba(212,175,55,.38);border-radius:10px">
-      <div style="font-family:'Cinzel',serif;font-size:.74rem;color:var(--gold);letter-spacing:.12em;margin-bottom:7px">✦ ${L('關鍵結論','Key Verdict')} ✦</div>
-      <p style="margin:0;font-size:.92rem;color:var(--white);line-height:1.85">${v}</p>
-      ${hook?`<p style="margin:9px 0 0;font-size:.78rem;color:rgba(212,175,55,.8);line-height:1.7">→ ${hook}</p>`:''}
-    </div>`;
+  return verdictBox(v, hook);
 }
 
 // ── 其他牌陣：傳統位置解法，每張牌依其位置意義解讀 ──
@@ -2578,7 +2599,10 @@ async function sendChat(){
     if(proxyEmail&&WORKER_URL){
       const r=await fetchRetry(()=>fetch(WORKER_URL+'/gemini',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:proxyEmail,body:geminiBody})}));
       const data=await r.json();
-      if(!r.ok)throw new Error(data.error||`Worker ${r.status}`);
+      if(!r.ok){
+        if(r.status===403){ localStorage.removeItem('tr_verified_email'); if(typeof updateApiStatus==='function') updateApiStatus(); throw new Error(L('訂閱已到期或未生效，請續訂以繼續使用 AI 解牌','Your subscription has lapsed — please resubscribe to keep using AI readings')); }
+        throw new Error(data.error||`Worker ${r.status}`);
+      }
       ans=data.candidates?.[0]?.content?.parts?.[0]?.text||'無法取得回應';
     } else {
       const cleanKey=key.split('').filter(c=>c.charCodeAt(0)>=32&&c.charCodeAt(0)<=126).join('');
@@ -2759,6 +2783,22 @@ function clearVerifiedEmail(){
 }
 function isVerified(){return !!localStorage.getItem('tr_verified_email')&&!!WORKER_URL;}
 function getVerifiedEmail(){return localStorage.getItem('tr_verified_email')||'';}
+// 開頁時重新確認訂閱仍有效（訂閱可能已到期）。回傳「是否仍有效」。
+async function revalidateAccess(){
+  if(!isVerified())return false;
+  try{
+    const r=await fetch(WORKER_URL+'/check',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:getVerifiedEmail()})});
+    const d=await r.json();
+    if(d&&d.verified===false){
+      // 訂閱已到期/失效 → 清掉本機解鎖狀態並提示
+      localStorage.removeItem('tr_verified_email');
+      updateApiStatus();
+      toast(L('訂閱已到期，AI 解牌已鎖定，續訂即可恢復','Your subscription has lapsed — AI readings are locked; resubscribe to restore'));
+      return false;
+    }
+    return true;
+  }catch(e){ return true; } // 網路失敗就保留現狀，不誤鎖
+}
 
 // ── 跨裝置歷史同步（付費驗證 email 專屬） ──
 async function syncPush(){
@@ -2976,6 +3016,9 @@ function toggleAiInfo(){
 //  更新紀錄 CHANGELOG（新項目加在最上面；中英務必同步）
 // ══════════════════════════════════════════
 const CHANGELOG = [
+  { date:'2026-06-14',
+    zh:['改為每月 US$5 訂閱制（新開張限時保留一次買斷優惠到 6/30）','訂閱到期會自動提示並引導續訂，不再卡在「看似解鎖卻無法解牌」','五張無視論牌陣也加上醒目的「關鍵結論」判讀','牌陣選擇版面優化：視窗變小時換行的卡片置中對齊','修正英文版部分按鈕文字過長破框'],
+    en:['Switched to a US$5/month subscription (one-time launch deal kept until Jun 30)','Lapsed subscriptions now prompt you to resubscribe instead of silently failing to read','Added the prominent "Key Verdict" to the Five-Card Wuxi spread too','Spread picker layout: wrapped cards now center-align on smaller windows','Fixed a few English buttons whose text overflowed their frame'] },
   { date:'2026-06-13',
     zh:['解牌新增「關鍵結論」：針對現在→未來給出明確趨勢判讀（例如低谷會不會過去），結論更清楚','提問前加入「面向聚焦」提示，引導先鎖定感情／事業／財運／健康／學業，問得更準、解得更貼切','購買後解鎖更順：從購買連結回到網站會自動開啟解鎖視窗並引導輸入購買 Email','自訂牌陣張數上限提升至 12 張（適合占算一整年每月運勢）','強化跨裝置同步：開啟網站即自動雙向同步，另一台裝置的記錄更即時呈現','啟用專屬網址 tarot.angiehu.com','新增「更新紀錄」頁面，記錄每次更新','五張無視論牌陣標示為「最推薦」全方位解牌','追問區加入提示，引導如何向 AI 追問細節','付費會員新增跨裝置雲端同步歷史記錄','強化 SEO 與結構化資料，讓 Google 與 AI 更容易找到本站'],
     en:['New "Key Verdict" in readings: a clear trend call from Present → Future (e.g. whether the low point will pass), so conclusions feel definite','Added a "focus your question" prompt before drawing — pick love / career / money / health / study first for sharper, more on-point readings','Smoother post-purchase unlock: returning from the purchase link auto-opens the unlock prompt and guides you to enter your email','Custom spread now supports up to 12 cards (great for a month-by-month year-ahead reading)','Stronger cross-device sync: two-way sync runs automatically on load, so another device\'s readings show up sooner','Launched the custom address tarot.angiehu.com','Added this Changelog page to track every update','Marked the Five-Card Wuxi spread as the recommended all-around reading','Added hints in the follow-up area on how to ask the AI for details','Paid members get cross-device cloud history sync','Improved SEO and structured data so Google and AI can find the site more easily'] },
@@ -3011,11 +3054,14 @@ applyLang();
 go('s-welcome');
 // 新開張一次性買斷優惠：只在 6/30 前顯示，之後自動隱藏（毋須手動改站）
 (function(){ const el=document.getElementById('launch-offer'); if(el && new Date() < new Date('2026-07-01T00:00:00')) el.style.display='block'; })();
-// 已驗證 email → 啟動時靜默拉回雲端歷史（syncPull 內部會在需要時推回收斂）
-if(isVerified()) syncPull().then(merged=>{
-  if(!merged) return;
-  const cur=document.querySelector('.screen.on');
-  if(cur && cur.id==='s-history') showHistory(); // 正停在歷史頁才重繪
+// 已驗證 email → 先確認訂閱仍有效（可能已到期），再靜默拉回雲端歷史
+if(isVerified()) revalidateAccess().then(ok=>{
+  if(!ok) return;
+  syncPull().then(merged=>{
+    if(!merged) return;
+    const cur=document.querySelector('.screen.on');
+    if(cur && cur.id==='s-history') showHistory(); // 正停在歷史頁才重繪
+  });
 });
 
 // ── Gumroad 購買後自動解鎖 ──
