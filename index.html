@@ -129,8 +129,7 @@ html,body{min-height:100vh;background:var(--dp);color:var(--white);font-family:'
 .btn-ghost:hover{border-color:var(--silver);color:var(--silver);background:rgba(255,255,255,.03)}
 .btn-sm{padding:8px 20px;font-size:.78rem;letter-spacing:.12em;margin:4px}
 .btn-glow{animation:btn-pulse 2s ease-in-out infinite}
-.buy-opt{display:block;width:100%;box-sizing:border-box;text-decoration:none;text-align:center;border:1px solid rgba(212,175,55,.55);background:linear-gradient(135deg,rgba(212,175,55,.16),rgba(42,22,96,.55)),#1a0c30 !important;border-radius:12px;padding:13px 16px;margin-bottom:10px;transition:transform .2s,box-shadow .2s;cursor:pointer;position:relative;overflow:hidden;box-shadow:none !important}
-.buy-opt::before,.buy-opt::after{display:none !important;content:none !important}
+.buy-opt{display:block;width:100%;box-sizing:border-box;text-decoration:none;text-align:center;border:1px solid rgba(212,175,55,.55);border-radius:12px;padding:13px 16px;margin-bottom:10px;transition:transform .2s;cursor:pointer}
 .buy-opt:hover{transform:translateY(-2px)}
 .buy-opt .t{font-family:'Cinzel',serif;font-size:.92rem;font-weight:700;color:var(--gold);letter-spacing:.03em;line-height:1.4}
 .buy-opt .s{font-size:.72rem;color:var(--silver);margin-top:5px;line-height:1.55}
@@ -381,12 +380,12 @@ textarea.inp{resize:vertical;min-height:90px}
       <div style="font-family:'Cinzel',serif;font-size:.8rem;color:var(--gold);letter-spacing:.1em;margin-bottom:8px" data-i18n="set.buy.head">✦ 訂閱解鎖 · 支持創作</div>
       <p class="hint" style="margin:0 0 12px" data-i18n="set.buy.desc">訂閱（每月 US$5）即可解鎖 AI 深度解牌功能，獲得針對你問題的個人化塔羅分析、感情連結牌組解讀與追問對話。可隨時取消。</p>
       <!-- 一次買斷（限時新開張優惠，過了 6/30 由 JS 自動隱藏）。促銷期間與月訂閱同等並列 -->
-      <a id="launch-offer" href="https://huisangie.gumroad.com/l/tarotreading?wanted=true" data-gumroad-overlay-checkout="true" class="buy-opt" style="display:none;border-color:var(--gl)">
+      <a id="launch-offer" href="https://huisangie.gumroad.com/l/tarotreading?wanted=true" data-gumroad-overlay-checkout="true" class="buy-opt" style="display:none;border-color:var(--gl);background:linear-gradient(135deg,#3a2c5e,#241043)">
         <div class="t" data-i18n="set.buy.once.t">🎉 一次買斷 · 限時優惠</div>
-        <div class="s" data-i18n="set.buy.once.s">付一次、之後不再扣款 · 限時只到 6/30</div>
+        <div class="s" data-i18n="set.buy.once.s">付一次、不再扣款 · 含 2 年使用權 · 限時只到 6/30</div>
       </a>
       <!-- 月訂閱 -->
-      <a href="https://huisangie.gumroad.com/l/tarotmonthly?wanted=true" data-gumroad-overlay-checkout="true" class="buy-opt">
+      <a href="https://huisangie.gumroad.com/l/tarotmonthly?wanted=true" data-gumroad-overlay-checkout="true" class="buy-opt" style="background:linear-gradient(135deg,#3a2c5e,#241043)">
         <div class="t" data-i18n="set.buy.sub.t">✦ 月訂閱 · US$5／月</div>
         <div class="s" data-i18n="set.buy.sub.s">每月自動續扣，可隨時取消</div>
       </a>
