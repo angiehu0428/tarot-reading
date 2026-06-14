@@ -58,7 +58,7 @@
 }
 </script>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Noto+Serif+TC:wght@300;400;700&display=swap" rel="stylesheet">
-<script src="https://gumroad.com/js/gumroad.js"></script>
+<!-- Gumroad overlay 移除：購買連結改開新分頁結帳，避免 gumroad.js 自動裝飾按鈕造成的樣式異常 -->
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -380,12 +380,12 @@ textarea.inp{resize:vertical;min-height:90px}
       <div style="font-family:'Cinzel',serif;font-size:.8rem;color:var(--gold);letter-spacing:.1em;margin-bottom:8px" data-i18n="set.buy.head">✦ 訂閱解鎖 · 支持創作</div>
       <p class="hint" style="margin:0 0 12px" data-i18n="set.buy.desc">訂閱（每月 US$5）即可解鎖 AI 深度解牌功能，獲得針對你問題的個人化塔羅分析、感情連結牌組解讀與追問對話。可隨時取消。</p>
       <!-- 一次買斷（限時新開張優惠，過了 6/30 由 JS 自動隱藏）。促銷期間與月訂閱同等並列 -->
-      <a id="launch-offer" href="https://huisangie.gumroad.com/l/tarotreading?wanted=true" data-gumroad-overlay-checkout="true" class="buy-opt" style="display:none;border-color:var(--gl);background:linear-gradient(135deg,#3a2c5e,#241043)">
+      <a id="launch-offer" href="https://huisangie.gumroad.com/l/tarotreading?wanted=true" target="_blank" rel="noopener" class="buy-opt" style="display:none;border-color:var(--gl);background:linear-gradient(135deg,#3a2c5e,#241043)">
         <div class="t" data-i18n="set.buy.once.t">🎉 一次買斷 · 限時優惠</div>
         <div class="s" data-i18n="set.buy.once.s">付一次、不再扣款 · 含 2 年使用權 · 限時只到 6/30</div>
       </a>
       <!-- 月訂閱 -->
-      <a href="https://huisangie.gumroad.com/l/tarotmonthly?wanted=true" data-gumroad-overlay-checkout="true" class="buy-opt" style="background:linear-gradient(135deg,#3a2c5e,#241043)">
+      <a href="https://huisangie.gumroad.com/l/tarotmonthly?wanted=true" target="_blank" rel="noopener" class="buy-opt" style="background:linear-gradient(135deg,#3a2c5e,#241043)">
         <div class="t" data-i18n="set.buy.sub.t">✦ 月訂閱 · US$5／月</div>
         <div class="s" data-i18n="set.buy.sub.s">每月自動續扣，可隨時取消</div>
       </a>
@@ -1560,8 +1560,8 @@ function unlockCtaHtml(){
           <span>${L('③ 點左方按鈕輸入購買 email 驗證','③ Verify with your purchase email')}</span>
         </div>
         <div style="display:flex;justify-content:center;gap:10px;flex-wrap:wrap">
-          ${inPromo()?`<a href="${GUMROAD_ONCE_URL}?wanted=true" data-gumroad-overlay-checkout="true" class="btn btn-sm" style="text-decoration:none">${L('🎉 一次買斷 · 2 年（限時到 6/30）','🎉 One-time · 2-yr access (until Jun 30)')}</a>`:''}
-          <a href="${GUMROAD_URL}?wanted=true" data-gumroad-overlay-checkout="true" class="btn btn-sm btn-ghost" style="text-decoration:none">${L('月訂閱 US$5／月（自動續扣）','Monthly US$5/mo (auto-renews)')}</a>
+          ${inPromo()?`<a href="${GUMROAD_ONCE_URL}?wanted=true" target="_blank" rel="noopener" class="btn btn-sm" style="text-decoration:none">${L('🎉 一次買斷 · 2 年（限時到 6/30）','🎉 One-time · 2-yr access (until Jun 30)')}</a>`:''}
+          <a href="${GUMROAD_URL}?wanted=true" target="_blank" rel="noopener" class="btn btn-sm btn-ghost" style="text-decoration:none">${L('月訂閱 US$5／月（自動續扣）','Monthly US$5/mo (auto-renews)')}</a>
           <button class="btn btn-sm btn-ghost" onclick="openSettings()">${L('已購買？驗證 Email','Purchased? Verify')}</button>
         </div>
       </div>`;
