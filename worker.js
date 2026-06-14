@@ -66,6 +66,12 @@ export default {
   },
 };
 
+// 訂閱存取期限：每次扣款後給約 40 天（月扣款 + 寬限）。Gumroad 每次續扣都會再打一次
+// webhook，自動刷新此期限；一旦停止續訂，存取會在約 40 天內自動失效。
+const SUB_TTL = 60 * 60 * 24 * 40;
+// 舊式「一次性購買」的存取期限（2 年）。現有已付費用戶沿用此設定、不受訂閱制影響。
+const LIFETIME_TTL = 60 * 60 * 24 * 730;
+
 // ── Gumroad webhook ──────────────────────────────────────────
 async function handleWebhook(request, env) {
   const text = await request.text();
@@ -74,7 +80,11 @@ async function handleWebhook(request, env) {
   const sellerId = params.get('seller_id');
   const email = params.get('email')?.toLowerCase().trim();
   const saleId = params.get('sale_id') || '';
+  const subId = params.get('subscription_id') || '';   // 訂閱才有
   const refunded = params.get('refunded') === 'true';
+  // 訂閱「真正結束」或「扣款失敗」→ 撤銷存取。
+  // 注意：單純「取消但本期尚未到期」不在此撤銷，讓存取靠 TTL 自然到期（等於用到付費期末）。
+  const ended = !!(params.get('subscription_ended_at') || params.get('subscription_failed_at'));
 
   // Verify this is from your Gumroad account
   if (!env.GUMROAD_SELLER_ID || sellerId !== env.GUMROAD_SELLER_ID) {
@@ -83,16 +93,20 @@ async function handleWebhook(request, env) {
 
   if (!email) return new Response('No email', { status: 400 });
 
-  if (refunded) {
-    // Remove access on refund
+  if (refunded || ended) {
+    // 退款 / 訂閱結束 → 移除存取
     await env.TAROT_KV.delete(`email:${email}`);
-  } else {
-    await env.TAROT_KV.put(
-      `email:${email}`,
-      JSON.stringify({ verified: true, date: new Date().toISOString(), saleId }),
-      { expirationTtl: 60 * 60 * 24 * 730 } // 2 years
-    );
+    return new Response('OK');
   }
+
+  // 有 subscription_id → 訂閱用戶，用短 TTL（每次扣款自動刷新）；
+  // 無 subId → 舊式一次性購買，沿用 2 年 TTL（不影響既有付費用戶）。
+  const ttl = subId ? SUB_TTL : LIFETIME_TTL;
+  await env.TAROT_KV.put(
+    `email:${email}`,
+    JSON.stringify({ verified: true, date: new Date().toISOString(), saleId, subId, plan: subId ? 'sub' : 'lifetime' }),
+    { expirationTtl: ttl }
+  );
 
   return new Response('OK');
 }
