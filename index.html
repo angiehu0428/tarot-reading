@@ -2493,6 +2493,7 @@ function buildInterpWuxi(){
   else if(isHeavy){ wuxiV=L(`明確結論：能量直接、但偏向考驗。關於「${S.q}」，眼前有實際課題要面對；好消息是困難都攤在檯面上、沒有暗流，正面迎戰就是現在最好的策略。`,`Clear verdict: the energy is direct but leans toward testing. For "${S.q}", there are real tasks ahead — the good news is the challenges are all out in the open with no hidden undercurrents, so meeting them head-on is the best strategy now.`); wuxiHook=DEEP_HOOK(); }
   else { wuxiV=L(`明確結論：整體走勢正向。關於「${S.q}」，你已具備所需的資源與動力，順著這股能量推進就對了。`,`Clear verdict: the overall trajectory is positive. For "${S.q}", you already have the resources and momentum you need — move with this energy.`); }
 
+  const wuxiCards = S.picked.map(di=>({cid:S.deck[di].cid, rev:S.deck[di].rev, kw:cardKw(S.deck[di].cid,S.deck[di].rev)}));
   return `
     <p class="interp-p">${intro}</p>
     <div style="margin:14px 0 10px;padding:12px 14px;background:rgba(42,22,96,.25);border-radius:8px;border:1px solid rgba(212,175,55,.12)">
@@ -2502,6 +2503,7 @@ function buildInterpWuxi(){
     ${verdictBox(wuxiV, wuxiHook)}
     <p class="interp-p">${conclusionText}</p>
     ${topicHtml}
+    ${buildOverallSummary(wuxiCards)}
     <p class="interp-p" style="font-size:.82rem;color:rgba(212,175,55,.55);margin-top:6px">${foot}</p>`;
 }
 
