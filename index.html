@@ -427,6 +427,16 @@ textarea.inp{resize:vertical;min-height:90px}
   </div>
 </div>
 
+<!-- ══ ANNOUNCEMENT ══ -->
+<div class="modal-overlay" id="announce-modal" style="z-index:650;backdrop-filter:none" onclick="if(event.target===this)closeAnnounce()">
+  <div class="modal" style="max-width:440px;text-align:center">
+    <button class="modal-close" onclick="closeAnnounce()">✕</button>
+    <h3 data-i18n="ann.title">✦ 服務通知</h3>
+    <p class="hint" style="margin-top:12px;line-height:1.9;text-align:left" data-i18n-html="ann.body"></p>
+    <button class="btn btn-sm" style="margin-top:16px" onclick="closeAnnounce()" data-i18n="ann.ok">我知道了</button>
+  </div>
+</div>
+
 <!-- ══ REPORT A PROBLEM ══ -->
 <div class="modal-overlay" id="report-modal" style="z-index:600;backdrop-filter:none" onclick="if(event.target===this)closeReport()">
   <div class="modal" style="max-width:430px">
@@ -806,6 +816,9 @@ Object.assign(T, {
   'w.copyright':{zh:'© 2026 塔羅神諭 · All Rights Reserved',en:'© 2026 Tarot Oracle · All Rights Reserved'},
   'w.contact':{zh:'聯繫我們',en:'Contact Us'},
   'set.report':{zh:'🐞 遇到問題？點此回報',en:'🐞 Hit a problem? Report it'},
+  'ann.title':{zh:'✦ 服務通知',en:'✦ Service Update'},
+  'ann.body':{zh:'剛剛因為 AI 服務商的 API 額度已滿，AI 深度解牌曾短暫暫停，造成不便很抱歉 🙏<br><br>目前已經<strong style="color:var(--gold)">提高流量額度、恢復服務</strong>。<br><br>已付費解鎖的朋友，歡迎再回來試試 AI 解牌 ✨',en:'AI deep readings were briefly paused because the AI provider\'s API quota was full — sorry for the hiccup 🙏<br><br>We\'ve now <strong style="color:var(--gold)">raised the quota and restored service</strong>.<br><br>If you\'ve unlocked AI readings, you\'re welcome to come back and try again ✨'},
+  'ann.ok':{zh:'我知道了',en:'Got it'},
   'report.title':{zh:'🐞 回報問題',en:'🐞 Report a Problem'},
   'report.desc':{zh:'遇到問題或有建議嗎？把情況描述寄到下面這個信箱，我會盡快處理 🙏',en:'Hit a problem or have a suggestion? Email the details to the address below and I\'ll get on it 🙏'},
   'report.copy':{zh:'複製',en:'Copy'},
@@ -3092,6 +3105,16 @@ function reportProblem(ctx){
   document.getElementById('report-modal').classList.add('on');
 }
 function closeReport(){ document.getElementById('report-modal').classList.remove('on'); }
+// 一次性公告（看過就不再跳；要再對所有人公告，換一個新的 ANNOUNCE_ID 即可）
+const ANNOUNCE_ID = '2026-06-14-quota-restored';
+function showAnnounce(){
+  if(localStorage.getItem('tr_announce_'+ANNOUNCE_ID)) return;
+  const m=document.getElementById('announce-modal'); if(m) m.classList.add('on');
+}
+function closeAnnounce(){
+  localStorage.setItem('tr_announce_'+ANNOUNCE_ID,'1');
+  const m=document.getElementById('announce-modal'); if(m) m.classList.remove('on');
+}
 function copyReportEmail(){
   const email=reportEmailAddr();
   if(navigator.clipboard&&navigator.clipboard.writeText){
@@ -3270,6 +3293,7 @@ function showChangelog(){
 })();
 applyLang();
 go('s-welcome');
+showAnnounce(); // 一次性服務公告
 // 新開張一次性買斷優惠：只在 6/30 前顯示，之後自動隱藏（毋須手動改站）
 (function(){ const el=document.getElementById('launch-offer'); if(el && inPromo()) el.style.display='block'; })();
 // 已驗證 email → 先確認訂閱仍有效（可能已到期），再靜默拉回雲端歷史
