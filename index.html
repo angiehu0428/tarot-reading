@@ -559,6 +559,7 @@ textarea.inp{resize:vertical;min-height:90px}
       <input type="number" class="inp" id="custom-n" min="1" max="12" value="3" oninput="renderCustomPos()">
       <div id="custom-pos-list"></div>
     </div>
+    <div id="q-focus-hint" data-i18n-html="q.focus.hint" style="margin-bottom:12px;padding:11px 14px;border-radius:8px;background:rgba(212,175,55,.07);border:1px solid rgba(212,175,55,.2);font-size:.78rem;color:var(--silver);line-height:1.85;text-align:left"></div>
     <div id="q-hint" style="display:none;margin-bottom:14px;padding:10px 14px;border-left:2px solid rgba(212,175,55,.4);background:rgba(212,175,55,.05);font-size:.78rem;color:rgba(212,175,55,.75);line-height:1.8;text-align:left"></div>
     <label class="lbl" data-i18n="q.label">你的問題</label>
     <textarea class="inp" id="q-input" data-i18n-ph="q.ph" placeholder="寫下你心中想要了解的事..."></textarea>
@@ -787,6 +788,7 @@ Object.assign(T, {
   'q.label':{zh:'你的問題',en:'Your question'},
   'q.ph':{zh:'寫下你心中想要了解的事...',en:'Write down what you wish to understand...'},
   'q.go':{zh:'✦ 進入冥想 ✦',en:'✦ Enter Meditation ✦'},
+  'q.focus.hint':{zh:'💡 <strong style="color:var(--gold)">先聚焦你的問題</strong>：想清楚你主要想問哪一個面向 —— 💗 感情 · 💼 事業 · 💰 財運 · 🩺 健康 · 📖 學業。問題越具體聚焦（例如「我和某人這段關係下半年會如何發展？」比「我會幸福嗎？」更好），牌義就越能切中你的方向。',en:'💡 <strong style="color:var(--gold)">Focus your question first</strong>: decide which area you mainly want to ask about — 💗 Love · 💼 Career · 💰 Money · 🩺 Health · 📖 Study. The more specific and focused your question (e.g. "How will my relationship with ___ develop in the second half of this year?" beats "Will I be happy?"), the more precisely the cards can speak to your situation.'},
   // ── Meditation ──
   'med.title':{zh:'靜心冥想',en:'Meditation'},
   'med.guide':{zh:'請專注於問題，讓答案從心中自然升起',en:'Focus on your question; let the answer rise from within'},
@@ -2350,6 +2352,47 @@ function buildInterpWuxi(){
     <p class="interp-p" style="font-size:.82rem;color:rgba(212,175,55,.55);margin-top:6px">${foot}</p>`;
 }
 
+// ── 關鍵結論：給明確方向與「結論感」，強化使用者想深入了解的 hook ──
+function buildVerdict(cards){
+  const en=LANG==='en';
+  const heavy=c=>kwIsHeavy(c.kw);
+  const kw=(c,k=2)=>en?c.kw.slice(0,k).join(', '):c.kw.slice(0,k).join('、');
+  const nm=c=>cardName(c.cid)+(c.rev?L('（逆位）',' reversed'):'');
+  const deepHook=L('想知道針對你的處境具體該怎麼做？解鎖 AI 解牌可獲得 step-by-step 的個人化行動建議。','Want to know exactly what to do in your situation? Unlock AI readings for step-by-step, personalized guidance.');
+  let v='', hook='';
+
+  if(S.type==='one'){
+    const c=cards[0];
+    if(heavy(c)){ v=L(`結論偏向「需要謹慎面對」。這張${nm(c)}直指「${kw(c,3)}」，提醒你眼前有實際的課題，正面處理會比迴避更有利。`,`The verdict leans toward "handle with care." This ${nm(c)} points straight to "${kw(c,3)}" — there's a real task in front of you, and meeting it head-on beats avoiding it.`); hook=deepHook; }
+    else { v=L(`結論偏向「順勢而為」。這張${nm(c)}帶來「${kw(c,3)}」的正向能量，順著這個方向走，事情會往你期待的方向發展。`,`The verdict leans positive. This ${nm(c)} brings the supportive energy of "${kw(c,3)}" — follow this direction and things move your way.`); }
+  } else if(S.type==='three' && cards.length>=3){
+    const pres=cards[1], fut=cards[2], pH=heavy(pres), fH=heavy(fut);
+    if(!fH && pH){ v=L(`明確結論：低谷正在過去。「現在」的${nm(pres)}顯示你正處於壓力或卡關的階段，但「未來」的${nm(fut)}轉為「${kw(fut,2)}」的正向能量——趨勢明顯向上，你會度過這個階段，之後會漸入佳境。`,`Clear verdict: the low point is passing. "Present" (${nm(pres)}) shows you under pressure or stuck, but "Future" (${nm(fut)}) shifts to the positive energy of "${kw(fut,2)}." The trend is clearly rising — you get through this stage, and it improves afterward.`); }
+    else if(!fH && !pH){ v=L(`明確結論：走勢穩定向好。「現在」與「未來」都呈現正向能量，保持目前的方向與步調，事情會自然推進到你期待的結果。`,`Clear verdict: steadily improving. Both "Present" and "Future" carry positive energy — hold your current direction and pace, and things move toward the outcome you want.`); }
+    else if(fH && !pH){ v=L(`明確結論：留意後續的變數。「現在」的${nm(pres)}相對順遂，但「未來」的${nm(fut)}提醒「${kw(fut,2)}」的挑戰會浮現——提前因應，就能避免被打亂。`,`Clear verdict: watch what's coming. "Present" (${nm(pres)}) is relatively smooth, but "Future" (${nm(fut)}) flags the challenge of "${kw(fut,2)}" emerging — prepare early and you can keep it from derailing you.`); hook=deepHook; }
+    else { v=L(`明確結論：低谷還沒完全結束，但這不是定數。「現在」與「未來」都偏向考驗，代表這個階段需要你「主動調整」而非被動等待；牌反映的是目前的趨勢，而趨勢是可以被你改變的。`,`Clear verdict: the low point isn't fully over yet — but this is not fixed fate. Both "Present" and "Future" lean toward testing, so this stage calls for active adjustment rather than passive waiting. The cards reflect the current trend — and that trend is yours to change.`); hook=deepHook; }
+  } else if(S.type==='triangle' && cards.length>=3){
+    const adv=cards[2];
+    v=L(`明確結論：你的盲點，在於「我以為（${kw(cards[0],2)}）」與「真相（${kw(cards[1],2)}）」之間的落差。跨越它的鑰匙是建言牌${nm(adv)}——往「${kw(adv,2)}」的方向調整，就能突破目前的卡點。`,`Clear verdict: your blind spot is the gap between "what you assume (${kw(cards[0],2)})" and "the truth (${kw(cards[1],2)})." The key to crossing it is the advice card ${nm(adv)} — adjust toward "${kw(adv,2)}" and you break through where you're stuck.`);
+    if(heavy(cards[1])) hook=deepHook;
+  } else if(S.type==='choice' && cards.length>=5){
+    const fav=(pro,con)=>(heavy(pro)?0:1)+(heavy(con)?0:1);
+    const aF=fav(cards[0],cards[1]), bF=fav(cards[2],cards[3]), adv=cards[4];
+    if(aF>bF){ v=L(`明確結論：整體而言「選項A」較為有利——它的優勢（${kw(cards[0],2)}）較穩固，要面對的阻力也較小。`,`Clear verdict: overall "Option A" looks more favorable — its strength (${kw(cards[0],2)}) is more solid and it faces less resistance.`); }
+    else if(bF>aF){ v=L(`明確結論：整體而言「選項B」較為有利——它的優勢（${kw(cards[2],2)}）較穩固，要面對的阻力也較小。`,`Clear verdict: overall "Option B" looks more favorable — its strength (${kw(cards[2],2)}) is more solid and it faces less resistance.`); }
+    else { v=L(`明確結論：兩個選項勢均力敵，關鍵落在建議牌${nm(adv)}——以「${kw(adv,2)}」的精神去衡量，會幫你做出更不後悔的選擇。`,`Clear verdict: the two options are evenly matched — the deciding factor is the advice card ${nm(adv)}: weigh them in the spirit of "${kw(adv,2)}" to make the choice you'll least regret.`); hook=deepHook; }
+  } else {
+    return ''; // 其他類型（如自訂）不額外下結論，交給逐位解析
+  }
+
+  return `
+    <div style="margin:14px 0;padding:14px 16px;background:linear-gradient(135deg,rgba(212,175,55,.13),rgba(42,22,96,.25));border:1px solid rgba(212,175,55,.38);border-radius:10px">
+      <div style="font-family:'Cinzel',serif;font-size:.74rem;color:var(--gold);letter-spacing:.12em;margin-bottom:7px">✦ ${L('關鍵結論','Key Verdict')} ✦</div>
+      <p style="margin:0;font-size:.92rem;color:var(--white);line-height:1.85">${v}</p>
+      ${hook?`<p style="margin:9px 0 0;font-size:.78rem;color:rgba(212,175,55,.8);line-height:1.7">→ ${hook}</p>`:''}
+    </div>`;
+}
+
 // ── 其他牌陣：傳統位置解法，每張牌依其位置意義解讀 ──
 function buildInterpPositional(){
   const n = S.picked.length;
@@ -2437,6 +2480,7 @@ function buildInterpPositional(){
       <div style="font-family:'Cinzel',serif;font-size:.72rem;color:rgba(212,175,55,.6);letter-spacing:.12em;margin-bottom:8px">${L('牌陣總覽','Spread Overview')} · ${revRatio}</div>
       ${rowsHtml}
     </div>
+    ${buildVerdict(cards)}
     <p class="interp-p">${storyText}</p>
     ${topicHtml}
     <p class="interp-p">${toneText}</p>
@@ -2924,8 +2968,8 @@ function toggleAiInfo(){
 // ══════════════════════════════════════════
 const CHANGELOG = [
   { date:'2026-06-13',
-    zh:['購買後解鎖更順：從購買連結回到網站會自動開啟解鎖視窗並引導輸入購買 Email','自訂牌陣張數上限提升至 12 張（適合占算一整年每月運勢）','強化跨裝置同步：開啟網站即自動雙向同步，另一台裝置的記錄更即時呈現','啟用專屬網址 tarot.angiehu.com','新增「更新紀錄」頁面，記錄每次更新','五張無視論牌陣標示為「最推薦」全方位解牌','追問區加入提示，引導如何向 AI 追問細節','付費會員新增跨裝置雲端同步歷史記錄','強化 SEO 與結構化資料，讓 Google 與 AI 更容易找到本站'],
-    en:['Smoother post-purchase unlock: returning from the purchase link auto-opens the unlock prompt and guides you to enter your email','Custom spread now supports up to 12 cards (great for a month-by-month year-ahead reading)','Stronger cross-device sync: two-way sync runs automatically on load, so another device\'s readings show up sooner','Launched the custom address tarot.angiehu.com','Added this Changelog page to track every update','Marked the Five-Card Wuxi spread as the recommended all-around reading','Added hints in the follow-up area on how to ask the AI for details','Paid members get cross-device cloud history sync','Improved SEO and structured data so Google and AI can find the site more easily'] },
+    zh:['解牌新增「關鍵結論」：針對現在→未來給出明確趨勢判讀（例如低谷會不會過去），結論更清楚','提問前加入「面向聚焦」提示，引導先鎖定感情／事業／財運／健康／學業，問得更準、解得更貼切','購買後解鎖更順：從購買連結回到網站會自動開啟解鎖視窗並引導輸入購買 Email','自訂牌陣張數上限提升至 12 張（適合占算一整年每月運勢）','強化跨裝置同步：開啟網站即自動雙向同步，另一台裝置的記錄更即時呈現','啟用專屬網址 tarot.angiehu.com','新增「更新紀錄」頁面，記錄每次更新','五張無視論牌陣標示為「最推薦」全方位解牌','追問區加入提示，引導如何向 AI 追問細節','付費會員新增跨裝置雲端同步歷史記錄','強化 SEO 與結構化資料，讓 Google 與 AI 更容易找到本站'],
+    en:['New "Key Verdict" in readings: a clear trend call from Present → Future (e.g. whether the low point will pass), so conclusions feel definite','Added a "focus your question" prompt before drawing — pick love / career / money / health / study first for sharper, more on-point readings','Smoother post-purchase unlock: returning from the purchase link auto-opens the unlock prompt and guides you to enter your email','Custom spread now supports up to 12 cards (great for a month-by-month year-ahead reading)','Stronger cross-device sync: two-way sync runs automatically on load, so another device\'s readings show up sooner','Launched the custom address tarot.angiehu.com','Added this Changelog page to track every update','Marked the Five-Card Wuxi spread as the recommended all-around reading','Added hints in the follow-up area on how to ask the AI for details','Paid members get cross-device cloud history sync','Improved SEO and structured data so Google and AI can find the site more easily'] },
   { date:'2026-06-12',
     zh:['推出完整英文版，瀏覽器語言自動偵測 + 右上角一鍵切換','78 張牌的英文牌義、關鍵字、圖像星象資料庫','首頁加入星雲、流星、牌扇動畫與書籤／加入主畫面功能','新增聖三角牌陣；每個牌陣加上「適合占卜什麼」說明'],
     en:['Launched the full English version with browser-language auto-detect and a one-tap toggle','English database of all 78 cards: meanings, keywords, imagery & astrology','Home page nebula / shooting-star / card-fan animations, plus bookmark / add-to-home','Added the Holy Triangle spread; each spread now notes what it is best for'] },
