@@ -2388,7 +2388,26 @@ function buildInterpWuxi(){
     }
   }
 
-  const topicHtml = buildTopicHtml(detectTopic(S.q), keyIdx.length ? keyIdx : S.picked);
+  // 逐張列出全部 5 張對你問題的訊息（標示重點/輔助），讓基本解讀更完整、不只講重點牌
+  const topic = detectTopic(S.q);
+  const dash = en ? ' — ' : '——';
+  const cardSentence = (cid,rev)=> topic==='general'
+    ? (en ? (cardMeaning(cid,rev).split('. ')[0].replace(/\.$/,'')+'.') : cardMeaning(cid,rev).split('。')[0]+'。')
+    : topicSentence(topic,cid,rev);
+  const perCardItems = S.picked.map(di=>{
+    const {cid,rev}=S.deck[di];
+    const isKey = !hasMinority ? null : (keyIsRev ? rev : !rev);
+    const badge = isKey===null ? '' : isKey
+      ? `<span class="wuxi-badge key" style="margin-right:6px;vertical-align:middle">${L('重點','Key')}</span>`
+      : `<span class="wuxi-badge sup" style="margin-right:6px;vertical-align:middle">${L('輔助','Support')}</span>`;
+    return `<div style="padding:8px 0;border-bottom:1px solid rgba(212,175,55,.08);font-size:.9rem;line-height:1.8">${badge}<span style="color:var(--gold)">${cardName(cid)}${revLabel(rev)}</span>${dash}${cardSentence(cid,rev)}</div>`;
+  }).join('');
+  const perCardHeading = topic==='general'
+    ? L('五張牌各自給你的訊息','What each of the five cards tells you')
+    : en ? `Focused on "${topicLabel(topic)}" · each card's message` : `聚焦「${topicLabel(topic)}」· 每張牌給你的訊息`;
+  const topicHtml = `<div style="margin:12px 0">
+    <div style="font-family:'Cinzel',serif;font-size:.78rem;color:var(--gold);letter-spacing:.08em;margin-bottom:6px">${perCardHeading}</div>
+    ${perCardItems}</div>`;
   const intro = en
     ? `For your question "${S.q}", this spread brings the combined energy of ${cardNames.join(', ')}.`
     : `針對你的問題「${S.q}」，這次牌組帶出了 ${cardNames.join('、')} 的組合能量。`;
@@ -3122,8 +3141,8 @@ function toggleAiInfo(){
 // ══════════════════════════════════════════
 const CHANGELOG = [
   { date:'2026-06-14',
-    zh:['設定頁新增「🐞 回報問題」聯絡連結，AI 連線失敗時也能一鍵回報','解牌頁的「解鎖方案」改為跳出設定小視窗（站內彈窗結帳），不再開新分頁','購買區改為兩個清楚並列的選項——「🎉 一次買斷（限時到 6/30）」與「月訂閱 US$5／月（每月自動續扣）」，各自標明時限與扣款方式，避免誤點','設定頁新增「☁ 立即同步歷史記錄」按鈕，可手動同步並顯示同步筆數，不再只是默默在背景跑','改為每月 US$5 訂閱制（新開張限時保留一次買斷優惠到 6/30）','訂閱到期會自動提示並引導續訂，不再卡在「看似解鎖卻無法解牌」','五張無視論牌陣也加上醒目的「關鍵結論」判讀','牌陣選擇版面優化：視窗變小時換行的卡片置中對齊','修正英文版部分按鈕文字過長破框'],
-    en:['Added a "🐞 Report a problem" contact link in settings (and on AI-connection errors)','Reading-page unlock now opens the in-page settings popup (on-site overlay checkout) instead of a new tab','Purchase area now shows two clearly-labeled options — "🎉 One-time unlock (until Jun 30)" and "Monthly US$5/mo (auto-renews)" — each stating its time limit and billing, so no one picks the wrong one','Added a "☁ Sync history now" button in settings — sync on demand and see how many records synced, instead of it only running silently','Switched to a US$5/month subscription (one-time launch deal kept until Jun 30)','Lapsed subscriptions now prompt you to resubscribe instead of silently failing to read','Added the prominent "Key Verdict" to the Five-Card Wuxi spread too','Spread picker layout: wrapped cards now center-align on smaller windows','Fixed a few English buttons whose text overflowed their frame'] },
+    zh:['五張無視論的基本解讀改為「逐張」分析全部 5 張（標示重點/輔助），不再只講重點牌','設定頁新增「🐞 回報問題」聯絡連結，AI 連線失敗時也能一鍵回報','解牌頁的「解鎖方案」改為跳出設定小視窗（站內彈窗結帳），不再開新分頁','購買區改為兩個清楚並列的選項——「🎉 一次買斷（限時到 6/30）」與「月訂閱 US$5／月（每月自動續扣）」，各自標明時限與扣款方式，避免誤點','設定頁新增「☁ 立即同步歷史記錄」按鈕，可手動同步並顯示同步筆數，不再只是默默在背景跑','改為每月 US$5 訂閱制（新開張限時保留一次買斷優惠到 6/30）','訂閱到期會自動提示並引導續訂，不再卡在「看似解鎖卻無法解牌」','五張無視論牌陣也加上醒目的「關鍵結論」判讀','牌陣選擇版面優化：視窗變小時換行的卡片置中對齊','修正英文版部分按鈕文字過長破框'],
+    en:['Five-Card Wuxi basic reading now analyzes all five cards one by one (key/support marked), not just the key cards','Added a "🐞 Report a problem" contact link in settings (and on AI-connection errors)','Reading-page unlock now opens the in-page settings popup (on-site overlay checkout) instead of a new tab','Purchase area now shows two clearly-labeled options — "🎉 One-time unlock (until Jun 30)" and "Monthly US$5/mo (auto-renews)" — each stating its time limit and billing, so no one picks the wrong one','Added a "☁ Sync history now" button in settings — sync on demand and see how many records synced, instead of it only running silently','Switched to a US$5/month subscription (one-time launch deal kept until Jun 30)','Lapsed subscriptions now prompt you to resubscribe instead of silently failing to read','Added the prominent "Key Verdict" to the Five-Card Wuxi spread too','Spread picker layout: wrapped cards now center-align on smaller windows','Fixed a few English buttons whose text overflowed their frame'] },
   { date:'2026-06-13',
     zh:['解牌新增「關鍵結論」：針對現在→未來給出明確趨勢判讀（例如低谷會不會過去），結論更清楚','提問前加入「面向聚焦」提示，引導先鎖定感情／事業／財運／健康／學業，問得更準、解得更貼切','購買後解鎖更順：從購買連結回到網站會自動開啟解鎖視窗並引導輸入購買 Email','自訂牌陣張數上限提升至 12 張（適合占算一整年每月運勢）','強化跨裝置同步：開啟網站即自動雙向同步，另一台裝置的記錄更即時呈現','啟用專屬網址 tarot.angiehu.com','新增「更新紀錄」頁面，記錄每次更新','五張無視論牌陣標示為「最推薦」全方位解牌','追問區加入提示，引導如何向 AI 追問細節','付費會員新增跨裝置雲端同步歷史記錄','強化 SEO 與結構化資料，讓 Google 與 AI 更容易找到本站'],
     en:['New "Key Verdict" in readings: a clear trend call from Present → Future (e.g. whether the low point will pass), so conclusions feel definite','Added a "focus your question" prompt before drawing — pick love / career / money / health / study first for sharper, more on-point readings','Smoother post-purchase unlock: returning from the purchase link auto-opens the unlock prompt and guides you to enter your email','Custom spread now supports up to 12 cards (great for a month-by-month year-ahead reading)','Stronger cross-device sync: two-way sync runs automatically on load, so another device\'s readings show up sooner','Launched the custom address tarot.angiehu.com','Added this Changelog page to track every update','Marked the Five-Card Wuxi spread as the recommended all-around reading','Added hints in the follow-up area on how to ask the AI for details','Paid members get cross-device cloud history sync','Improved SEO and structured data so Google and AI can find the site more easily'] },
