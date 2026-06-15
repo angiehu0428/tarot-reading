@@ -1268,10 +1268,10 @@ const SPREADS = {
     hint:'建議問法：「針對目前卡關的狀態，請讓我看到事件的真相」或「在現在的事件中，有我沒注意到的盲點嗎？」',
     hintEn:'Suggested wording: "Show me the truth of where I feel stuck," or "Is there a blind spot I\'m missing in this situation?"'},
   five:{name:'五張牌陣（無視論）',nameEn:'Five-Card Wuxi Spread',pos:['牌一','牌二','牌三','牌四','牌五'],posEn:['Card 1','Card 2','Card 3','Card 4','Card 5']},
-  choice:{name:'二擇一牌陣',nameEn:'Either-Or Spread',pos:['選項A的優勢','選項A的挑戰','選項B的優勢','選項B的挑戰','整體建議'],
-    posEn:['Option A · Strengths','Option A · Challenges','Option B · Strengths','Option B · Challenges','Overall Advice'],
-    posDesc:['選擇A帶來的好處與正面能量','選擇A可能面對的困難與代價','選擇B帶來的好處與正面能量','選擇B可能面對的困難與代價','超越兩個選項的整體智慧與更高視角'],
-    posDescEn:['The benefits and positive energy of choosing A','The difficulties and costs of choosing A','The benefits and positive energy of choosing B','The difficulties and costs of choosing B','Higher wisdom that transcends both options']}
+  choice:{name:'二擇一牌陣',nameEn:'Either-Or Spread',pos:['選項1（左）· 優勢','選項1（左）· 挑戰','選項2（右）· 優勢','選項2（右）· 挑戰','整體建議'],
+    posEn:['Option 1 (left) · Strengths','Option 1 (left) · Challenges','Option 2 (right) · Strengths','Option 2 (right) · Challenges','Overall Advice'],
+    posDesc:['選項1（左）這條路帶來的好處與正面能量','選項1（左）可能面對的困難與代價','選項2（右）這條路帶來的好處與正面能量','選項2（右）可能面對的困難與代價','超越兩個選項的整體智慧與更高視角'],
+    posDescEn:['Benefits and positive energy of Option 1 (left)','Difficulties and costs of Option 1 (left)','Benefits and positive energy of Option 2 (right)','Difficulties and costs of Option 2 (right)','Higher wisdom that transcends both options']}
 };
 function spreadNameOf(type){ const s=SPREADS[type]; if(!s)return ''; return LANG==='en'?(s.nameEn||s.name):s.name; }
 function spreadPos(type){ const s=SPREADS[type]; if(!s)return []; return LANG==='en'?(s.posEn||s.pos):s.pos; }
@@ -3064,6 +3064,13 @@ function clearAllReadings(){
 // ══════════════════════════════════════════
 
 // Email verification via Cloudflare Worker
+// 解鎖（驗證 email 或存 key）後，若正停在解牌畫面且這次抽牌還在 → 立即用 AI 解析這次
+function maybeRunAIAfterUnlock(){
+  const cur=document.querySelector('.screen.on');
+  if(cur && cur.id==='s-reading' && S.picked && S.picked.length && typeof runAIReading==='function'){
+    runAIReading();
+  }
+}
 async function verifyEmail(){
   const email=document.getElementById('unlock-input').value.trim().toLowerCase();
   if(!email){toast(L('請輸入 Email','Please enter your email'));return;}
@@ -3077,6 +3084,7 @@ async function verifyEmail(){
       localStorage.setItem('tr_verified_email',email);
       ubar.className='api-status api-ok';ubar.textContent=L('✓ 驗證成功！已解鎖 AI 解牌','✓ Verified! AI reading unlocked');
       updateApiStatus();toast(L('✦ 驗證成功！AI 解牌已解鎖','✦ Verified! AI reading unlocked'));closeSettings();
+      maybeRunAIAfterUnlock(); // 解鎖後立即解析當前這次抽牌
       // 驗證後拉回雲端歷史並合併，再推回（跨裝置同步）
       syncPull().then(merged=>{ if(merged) toast(L('☁ 已同步雲端歷史記錄','☁ Cloud history synced')); syncPush(); });
     } else {
@@ -3175,6 +3183,7 @@ function saveApiKey(){
   if(!k){toast(L('請輸入 API Key','Please enter an API key'));return;}
   localStorage.setItem('gemini_key',k);
   updateApiStatus();toast(L('✦ API Key 已儲存','✦ API key saved'));closeSettings();
+  maybeRunAIAfterUnlock(); // 設定 key 後立即解析當前這次抽牌
 }
 async function testApiKey(){
   const k=(document.getElementById('api-key-input').value.trim()||getApiKey()).split('').filter(c=>c.charCodeAt(0)>=32&&c.charCodeAt(0)<=126).join('');
@@ -3447,8 +3456,8 @@ function toggleAiInfo(){
 // ══════════════════════════════════════════
 const CHANGELOG = [
   { date:'2026-06-15',
-    zh:['二擇一牌陣可先填寫「選項 1（左）／選項 2（右）」各是什麼，牌陣與解讀都會用你的選項名稱，分析更精準清楚','新增「說明與回報中心」：內建常見問題 FAQ，並可直接送出「🐞 問題回報 / 💡 功能許願」給開發者（站內表單，不必寄信）'],
-    en:['Either-Or spread now lets you name "Option 1 (left)" and "Option 2 (right)"; the spread and reading use your names for clearer, more precise analysis','Added a Help & Feedback center: a built-in FAQ plus an in-app form to send "🐞 Report a problem / 💡 Feature wish" to the developer (no email needed)'] },
+    zh:['解鎖流程優化：抽完牌後才解鎖（驗證 Email 或貼上 API Key），會「立即」用 AI 解析當前這次抽牌，不必再儲存、等下次','二擇一牌陣可先填寫「選項 1（左）／選項 2（右）」各是什麼，牌陣與解讀都會用你的選項名稱，分析更精準清楚','新增「說明與回報中心」：內建常見問題 FAQ，並可直接送出「🐞 問題回報 / 💡 功能許願」給開發者（站內表單，不必寄信）'],
+    en:['Smoother unlock: if you unlock (verify email or paste an API key) right after a reading, AI now analyzes that reading immediately — no need to save and re-run later','Either-Or spread now lets you name "Option 1 (left)" and "Option 2 (right)"; the spread and reading use your names for clearer, more precise analysis','Added a Help & Feedback center: a built-in FAQ plus an in-app form to send "🐞 Report a problem / 💡 Feature wish" to the developer (no email needed)'] },
   { date:'2026-06-14',
     zh:['新增「字級大小」調整（標準／大／特大／超大）：畫面左下角「A⁺」鈕一鍵放大，或在設定裡選級距，全站文字隨之變大','占卜記錄即使當初沒跑出 AI 解析（例如遇到 API 當機），現在都能在記錄裡用 AI 補解析同一組牌（含先前存的舊紀錄）','追問對話新增「每次占卜可追問次數上限」（預設 5 次），並清楚顯示「本次可追問幾次、還剩幾次」，避免無止境聊天','AI 當機或暫停時自動保留這次抽牌結果，可在「占卜記錄」用 AI 重新解析同一組牌，不必重抽；解牌失敗也新增「重試 AI 解析」按鈕','三張／聖三角／二擇一的基本解讀也改為逐張分析每張牌；解讀文字與 AI 一律避免預設性別（不用「她／妳」），降低性別誤判','五張無視論的基本解讀改為「逐張」分析全部 5 張（標示重點/輔助），不再只講重點牌','設定頁新增「🐞 回報問題」聯絡連結，AI 連線失敗時也能一鍵回報','解牌頁的「解鎖方案」改為跳出設定小視窗（站內彈窗結帳），不再開新分頁','購買區改為兩個清楚並列的選項——「🎉 一次買斷（限時到 6/30）」與「月訂閱 US$5／月（每月自動續扣）」，各自標明時限與扣款方式，避免誤點','設定頁新增「☁ 立即同步歷史記錄」按鈕，可手動同步並顯示同步筆數，不再只是默默在背景跑','改為每月 US$5 訂閱制（新開張限時保留一次買斷優惠到 6/30）','訂閱到期會自動提示並引導續訂，不再卡在「看似解鎖卻無法解牌」','五張無視論牌陣也加上醒目的「關鍵結論」判讀','牌陣選擇版面優化：視窗變小時換行的卡片置中對齊','修正英文版部分按鈕文字過長破框'],
     en:['Added a Text size control (Normal / Large / X-Large / XX-Large): tap the "A⁺" button at bottom-left, or pick a level in settings, to enlarge all text','Saved readings that never got an AI analysis (e.g. during an API outage) can now be analyzed with AI from History — including older saved records','Follow-up chat now has a per-reading limit (default 5 questions) with a clear "X per reading · N left" indicator, to avoid endless chats','If AI is down or paused, your draw is saved automatically — re-analyze the same cards later from "History", no need to redraw; failed readings also gain a "Retry AI" button','Three-Card / Holy Triangle / Either-Or basic readings now analyze each card too; readings and AI avoid assuming gender (no gendered pronouns) to prevent mis-gendering','Five-Card Wuxi basic reading now analyzes all five cards one by one (key/support marked), not just the key cards','Added a "🐞 Report a problem" contact link in settings (and on AI-connection errors)','Reading-page unlock now opens the in-page settings popup (on-site overlay checkout) instead of a new tab','Purchase area now shows two clearly-labeled options — "🎉 One-time unlock (until Jun 30)" and "Monthly US$5/mo (auto-renews)" — each stating its time limit and billing, so no one picks the wrong one','Added a "☁ Sync history now" button in settings — sync on demand and see how many records synced, instead of it only running silently','Switched to a US$5/month subscription (one-time launch deal kept until Jun 30)','Lapsed subscriptions now prompt you to resubscribe instead of silently failing to read','Added the prominent "Key Verdict" to the Five-Card Wuxi spread too','Spread picker layout: wrapped cards now center-align on smaller windows','Fixed a few English buttons whose text overflowed their frame'] },
