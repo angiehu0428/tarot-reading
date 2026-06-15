@@ -609,6 +609,13 @@ textarea.inp{resize:vertical;min-height:90px}
       <input type="number" class="inp" id="custom-n" min="1" max="12" value="3" oninput="renderCustomPos()">
       <div id="custom-pos-list"></div>
     </div>
+    <div id="choice-area" style="display:none;margin-bottom:20px">
+      <div style="font-size:.76rem;color:rgba(212,175,55,.8);line-height:1.7;margin-bottom:10px" data-i18n="q.choice.tip">✦ 先寫清楚你要二選一的兩條路，牌會分別分析「選項 1（左）」與「選項 2（右）」的優勢與挑戰。</div>
+      <label class="lbl" data-i18n="q.choice.a">選項 1（左）是什麼？</label>
+      <input class="inp" id="choice-a" data-i18n-ph="q.choice.aph" placeholder="例：留在現職">
+      <label class="lbl" style="margin-top:10px" data-i18n="q.choice.b">選項 2（右）是什麼？</label>
+      <input class="inp" id="choice-b" data-i18n-ph="q.choice.bph" placeholder="例：接受新工作">
+    </div>
     <div id="q-focus-hint" data-i18n-html="q.focus.hint" style="margin-bottom:12px;padding:11px 14px;border-radius:8px;background:rgba(212,175,55,.07);border:1px solid rgba(212,175,55,.2);font-size:.78rem;color:var(--silver);line-height:1.85;text-align:left"></div>
     <div id="q-hint" style="display:none;margin-bottom:14px;padding:10px 14px;border-left:2px solid rgba(212,175,55,.4);background:rgba(212,175,55,.05);font-size:.78rem;color:rgba(212,175,55,.75);line-height:1.8;text-align:left"></div>
     <label class="lbl" data-i18n="q.label">你的問題</label>
@@ -864,8 +871,13 @@ Object.assign(T, {
   'sp.five.desc':{zh:'全方位解牌 · 無視論五牌陣<br>重點牌 · 輔助牌 · 元素分析',en:'All-around reading · Wuxi method<br>Key card · supporting cards · elements'},
   'sp.five.fit':{zh:'最推薦！全方位解讀單一主題的整體能量，層次最豐富，如「接下來這段感情的走向」',en:'Most recommended! The richest, most all-around reading of a single theme — e.g. "Where is this relationship heading?"'},
   'sp.choice.name':{zh:'二擇一牌陣',en:'Either-Or Spread'},
-  'sp.choice.desc':{zh:'兩條路的深度分析<br>幫你看清選擇',en:'Deep analysis of two paths<br>See your options clearly'},
-  'sp.choice.fit':{zh:'適合：在兩個選項間猶豫，如「該留在現職還是接受新工作」',en:'Best for: choosing between two options — e.g. "Stay in my job or take the new offer?"'},
+  'sp.choice.desc':{zh:'選項1（左）vs 選項2（右）<br>各自分析優勢與挑戰',en:'Option 1 (left) vs Option 2 (right)<br>strengths & challenges of each'},
+  'sp.choice.fit':{zh:'適合：在兩個選項間猶豫，下一步會請你寫明「選項1（左）／選項2（右）」各是什麼',en:'Best for: deciding between two options — next you\'ll name Option 1 (left) and Option 2 (right)'},
+  'q.choice.tip':{zh:'✦ 先寫清楚你要二選一的兩條路，牌會分別分析「選項 1（左）」與「選項 2（右）」的優勢與挑戰。',en:'✦ Name your two options first — the cards will analyze the strengths & challenges of "Option 1 (left)" and "Option 2 (right)" separately.'},
+  'q.choice.a':{zh:'選項 1（左）是什麼？',en:'What is Option 1 (left)?'},
+  'q.choice.aph':{zh:'例：留在現職',en:'e.g. Stay in my current job'},
+  'q.choice.b':{zh:'選項 2（右）是什麼？',en:'What is Option 2 (right)?'},
+  'q.choice.bph':{zh:'例：接受新工作',en:'e.g. Take the new offer'},
   'sp.one.name':{zh:'單張牌陣',en:'Single Card'},
   'sp.one.desc':{zh:'今日訊息 · 快速指引<br>一牌道盡核心',en:'Daily message · quick guidance<br>One card, one core insight'},
   'sp.one.fit':{zh:'適合：簡單明確的問題或每日指引，如「今天我該注意什麼」',en:'Best for: simple questions or daily guidance — e.g. "What should I watch for today?"'},
@@ -1494,6 +1506,7 @@ function pickSpread(type) {
   const isCustom=type==='custom';
   document.getElementById('q-title').textContent=isCustom?t('q.title.custom'):t('q.title');
   document.getElementById('custom-area').style.display=isCustom?'block':'none';
+  document.getElementById('choice-area').style.display=type==='choice'?'block':'none';
   if(isCustom)renderCustomPos();
   const hint=spreadHint(type);
   const hintEl=document.getElementById('q-hint');
@@ -1520,9 +1533,22 @@ function skipMeditation(){
 function beginMeditation(){
   const q=document.getElementById('q-input').value.trim();
   if(!q){toast(t('toast.needq'));return;}
-  S.pos=S.type==='custom'
-    ?Array.from(document.querySelectorAll('.cp-inp')).map(el=>el.value||t('pos.default'))
-    :spreadPos(S.type);
+  if(S.type==='custom'){
+    S.pos=Array.from(document.querySelectorAll('.cp-inp')).map(el=>el.value||t('pos.default'));
+  } else if(S.type==='choice'){
+    const a=(document.getElementById('choice-a').value||'').trim()||L('選項1','Option 1');
+    const b=(document.getElementById('choice-b').value||'').trim()||L('選項2','Option 2');
+    S.optA=a; S.optB=b;
+    S.pos=[
+      L(`${a}（左）· 優勢`,`${a} (left) · Strengths`),
+      L(`${a}（左）· 挑戰`,`${a} (left) · Challenges`),
+      L(`${b}（右）· 優勢`,`${b} (right) · Strengths`),
+      L(`${b}（右）· 挑戰`,`${b} (right) · Challenges`),
+      L('整體建議','Overall Advice')
+    ];
+  } else {
+    S.pos=spreadPos(S.type);
+  }
   S.q=q;
   document.getElementById('med-q-disp').textContent=`「${q}」`;
   go('s-meditation');
@@ -2581,11 +2607,12 @@ function buildVerdict(cards){
     v=L(`明確結論：你的盲點，在於「我以為（${kw(cards[0],2)}）」與「真相（${kw(cards[1],2)}）」之間的落差。跨越它的鑰匙是建言牌${nm(adv)}——往「${kw(adv,2)}」的方向調整，就能突破目前的卡點。`,`Clear verdict: your blind spot is the gap between "what you assume (${kw(cards[0],2)})" and "the truth (${kw(cards[1],2)})." The key to crossing it is the advice card ${nm(adv)} — adjust toward "${kw(adv,2)}" and you break through where you're stuck.`);
     if(heavy(cards[1])) hook=deepHook;
   } else if(S.type==='choice' && cards.length>=5){
+    const oa=S.optA||L('選項1','Option 1'), ob=S.optB||L('選項2','Option 2');
     const fav=(pro,con)=>(heavy(pro)?0:1)+(heavy(con)?0:1);
     const aF=fav(cards[0],cards[1]), bF=fav(cards[2],cards[3]), adv=cards[4];
-    if(aF>bF){ v=L(`明確結論：整體而言「選項A」較為有利——它的優勢（${kw(cards[0],2)}）較穩固，要面對的阻力也較小。`,`Clear verdict: overall "Option A" looks more favorable — its strength (${kw(cards[0],2)}) is more solid and it faces less resistance.`); }
-    else if(bF>aF){ v=L(`明確結論：整體而言「選項B」較為有利——它的優勢（${kw(cards[2],2)}）較穩固，要面對的阻力也較小。`,`Clear verdict: overall "Option B" looks more favorable — its strength (${kw(cards[2],2)}) is more solid and it faces less resistance.`); }
-    else { v=L(`明確結論：兩個選項勢均力敵，關鍵落在建議牌${nm(adv)}——以「${kw(adv,2)}」的精神去衡量，會幫你做出更不後悔的選擇。`,`Clear verdict: the two options are evenly matched — the deciding factor is the advice card ${nm(adv)}: weigh them in the spirit of "${kw(adv,2)}" to make the choice you'll least regret.`); hook=deepHook; }
+    if(aF>bF){ v=L(`明確結論：整體而言「${oa}」（左）較為有利——它的優勢（${kw(cards[0],2)}）較穩固，要面對的阻力也較小。`,`Clear verdict: overall "${oa}" (left) looks more favorable — its strength (${kw(cards[0],2)}) is more solid and it faces less resistance.`); }
+    else if(bF>aF){ v=L(`明確結論：整體而言「${ob}」（右）較為有利——它的優勢（${kw(cards[2],2)}）較穩固，要面對的阻力也較小。`,`Clear verdict: overall "${ob}" (right) looks more favorable — its strength (${kw(cards[2],2)}) is more solid and it faces less resistance.`); }
+    else { v=L(`明確結論：「${oa}」與「${ob}」勢均力敵，關鍵落在建議牌${nm(adv)}——以「${kw(adv,2)}」的精神去衡量，會幫你做出更不後悔的選擇。`,`Clear verdict: "${oa}" and "${ob}" are evenly matched — the deciding factor is the advice card ${nm(adv)}: weigh them in the spirit of "${kw(adv,2)}" to choose with the least regret.`); hook=deepHook; }
   } else {
     return ''; // 其他類型（如自訂）不額外下結論，交給逐位解析
   }
@@ -2662,10 +2689,11 @@ function buildInterpPositional(){
       : `這張${cardName(c.cid)}${c.rev?'以逆位出現':''}，帶來「${c.kw.slice(0,3).join('、')}」的訊息——${firstSentence(c.m)}`;
   } else if(S.type==='choice'){
     const [aPro,aCon,bPro,bCon,advice] = cards;
+    const oa=S.optA||L('選項1','Option 1'), ob=S.optB||L('選項2','Option 2');
     storyText = en
-      ? `Option A — its strength is the ${kwq(aPro.kw,2)} of ${cardName(aPro.cid)}${revLabel(aPro.rev)}; its challenge is the ${kwq(aCon.kw,2)} of ${cardName(aCon.cid)}${revLabel(aCon.rev)}. Option B — its strength is the ${kwq(bPro.kw,2)} of ${cardName(bPro.cid)}${revLabel(bPro.rev)}; its challenge is the ${kwq(bCon.kw,2)} of ${cardName(bCon.cid)}${revLabel(bCon.rev)}. And in the advice position, ${cardName(advice.cid)}${revLabel(advice.rev)} reminds you: ${kwq(advice.kw,3)} — guidance from a higher view that transcends both options.`
-      : `選項A方面：優勢是${cardName(aPro.cid)}${revLabel(aPro.rev)}帶來的「${aPro.kw.slice(0,2).join('、')}」，挑戰則是${cardName(aCon.cid)}${revLabel(aCon.rev)}所指的「${aCon.kw.slice(0,2).join('、')}」。`
-      + `選項B方面：優勢是${cardName(bPro.cid)}${revLabel(bPro.rev)}的「${bPro.kw.slice(0,2).join('、')}」，挑戰則是${cardName(bCon.cid)}${revLabel(bCon.rev)}的「${bCon.kw.slice(0,2).join('、')}」。`
+      ? `${oa} (left) — its strength is the ${kwq(aPro.kw,2)} of ${cardName(aPro.cid)}${revLabel(aPro.rev)}; its challenge is the ${kwq(aCon.kw,2)} of ${cardName(aCon.cid)}${revLabel(aCon.rev)}. ${ob} (right) — its strength is the ${kwq(bPro.kw,2)} of ${cardName(bPro.cid)}${revLabel(bPro.rev)}; its challenge is the ${kwq(bCon.kw,2)} of ${cardName(bCon.cid)}${revLabel(bCon.rev)}. And in the advice position, ${cardName(advice.cid)}${revLabel(advice.rev)} reminds you: ${kwq(advice.kw,3)} — guidance from a higher view that transcends both options.`
+      : `「${oa}」（左）方面：優勢是${cardName(aPro.cid)}${revLabel(aPro.rev)}帶來的「${aPro.kw.slice(0,2).join('、')}」，挑戰則是${cardName(aCon.cid)}${revLabel(aCon.rev)}所指的「${aCon.kw.slice(0,2).join('、')}」。`
+      + `「${ob}」（右）方面：優勢是${cardName(bPro.cid)}${revLabel(bPro.rev)}的「${bPro.kw.slice(0,2).join('、')}」，挑戰則是${cardName(bCon.cid)}${revLabel(bCon.rev)}的「${bCon.kw.slice(0,2).join('、')}」。`
       + `而整體建議位置的${cardName(advice.cid)}${revLabel(advice.rev)}提醒你：「${advice.kw.slice(0,3).join('、')}」——這是超越兩個選項本身、更高視角的指引。`;
   } else {
     storyText = cards.map((c,i)=>{
@@ -3419,8 +3447,8 @@ function toggleAiInfo(){
 // ══════════════════════════════════════════
 const CHANGELOG = [
   { date:'2026-06-15',
-    zh:['新增「說明與回報中心」：內建常見問題 FAQ，並可直接送出「🐞 問題回報 / 💡 功能許願」給開發者（站內表單，不必寄信）'],
-    en:['Added a Help & Feedback center: a built-in FAQ plus an in-app form to send "🐞 Report a problem / 💡 Feature wish" to the developer (no email needed)'] },
+    zh:['二擇一牌陣可先填寫「選項 1（左）／選項 2（右）」各是什麼，牌陣與解讀都會用你的選項名稱，分析更精準清楚','新增「說明與回報中心」：內建常見問題 FAQ，並可直接送出「🐞 問題回報 / 💡 功能許願」給開發者（站內表單，不必寄信）'],
+    en:['Either-Or spread now lets you name "Option 1 (left)" and "Option 2 (right)"; the spread and reading use your names for clearer, more precise analysis','Added a Help & Feedback center: a built-in FAQ plus an in-app form to send "🐞 Report a problem / 💡 Feature wish" to the developer (no email needed)'] },
   { date:'2026-06-14',
     zh:['新增「字級大小」調整（標準／大／特大／超大）：畫面左下角「A⁺」鈕一鍵放大，或在設定裡選級距，全站文字隨之變大','占卜記錄即使當初沒跑出 AI 解析（例如遇到 API 當機），現在都能在記錄裡用 AI 補解析同一組牌（含先前存的舊紀錄）','追問對話新增「每次占卜可追問次數上限」（預設 5 次），並清楚顯示「本次可追問幾次、還剩幾次」，避免無止境聊天','AI 當機或暫停時自動保留這次抽牌結果，可在「占卜記錄」用 AI 重新解析同一組牌，不必重抽；解牌失敗也新增「重試 AI 解析」按鈕','三張／聖三角／二擇一的基本解讀也改為逐張分析每張牌；解讀文字與 AI 一律避免預設性別（不用「她／妳」），降低性別誤判','五張無視論的基本解讀改為「逐張」分析全部 5 張（標示重點/輔助），不再只講重點牌','設定頁新增「🐞 回報問題」聯絡連結，AI 連線失敗時也能一鍵回報','解牌頁的「解鎖方案」改為跳出設定小視窗（站內彈窗結帳），不再開新分頁','購買區改為兩個清楚並列的選項——「🎉 一次買斷（限時到 6/30）」與「月訂閱 US$5／月（每月自動續扣）」，各自標明時限與扣款方式，避免誤點','設定頁新增「☁ 立即同步歷史記錄」按鈕，可手動同步並顯示同步筆數，不再只是默默在背景跑','改為每月 US$5 訂閱制（新開張限時保留一次買斷優惠到 6/30）','訂閱到期會自動提示並引導續訂，不再卡在「看似解鎖卻無法解牌」','五張無視論牌陣也加上醒目的「關鍵結論」判讀','牌陣選擇版面優化：視窗變小時換行的卡片置中對齊','修正英文版部分按鈕文字過長破框'],
     en:['Added a Text size control (Normal / Large / X-Large / XX-Large): tap the "A⁺" button at bottom-left, or pick a level in settings, to enlarge all text','Saved readings that never got an AI analysis (e.g. during an API outage) can now be analyzed with AI from History — including older saved records','Follow-up chat now has a per-reading limit (default 5 questions) with a clear "X per reading · N left" indicator, to avoid endless chats','If AI is down or paused, your draw is saved automatically — re-analyze the same cards later from "History", no need to redraw; failed readings also gain a "Retry AI" button','Three-Card / Holy Triangle / Either-Or basic readings now analyze each card too; readings and AI avoid assuming gender (no gendered pronouns) to prevent mis-gendering','Five-Card Wuxi basic reading now analyzes all five cards one by one (key/support marked), not just the key cards','Added a "🐞 Report a problem" contact link in settings (and on AI-connection errors)','Reading-page unlock now opens the in-page settings popup (on-site overlay checkout) instead of a new tab','Purchase area now shows two clearly-labeled options — "🎉 One-time unlock (until Jun 30)" and "Monthly US$5/mo (auto-renews)" — each stating its time limit and billing, so no one picks the wrong one','Added a "☁ Sync history now" button in settings — sync on demand and see how many records synced, instead of it only running silently','Switched to a US$5/month subscription (one-time launch deal kept until Jun 30)','Lapsed subscriptions now prompt you to resubscribe instead of silently failing to read','Added the prominent "Key Verdict" to the Five-Card Wuxi spread too','Spread picker layout: wrapped cards now center-align on smaller windows','Fixed a few English buttons whose text overflowed their frame'] },
