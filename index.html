@@ -2924,9 +2924,12 @@ function saveReading(silent, skipProject){
   const spreadName = S.type==='custom'?L('自訂牌陣','Custom Spread'):spreadNameOf(S.type);
   const id = S.currentReadingId || Date.now();
   S.currentReadingId = id;
+  // 更新既有記錄時保留原本的占卜日期（補解析不應改到抽牌結果/日期）
+  const prev = JSON.parse(localStorage.getItem('tr_full')||'[]').find(r=>r.id===id);
+  const recDate = (prev && prev.date) ? prev.date : new Date().toLocaleString(LANG==='en'?'en-US':'zh-TW');
   const rec = {
     id, type:S.type, // type 供日後「用 AI 重新解析」重建牌局
-    date:new Date().toLocaleString(LANG==='en'?'en-US':'zh-TW'),
+    date:recDate,
     q:S.q, spread:spreadName, pos:S.pos,
     cards:S.picked.map(di=>({cid:S.deck[di].cid, rev:S.deck[di].rev})),
     interp: S.lastInterpText,
