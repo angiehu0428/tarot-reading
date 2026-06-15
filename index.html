@@ -1659,8 +1659,8 @@ function unlockCtaHtml(){
         </div>
       </div>`;
 }
-function showReading(){
-  S.lastInterpText = ''; S.chatHistory=[]; S.currentReadingId=null;
+function showReading(resumeId){
+  S.lastInterpText = ''; S.chatHistory=[]; S.currentReadingId = resumeId || null; // resumeId：從記錄補解析時保留原記錄 id
   document.getElementById('chat-area').style.display='none';
   document.getElementById('chat-msgs').innerHTML='';
   go('s-reading');
@@ -1730,10 +1730,11 @@ function runAIReading(){
     autoSaveDraw();
     return;
   }
-  // 既沒驗證也沒自備 key → 內建 + 解鎖 CTA
+  // 既沒驗證也沒自備 key → 內建 + 解鎖 CTA（自動保留這次抽牌，付費解鎖後可到記錄補 AI 解析）
   if(!(key||verified)){
     const fb=fbRender();
     document.getElementById('interp-main').innerHTML=`${fb}${unlockCtaHtml()}`;
+    autoSaveDraw();
     return;
   }
   // 暫停期間若有自備 key，改用自己的 key（不走付費代理）
@@ -1789,25 +1790,23 @@ function analyzeWithAI(id){
   const arr=JSON.parse(localStorage.getItem('tr_full')||'[]');
   const rec=arr.find(r=>r.id===id);
   if(!rec||!rec.cards||!rec.cards.length){ toast(L('這筆記錄無法重新解析（缺少牌局資料）','This record can\'t be re-analyzed (missing draw data)')); return; }
-  const type=inferReadingType(rec);
   const key=getApiKey(), verified=isVerified();
   if(AI_PAUSED && verified && !key){ toast(L('AI 解牌暫停服務中，請稍後再試 🙏','AI readings are paused right now, please try again later 🙏')); return; }
-  if(!(key||verified)){ toast(L('請先解鎖 AI 解牌或設定自己的 API Key','Unlock AI readings or set your own API key first')); return; }
-  // 把這筆牌局載回 S 供 callGemini 使用
+  // 還沒解鎖 → 引導去驗證/設定 key；記住這筆，解鎖後自動接著解析
+  if(!(key||verified)){ pendingAnalyzeId=id; toast(L('請先解鎖 AI 解牌（或設定自己的 API Key），解鎖後會自動幫你解析這筆','Unlock AI readings (or set your own API key) — we\'ll analyze this one right after')); openSettings(); return; }
+  // 把這筆牌局載回 S，開回完整解牌畫面重跑 AI（含 5 次追問）；以 rec.id 讓 AI 完成後更新原記錄
+  const type=inferReadingType(rec);
   S.type=type;
   S.deck=rec.cards.map(c=>({cid:c.cid,rev:c.rev}));
   S.picked=rec.cards.map((_,i)=>i);
   S.pos=(rec.pos&&rec.pos.length)?rec.pos:spreadPos(type);
   S.q=rec.q;
-  toast(L('☁ AI 正在解析這次占卜...','☁ AI is analyzing this reading...'));
-  const proxyEmail=(verified && !AI_PAUSED)?getVerifiedEmail():null;
-  callGemini(key,proxyEmail).then(text=>{
-    const full=JSON.parse(localStorage.getItem('tr_full')||'[]');
-    const i=full.findIndex(r=>r.id===id);
-    if(i>=0){ full[i].interp=text; localStorage.setItem('tr_full',JSON.stringify(full)); }
-    showHistory(); syncPush();
-    toast(L('✦ AI 解析完成，已更新這筆記錄','✦ AI reading done — record updated'));
-  }).catch(err=>{ toast(L('AI 解析失敗：','AI failed: ')+(err.message||'').slice(0,50)); });
+  // 二擇一：從位置標籤推回選項名稱，供敘事/結論顯示
+  if(type==='choice' && rec.pos && rec.pos.length>=4){
+    S.optA=(rec.pos[0]||'').replace(/[（(].*$/,'').trim()||L('選項1','Option 1');
+    S.optB=(rec.pos[2]||'').replace(/[（(].*$/,'').trim()||L('選項2','Option 2');
+  }
+  showReading(id); // 重繪牌面 + 跑 AI + 開放追問
 }
 
 // ══════════════════════════════════════════
@@ -3064,8 +3063,12 @@ function clearAllReadings(){
 // ══════════════════════════════════════════
 
 // Email verification via Cloudflare Worker
-// 解鎖（驗證 email 或存 key）後，若正停在解牌畫面且這次抽牌還在 → 立即用 AI 解析這次
+// 解鎖（驗證 email 或存 key）後的自動接續：
+// ① 若是從記錄按「用 AI 解析」但當時沒解鎖 → 解鎖後自動接著解析那筆
+// ② 若正停在解牌畫面且這次抽牌還在 → 立即用 AI 解析這次
+let pendingAnalyzeId=null;
 function maybeRunAIAfterUnlock(){
+  if(pendingAnalyzeId!=null){ const pid=pendingAnalyzeId; pendingAnalyzeId=null; analyzeWithAI(pid); return; }
   const cur=document.querySelector('.screen.on');
   if(cur && cur.id==='s-reading' && S.picked && S.picked.length && typeof runAIReading==='function'){
     runAIReading();
@@ -3456,8 +3459,8 @@ function toggleAiInfo(){
 // ══════════════════════════════════════════
 const CHANGELOG = [
   { date:'2026-06-15',
-    zh:['解鎖流程優化：抽完牌後才解鎖（驗證 Email 或貼上 API Key），會「立即」用 AI 解析當前這次抽牌，不必再儲存、等下次','二擇一牌陣可先填寫「選項 1（左）／選項 2（右）」各是什麼，牌陣與解讀都會用你的選項名稱，分析更精準清楚','新增「說明與回報中心」：內建常見問題 FAQ，並可直接送出「🐞 問題回報 / 💡 功能許願」給開發者（站內表單，不必寄信）'],
-    en:['Smoother unlock: if you unlock (verify email or paste an API key) right after a reading, AI now analyzes that reading immediately — no need to save and re-run later','Either-Or spread now lets you name "Option 1 (left)" and "Option 2 (right)"; the spread and reading use your names for clearer, more precise analysis','Added a Help & Feedback center: a built-in FAQ plus an in-app form to send "🐞 Report a problem / 💡 Feature wish" to the developer (no email needed)'] },
+    zh:['補解析升級：在「占卜記錄」用 AI 解析會重新開回完整解牌畫面、跑 AI 並給 5 次追問；未解鎖時先引導驗證、解鎖後自動接著解析（占卜也會自動保留，方便日後補解）','解鎖流程優化：抽完牌後才解鎖（驗證 Email 或貼上 API Key），會「立即」用 AI 解析當前這次抽牌，不必再儲存、等下次','二擇一牌陣可先填寫「選項 1（左）／選項 2（右）」各是什麼，牌陣與解讀都會用你的選項名稱，分析更精準清楚','新增「說明與回報中心」：內建常見問題 FAQ，並可直接送出「🐞 問題回報 / 💡 功能許願」給開發者（站內表單，不必寄信）'],
+    en:['Re-analysis upgrade: tapping "Analyze with AI" in History reopens the full reading, runs AI, and unlocks 5 follow-up questions; if you aren\'t unlocked it guides you to verify and then continues automatically (readings are auto-saved so you can analyze them later)','Smoother unlock: if you unlock (verify email or paste an API key) right after a reading, AI now analyzes that reading immediately — no need to save and re-run later','Either-Or spread now lets you name "Option 1 (left)" and "Option 2 (right)"; the spread and reading use your names for clearer, more precise analysis','Added a Help & Feedback center: a built-in FAQ plus an in-app form to send "🐞 Report a problem / 💡 Feature wish" to the developer (no email needed)'] },
   { date:'2026-06-14',
     zh:['新增「字級大小」調整（標準／大／特大／超大）：畫面左下角「A⁺」鈕一鍵放大，或在設定裡選級距，全站文字隨之變大','占卜記錄即使當初沒跑出 AI 解析（例如遇到 API 當機），現在都能在記錄裡用 AI 補解析同一組牌（含先前存的舊紀錄）','追問對話新增「每次占卜可追問次數上限」（預設 5 次），並清楚顯示「本次可追問幾次、還剩幾次」，避免無止境聊天','AI 當機或暫停時自動保留這次抽牌結果，可在「占卜記錄」用 AI 重新解析同一組牌，不必重抽；解牌失敗也新增「重試 AI 解析」按鈕','三張／聖三角／二擇一的基本解讀也改為逐張分析每張牌；解讀文字與 AI 一律避免預設性別（不用「她／妳」），降低性別誤判','五張無視論的基本解讀改為「逐張」分析全部 5 張（標示重點/輔助），不再只講重點牌','設定頁新增「🐞 回報問題」聯絡連結，AI 連線失敗時也能一鍵回報','解牌頁的「解鎖方案」改為跳出設定小視窗（站內彈窗結帳），不再開新分頁','購買區改為兩個清楚並列的選項——「🎉 一次買斷（限時到 6/30）」與「月訂閱 US$5／月（每月自動續扣）」，各自標明時限與扣款方式，避免誤點','設定頁新增「☁ 立即同步歷史記錄」按鈕，可手動同步並顯示同步筆數，不再只是默默在背景跑','改為每月 US$5 訂閱制（新開張限時保留一次買斷優惠到 6/30）','訂閱到期會自動提示並引導續訂，不再卡在「看似解鎖卻無法解牌」','五張無視論牌陣也加上醒目的「關鍵結論」判讀','牌陣選擇版面優化：視窗變小時換行的卡片置中對齊','修正英文版部分按鈕文字過長破框'],
     en:['Added a Text size control (Normal / Large / X-Large / XX-Large): tap the "A⁺" button at bottom-left, or pick a level in settings, to enlarge all text','Saved readings that never got an AI analysis (e.g. during an API outage) can now be analyzed with AI from History — including older saved records','Follow-up chat now has a per-reading limit (default 5 questions) with a clear "X per reading · N left" indicator, to avoid endless chats','If AI is down or paused, your draw is saved automatically — re-analyze the same cards later from "History", no need to redraw; failed readings also gain a "Retry AI" button','Three-Card / Holy Triangle / Either-Or basic readings now analyze each card too; readings and AI avoid assuming gender (no gendered pronouns) to prevent mis-gendering','Five-Card Wuxi basic reading now analyzes all five cards one by one (key/support marked), not just the key cards','Added a "🐞 Report a problem" contact link in settings (and on AI-connection errors)','Reading-page unlock now opens the in-page settings popup (on-site overlay checkout) instead of a new tab','Purchase area now shows two clearly-labeled options — "🎉 One-time unlock (until Jun 30)" and "Monthly US$5/mo (auto-renews)" — each stating its time limit and billing, so no one picks the wrong one','Added a "☁ Sync history now" button in settings — sync on demand and see how many records synced, instead of it only running silently','Switched to a US$5/month subscription (one-time launch deal kept until Jun 30)','Lapsed subscriptions now prompt you to resubscribe instead of silently failing to read','Added the prominent "Key Verdict" to the Five-Card Wuxi spread too','Spread picker layout: wrapped cards now center-align on smaller windows','Fixed a few English buttons whose text overflowed their frame'] },
