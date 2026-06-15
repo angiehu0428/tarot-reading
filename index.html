@@ -446,18 +446,22 @@ textarea.inp{resize:vertical;min-height:90px}
   </div>
 </div>
 
-<!-- ══ REPORT A PROBLEM ══ -->
+<!-- ══ HELP & FEEDBACK ══ -->
 <div class="modal-overlay" id="report-modal" style="z-index:600;backdrop-filter:none" onclick="if(event.target===this)closeReport()">
-  <div class="modal" style="max-width:430px">
+  <div class="modal" style="max-width:480px">
     <button class="modal-close" onclick="closeReport()">✕</button>
-    <h3 data-i18n="report.title">🐞 回報問題</h3>
-    <p class="hint" style="margin-top:10px" data-i18n="report.desc">遇到問題或有建議嗎？把情況描述寄到下面這個信箱，我會盡快處理 🙏</p>
-    <div style="display:flex;align-items:center;gap:8px;margin:14px 0;padding:11px 13px;background:rgba(212,175,55,.08);border:1px solid rgba(212,175,55,.25);border-radius:8px">
-      <span id="report-email" style="flex:1;color:var(--gold);font-size:.92rem;word-break:break-all;user-select:all"></span>
-      <button class="btn btn-sm btn-ghost" style="margin:0;white-space:nowrap" onclick="copyReportEmail()" data-i18n="report.copy">複製</button>
+    <h3 data-i18n="help.title">✦ 說明與回報</h3>
+    <div style="font-family:'Cinzel',serif;font-size:.78rem;color:var(--gold);letter-spacing:.08em;margin:14px 0 8px" data-i18n="help.faq.head">✦ 常見問題</div>
+    <div id="faq-list"></div>
+    <div style="font-family:'Cinzel',serif;font-size:.78rem;color:var(--gold);letter-spacing:.08em;margin:20px 0 8px" data-i18n="help.form.head">✦ 找不到答案？告訴我們</div>
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <button id="rtype-issue" class="btn btn-sm" style="margin:0" onclick="setReportType('issue')" data-i18n="help.type.issue">🐞 問題回報</button>
+      <button id="rtype-wish" class="btn btn-sm btn-ghost" style="margin:0" onclick="setReportType('wish')" data-i18n="help.type.wish">💡 功能許願</button>
     </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center">
-      <button class="btn btn-sm" onclick="mailReport()" data-i18n="report.mail">開啟郵件 App 寄出</button>
+    <textarea class="inp" id="report-msg" rows="4" data-i18n-ph="help.ph" placeholder="描述你遇到的問題，或想要的功能..." style="min-height:88px;resize:vertical"></textarea>
+    <input class="inp" id="report-contact" type="text" data-i18n-ph="help.contact.ph" placeholder="（選填）想收到回覆就留 email 或 IG" style="margin-top:10px">
+    <div style="display:flex;justify-content:flex-end;margin-top:14px">
+      <button class="btn btn-sm" id="report-submit" onclick="submitReport()" data-i18n="help.submit">送出</button>
     </div>
   </div>
 </div>
@@ -828,7 +832,15 @@ Object.assign(T, {
   'w.ai.foot':{zh:'✦ 訂閱每月 US$5，解鎖跨裝置 AI 解牌，可隨時取消<br>✦ 自備 Key 完全免費，每分鐘可解牌 15 次<br>✦ 兩種方式皆不會對外傳送個人資料',en:'✦ Subscribe for US$5/month to unlock AI readings across devices — cancel anytime<br>✦ Your own key is free, ~15 readings per minute<br>✦ Neither method sends your personal data anywhere'},
   'w.copyright':{zh:'© 2026 塔羅神諭 · All Rights Reserved',en:'© 2026 Tarot Oracle · All Rights Reserved'},
   'w.contact':{zh:'聯繫我們',en:'Contact Us'},
-  'set.report':{zh:'🐞 遇到問題？點此回報',en:'🐞 Hit a problem? Report it'},
+  'set.report':{zh:'✦ 說明與回報 · 功能許願',en:'✦ Help, feedback & feature wishes'},
+  'help.title':{zh:'✦ 說明與回報',en:'✦ Help & Feedback'},
+  'help.faq.head':{zh:'✦ 常見問題',en:'✦ FAQ'},
+  'help.form.head':{zh:'✦ 找不到答案？告訴我們',en:'✦ Didn\'t find it? Tell us'},
+  'help.type.issue':{zh:'🐞 問題回報',en:'🐞 Report a problem'},
+  'help.type.wish':{zh:'💡 功能許願',en:'💡 Feature wish'},
+  'help.ph':{zh:'描述你遇到的問題，或想要的功能...',en:'Describe the problem you hit, or a feature you\'d like...'},
+  'help.contact.ph':{zh:'（選填）想收到回覆就留 email 或 IG',en:'(optional) Leave email or IG if you\'d like a reply'},
+  'help.submit':{zh:'送出',en:'Send'},
   'set.font.head':{zh:'✦ 字級大小（看不清楚可調大）',en:'✦ Text size (make it bigger if hard to read)'},
   'font.lv0':{zh:'標準',en:'Normal'},'font.lv1':{zh:'大',en:'Large'},'font.lv2':{zh:'特大',en:'X-Large'},'font.lv3':{zh:'超大',en:'XX-Large'},
   'font.btn.title':{zh:'字級大小（點我放大）',en:'Text size (tap to enlarge)'},
@@ -3210,16 +3222,59 @@ function renderFontBtns(lvl){
     return `<button onclick="setFontLevel(${i})" style="padding:6px 13px;border-radius:8px;cursor:pointer;line-height:1.2;font-size:${sample[i]}px;border:1px solid ${on?'var(--gold)':'rgba(212,175,55,.3)'};background:${on?'rgba(212,175,55,.18)':'transparent'};color:${on?'var(--gold)':'var(--muted)'};transition:all .2s">${t('font.lv'+i)}</button>`;
   }).join('');
 }
-// 回報問題：先跳站內小視窗（顯示信箱＋複製＋開郵件），不直接依賴 mailto（無郵件 App 時會無反應）
-let reportCtx='';
-function reportEmailAddr(){ return atob('YW5naWVodUBnbWFpbC5jb20='); } // base64 隱藏，避免爬蟲抓取
+// ── 說明與回報中心：FAQ + 問題回報 / 功能許願表單（送到後端，不露 email）──
+let reportCtx='', reportType='issue';
+const FAQ = [
+  {q:{zh:'如何解鎖 AI 深度解牌？',en:'How do I unlock AI deep readings?'}, a:{zh:'點右上角 ⚙ → 選「月訂閱 US$5／月」或限時「一次買斷」完成購買 → 用購買時填寫的 email 在同一處驗證即可解鎖。',en:'Tap ⚙ (top-right) → choose the US$5/month plan or the limited one-time unlock → then verify with your checkout email in the same place.'}},
+  {q:{zh:'AI 解牌跑不出來怎麼辦？',en:'My AI reading didn\'t come out — what now?'}, a:{zh:'若服務商額度滿或暫停，會自動改用免費內建解讀，並「自動保留這次抽牌」。等服務恢復後，到「占卜記錄」找到那一筆 → 點「用 AI 解析」即可補跑，不用重抽。',en:'If the provider is over quota or paused, you get the free built-in reading and your draw is auto-saved. Once service is back, open History, find it, and tap “Analyze with AI” — no redraw needed.'}},
+  {q:{zh:'如何取消訂閱？',en:'How do I cancel my subscription?'}, a:{zh:'訂閱透過 Gumroad，請到你的 Gumroad 帳號、或購買收據 email 裡的連結管理／取消，隨時可取消、不綁約。',en:'Subscriptions are via Gumroad — manage or cancel anytime from your Gumroad account or the link in your receipt email. No lock-in.'}},
+  {q:{zh:'占卜記錄會跨裝置同步嗎？',en:'Does my history sync across devices?'}, a:{zh:'付費解鎖後，用同一個 email 在不同裝置驗證即可同步；也可在「占卜記錄」上方按「☁ 立即同步」手動同步。',en:'After unlocking, verify the same email on each device to sync; you can also tap “☁ Sync now” at the top of History.'}},
+  {q:{zh:'一次買斷和月訂閱差在哪？',en:'One-time unlock vs monthly?'}, a:{zh:'月訂閱 US$5／月、每月自動續扣、可隨時取消；一次買斷為限時優惠（到 6/30），付一次含 2 年使用權、之後不再扣款。',en:'Monthly is US$5/mo, auto-renews, cancel anytime. The one-time unlock is a limited offer (until Jun 30): pay once for 2-year access, no further charges.'}},
+  {q:{zh:'為什麼顯示台幣不是美金？',en:'Why my local currency, not USD?'}, a:{zh:'全部以美金（USD）計價；Gumroad 會依你所在地區自動換算顯示，但信用卡實際以美金扣款。',en:'All prices are in USD; Gumroad shows your local-currency equivalent by region, but your card is charged in USD.'}},
+  {q:{zh:'字太小看不清楚？',en:'Text too small?'}, a:{zh:'點畫面左下角的「A⁺」按鈕可一鍵放大字級（或到 ⚙ 設定最上方選擇字級大小）。',en:'Tap the “A⁺” button at the bottom-left to enlarge text (or pick a size at the top of ⚙ Settings).'}},
+  {q:{zh:'追問次數有上限嗎？',en:'Is there a follow-up limit?'}, a:{zh:'每次占卜可追問 5 次，追問框下方會顯示剩餘次數；想再問可以重新抽牌。',en:'Each reading allows 5 follow-up questions; the remaining count shows under the chat. Draw again to ask more.'}},
+];
+function renderFaq(){
+  const el=document.getElementById('faq-list'); if(!el) return;
+  el.innerHTML=FAQ.map(f=>`<details style="border:1px solid rgba(212,175,55,.18);border-radius:8px;padding:9px 12px;margin-bottom:8px;background:rgba(42,22,96,.18)">
+    <summary style="cursor:pointer;font-size:.86rem;color:var(--gold);line-height:1.5">${f.q[LANG]||f.q.zh}</summary>
+    <div style="font-size:.82rem;color:var(--silver);line-height:1.75;margin-top:8px">${f.a[LANG]||f.a.zh}</div>
+  </details>`).join('');
+}
+function setReportType(tp){
+  reportType=tp;
+  const a=document.getElementById('rtype-issue'), b=document.getElementById('rtype-wish');
+  if(a) a.className='btn btn-sm'+(tp==='issue'?'':' btn-ghost');
+  if(b) b.className='btn btn-sm'+(tp==='wish'?'':' btn-ghost');
+}
 function reportProblem(ctx){
   reportCtx=ctx||'';
-  closeSettings(); // 關掉設定視窗，回報以獨立視窗呈現（避免兩層模糊疊加變慢）
-  const el=document.getElementById('report-email'); if(el) el.textContent=reportEmailAddr();
+  closeSettings(); // 以獨立視窗呈現
+  renderFaq();
+  setReportType('issue');
+  const m1=document.getElementById('report-msg'); if(m1) m1.value='';
+  const m2=document.getElementById('report-contact'); if(m2) m2.value='';
   document.getElementById('report-modal').classList.add('on');
 }
 function closeReport(){ document.getElementById('report-modal').classList.remove('on'); }
+async function submitReport(){
+  const msgEl=document.getElementById('report-msg');
+  const msg=(msgEl.value||'').trim();
+  if(!msg){ toast(L('請先描述你的問題或想要的功能','Please describe your issue or wish first')); return; }
+  if(!WORKER_URL){ toast(L('暫時無法送出，請稍後再試','Can\'t send right now, please try later')); return; }
+  const contact=(document.getElementById('report-contact').value||'').trim();
+  const btn=document.getElementById('report-submit'); if(btn) btn.disabled=true;
+  try{
+    const r=await fetch(WORKER_URL+'/report',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({type:reportType, message:msg, contact, ctx:reportCtx, lang:LANG, ua:navigator.userAgent})});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    msgEl.value=''; document.getElementById('report-contact').value='';
+    closeReport();
+    toast(L('✦ 已送出，感謝你的回報！我們會盡快處理 🙏','✦ Sent — thank you for the feedback! 🙏'));
+  }catch(e){
+    toast(L('送出失敗，請稍後再試','Couldn\'t send, please try again later'));
+  }finally{ if(btn) btn.disabled=false; }
+}
 // 一次性公告（看過就不再跳；要再對所有人公告，換一個新的 ANNOUNCE_ID 即可）
 const ANNOUNCE_ID = '2026-06-14-quota-restored-v2';
 const ANNOUNCE_EXPIRES = new Date('2026-06-15T00:00:00'); // 過了今天（6/15 起）就不再顯示
@@ -3231,17 +3286,6 @@ function showAnnounce(){
 function closeAnnounce(){
   localStorage.setItem('tr_announce_'+ANNOUNCE_ID,'1');
   const m=document.getElementById('announce-modal'); if(m) m.classList.remove('on');
-}
-function copyReportEmail(){
-  const email=reportEmailAddr();
-  if(navigator.clipboard&&navigator.clipboard.writeText){
-    navigator.clipboard.writeText(email).then(()=>toast(L('✦ 已複製信箱','✦ Email copied')),()=>toast(email));
-  } else { toast(email); }
-}
-function mailReport(){
-  const subj=encodeURIComponent(L('塔羅神諭・問題回報','Tarot Oracle · issue report'));
-  const body=encodeURIComponent([L('請描述你遇到的問題：','Please describe the issue:'),'','','— — —',(reportCtx?('['+reportCtx+'] '):'')+'lang='+LANG+' · '+navigator.userAgent].join('\n'));
-  window.location.href='mailto:'+reportEmailAddr()+'?subject='+subj+'&body='+body;
 }
 
 // ══════════════════════════════════════════
@@ -3374,6 +3418,9 @@ function toggleAiInfo(){
 //  更新紀錄 CHANGELOG（新項目加在最上面；中英務必同步）
 // ══════════════════════════════════════════
 const CHANGELOG = [
+  { date:'2026-06-15',
+    zh:['新增「說明與回報中心」：內建常見問題 FAQ，並可直接送出「🐞 問題回報 / 💡 功能許願」給開發者（站內表單，不必寄信）'],
+    en:['Added a Help & Feedback center: a built-in FAQ plus an in-app form to send "🐞 Report a problem / 💡 Feature wish" to the developer (no email needed)'] },
   { date:'2026-06-14',
     zh:['新增「字級大小」調整（標準／大／特大／超大）：畫面左下角「A⁺」鈕一鍵放大，或在設定裡選級距，全站文字隨之變大','占卜記錄即使當初沒跑出 AI 解析（例如遇到 API 當機），現在都能在記錄裡用 AI 補解析同一組牌（含先前存的舊紀錄）','追問對話新增「每次占卜可追問次數上限」（預設 5 次），並清楚顯示「本次可追問幾次、還剩幾次」，避免無止境聊天','AI 當機或暫停時自動保留這次抽牌結果，可在「占卜記錄」用 AI 重新解析同一組牌，不必重抽；解牌失敗也新增「重試 AI 解析」按鈕','三張／聖三角／二擇一的基本解讀也改為逐張分析每張牌；解讀文字與 AI 一律避免預設性別（不用「她／妳」），降低性別誤判','五張無視論的基本解讀改為「逐張」分析全部 5 張（標示重點/輔助），不再只講重點牌','設定頁新增「🐞 回報問題」聯絡連結，AI 連線失敗時也能一鍵回報','解牌頁的「解鎖方案」改為跳出設定小視窗（站內彈窗結帳），不再開新分頁','購買區改為兩個清楚並列的選項——「🎉 一次買斷（限時到 6/30）」與「月訂閱 US$5／月（每月自動續扣）」，各自標明時限與扣款方式，避免誤點','設定頁新增「☁ 立即同步歷史記錄」按鈕，可手動同步並顯示同步筆數，不再只是默默在背景跑','改為每月 US$5 訂閱制（新開張限時保留一次買斷優惠到 6/30）','訂閱到期會自動提示並引導續訂，不再卡在「看似解鎖卻無法解牌」','五張無視論牌陣也加上醒目的「關鍵結論」判讀','牌陣選擇版面優化：視窗變小時換行的卡片置中對齊','修正英文版部分按鈕文字過長破框'],
     en:['Added a Text size control (Normal / Large / X-Large / XX-Large): tap the "A⁺" button at bottom-left, or pick a level in settings, to enlarge all text','Saved readings that never got an AI analysis (e.g. during an API outage) can now be analyzed with AI from History — including older saved records','Follow-up chat now has a per-reading limit (default 5 questions) with a clear "X per reading · N left" indicator, to avoid endless chats','If AI is down or paused, your draw is saved automatically — re-analyze the same cards later from "History", no need to redraw; failed readings also gain a "Retry AI" button','Three-Card / Holy Triangle / Either-Or basic readings now analyze each card too; readings and AI avoid assuming gender (no gendered pronouns) to prevent mis-gendering','Five-Card Wuxi basic reading now analyzes all five cards one by one (key/support marked), not just the key cards','Added a "🐞 Report a problem" contact link in settings (and on AI-connection errors)','Reading-page unlock now opens the in-page settings popup (on-site overlay checkout) instead of a new tab','Purchase area now shows two clearly-labeled options — "🎉 One-time unlock (until Jun 30)" and "Monthly US$5/mo (auto-renews)" — each stating its time limit and billing, so no one picks the wrong one','Added a "☁ Sync history now" button in settings — sync on demand and see how many records synced, instead of it only running silently','Switched to a US$5/month subscription (one-time launch deal kept until Jun 30)','Lapsed subscriptions now prompt you to resubscribe instead of silently failing to read','Added the prominent "Key Verdict" to the Five-Card Wuxi spread too','Spread picker layout: wrapped cards now center-align on smaller windows','Fixed a few English buttons whose text overflowed their frame'] },

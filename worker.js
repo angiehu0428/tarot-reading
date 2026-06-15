@@ -67,9 +67,84 @@ export default {
       return handleStats(request, env);
     }
 
+    // Report / feature wish — store user feedback (no email exposed)
+    if (url.pathname === '/report' && request.method === 'POST') {
+      return handleReport(request, env);
+    }
+    // View reports — private, key in query
+    if (url.pathname === '/reports' && request.method === 'GET') {
+      return handleReports(request, env);
+    }
+
     return new Response('Not found', { status: 404 });
   },
 };
+
+// ── Report / feature wish ────────────────────────────────────
+async function handleReport(request, env) {
+  const { type, message, contact, ctx, lang, ua } = await request.json().catch(() => ({}));
+  const msg = (message || '').toString().trim().slice(0, 2000);
+  if (!msg) return json({ error: 'empty' }, 400, request);
+  const id = Date.now();
+  const rec = {
+    id,
+    date: new Date().toISOString(),
+    type: type === 'wish' ? 'wish' : 'issue',
+    message: msg,
+    contact: (contact || '').toString().trim().slice(0, 120),
+    ctx: (ctx || '').toString().slice(0, 40),
+    lang: (lang || '').toString().slice(0, 8),
+    ua: (ua || '').toString().slice(0, 200),
+  };
+  await env.TAROT_KV.put('report:' + id, JSON.stringify(rec), { expirationTtl: 60 * 60 * 24 * 365 });
+  return json({ ok: true }, 200, request);
+}
+
+// ── View reports (private) ───────────────────────────────────
+async function handleReports(request, env) {
+  const url = new URL(request.url);
+  if (!env.STATS_TOKEN || url.searchParams.get('key') !== env.STATS_TOKEN) {
+    return new Response('Forbidden', { status: 403 });
+  }
+  const list = await env.TAROT_KV.list({ prefix: 'report:' });
+  const items = [];
+  for (const k of list.keys) { const v = await env.TAROT_KV.get(k.name); if (v) { try { items.push(JSON.parse(v)); } catch (e) {} } }
+  items.sort((a, b) => b.id - a.id);
+  const esc = s => (s || '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+  const rows = items.map(r => {
+    const isWish = r.type === 'wish';
+    return `<div class="card ${isWish ? 'wish' : 'issue'}">
+      <div class="meta"><span class="tag">${isWish ? '💡 許願' : '🐞 問題'}</span><span class="date">${new Date(r.date).toLocaleString('zh-TW')}</span>${r.ctx ? `<span class="ctx">${esc(r.ctx)}</span>` : ''}<span class="lang">${esc(r.lang)}</span></div>
+      <div class="msg">${esc(r.message)}</div>
+      ${r.contact ? `<div class="contact">↩ ${esc(r.contact)}</div>` : ''}
+      <div class="ua">${esc(r.ua)}</div>
+    </div>`;
+  }).join('');
+  const issues = items.filter(r => r.type !== 'wish').length;
+  const wishes = items.filter(r => r.type === 'wish').length;
+  const html = `<!DOCTYPE html><html lang="zh-TW"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>用戶回報 · 塔羅神諭</title>
+<style>
+  body{margin:0;background:#08031a;color:#b8b0c8;font-family:'Noto Serif TC',serif;padding:28px 16px;line-height:1.6}
+  .wrap{max-width:680px;margin:0 auto}
+  h1{font-family:Georgia,serif;color:#d4af37;font-size:1.3rem;text-align:center;letter-spacing:.06em}
+  .sub{text-align:center;color:#9a8db5;font-size:.82rem;margin-bottom:22px}
+  .card{background:rgba(42,22,96,.25);border:1px solid rgba(212,175,55,.2);border-radius:12px;padding:16px 18px;margin-bottom:14px}
+  .card.wish{border-color:rgba(120,180,255,.3)}
+  .meta{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:.74rem;color:#9a8db5;margin-bottom:8px}
+  .tag{color:#f0d878;font-weight:700}
+  .card.wish .tag{color:#9ec5ff}
+  .ctx,.lang{background:rgba(255,255,255,.06);border-radius:4px;padding:1px 6px}
+  .msg{color:#efe9ff;font-size:.95rem;white-space:pre-wrap;line-height:1.7}
+  .contact{margin-top:8px;color:#d4af37;font-size:.82rem}
+  .ua{margin-top:6px;color:#5a4d75;font-size:.66rem;word-break:break-all}
+  .empty{text-align:center;color:#6a5d85;padding:40px}
+</style></head><body><div class="wrap">
+  <h1>✦ 用戶回報 ✦</h1>
+  <div class="sub">塔羅神諭 · 🐞 問題 ${issues} 件 · 💡 許願 ${wishes} 件</div>
+  ${rows || '<div class="empty">目前還沒有任何回報</div>'}
+</div></body></html>`;
+  return new Response(html, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+}
 
 // 訂閱存取期限：每次扣款後給約 40 天（月扣款 + 寬限）。Gumroad 每次續扣都會再打一次
 // webhook，自動刷新此期限；一旦停止續訂，存取會在約 40 天內自動失效。
