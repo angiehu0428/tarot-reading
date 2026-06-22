@@ -2502,33 +2502,33 @@ function buildInterpWuxi(){
     const kc=keyCards.join(sep);
     if(keyRev){
       conclusionText = en
-        ? `The key card(s) (${kc}) appear reversed, defining the core message of this spread: "${dominantKw}". Regarding "${S.q}", this signals energy or resistance that asks you to pause and re-examine.`
-        : `重點牌（${kc}）以逆位出現，定義了此次牌陣的核心訊息：「${dominantKw}」。這提示你在關於「${S.q}」這件事上，有需要停下來重新審視的能量或阻力。`;
+        ? `The key card(s) (${kc}) appear reversed, setting the core of this spread: "${dominantKw}" — for "${S.q}", energy or resistance that asks you to pause and re-examine.`
+        : `重點牌（${kc}）以逆位定調，核心是「${dominantKw}」——關於「${S.q}」，有需要停下來重新審視的能量或阻力。`;
     } else if(isHeavy){
       conclusionText = en
-        ? `The key card(s) (${kc}) appear upright; the core message is "${dominantKw}". Upright means these energies are unfolding openly — yet the meanings lean toward hardship and testing. Regarding "${S.q}", you are at a stage that calls for meeting challenges head-on. The difficulty isn't hidden; it's a clearly visible task, which also means you can face and handle it directly.`
-        : `重點牌（${kc}）以正位出現，核心訊息是「${dominantKw}」。正位代表這些能量正在檯面上如實發生——但牌義本身偏向辛苦與考驗，表示關於「${S.q}」，你正處在需要正面迎接挑戰的階段。困難不是暗流，而是清楚可見的課題，這也意味著你能直接面對與處理它。`;
+        ? `The key card(s) (${kc}) are upright, core: "${dominantKw}". The meanings lean toward testing, so "${S.q}" brings real tasks — but they're out in the open, so meeting them head-on works.`
+        : `重點牌（${kc}）正位定調，核心是「${dominantKw}」。牌義偏向考驗，關於「${S.q}」眼前有實際課題；但困難都攤在檯面上，正面處理即可。`;
     } else {
       conclusionText = en
-        ? `The key card(s) (${kc}) appear upright, defining the core message of this spread: "${dominantKw}". This is the main energy carrying you forward — the universe guides you to trust this momentum.`
-        : `重點牌（${kc}）以正位出現，定義了此次牌陣的核心訊息：「${dominantKw}」。這是推動你前進的主要能量，宇宙在此指引你信任這股動力。`;
+        ? `The key card(s) (${kc}) are upright, setting the core: "${dominantKw}" — the main energy carrying you forward, so trust this momentum.`
+        : `重點牌（${kc}）正位定調，核心是「${dominantKw}」——這是推動你前進的主要能量，順勢而行即可。`;
     }
     if(supCards.length) conclusionText += en
-      ? ` The supporting cards (${supCards.join(sep)}) add the context of "${supportKw}", extending and detailing the key card's energy.`
-      : `輔助牌（${supCards.join(sep)}）補充了「${supportKw}」的背景脈絡，作為重點牌能量的延伸與細節說明。`;
+      ? ` Supporting cards (${supCards.join(sep)}) add the context of "${supportKw}".`
+      : `輔助牌（${supCards.join(sep)}）補充「${supportKw}」的脈絡。`;
   } else {
     if(keyRev){
       conclusionText = en
-        ? `The whole spread is reversed, carrying an energy of reflection and adjustment, centered on "${dominantKw}". This is a time to look inward and re-evaluate your direction rather than forcing things forward.`
-        : `牌組全數逆位，帶著整體反思與調整的能量，核心圍繞「${dominantKw}」。此刻更適合向內審視、重新評估方向，而非強行推進。`;
+        ? `The whole spread is reversed — reflection and adjustment, centered on "${dominantKw}". A time to look inward rather than force things forward.`
+        : `牌組全數逆位，整體偏向反思與調整，核心圍繞「${dominantKw}」——此刻更適合向內審視，而非強行推進。`;
     } else if(isHeavy){
       conclusionText = en
-        ? `The whole spread is upright, the energy showing up directly and clearly, centered on "${dominantKw}". Note, though: upright means things happen as they are, not that they go smoothly — these meanings lean toward hardship and testing. Regarding "${S.q}", you face real pressure and real tasks. The good news: the challenges are all out in the open, with no hidden undercurrents, so meeting them head-on is the best strategy now.`
-        : `牌組全數正位，能量直接而明確地展現，核心圍繞「${dominantKw}」。不過要注意：正位代表事情如實發生，而非保證順利——這組牌的牌義偏向辛苦、消耗與考驗，表示關於「${S.q}」，你正面對實實在在的壓力與課題。好消息是這些挑戰都攤在檯面上，沒有隱藏的暗流，正面應對就是此刻最好的策略。`;
+        ? `The whole spread is upright, energy direct and clear, centered on "${dominantKw}". The meanings lean toward testing, so "${S.q}" brings real pressure — but it's all in the open, so meeting it head-on is best.`
+        : `牌組全數正位、能量直接展現，核心圍繞「${dominantKw}」。牌義偏向考驗，關於「${S.q}」有實際壓力；但挑戰都在檯面上，正面應對最好。`;
     } else {
       conclusionText = en
-        ? `The overall energy is positive, focused on "${dominantKw}". You already hold the resources and will to face this question — the universe encourages you to trust your direction.`
-        : `牌組整體能量積極，核心聚焦於「${dominantKw}」。你已具備面對這個問題所需的資源與意志，宇宙鼓勵你信任自己的方向。`;
+        ? `The overall energy is positive, focused on "${dominantKw}" — you already hold what you need, so trust your direction.`
+        : `牌組整體能量積極，核心聚焦「${dominantKw}」——你已具備所需的資源，信任自己的方向即可。`;
     }
   }
 
@@ -2555,7 +2555,7 @@ function buildInterpWuxi(){
   const intro = en
     ? `For your question "${S.q}", this spread brings the combined energy of ${cardNames.join(', ')}.`
     : `針對你的問題「${S.q}」，這次牌組帶出了 ${cardNames.join('、')} 的組合能量。`;
-  const foot = L('以上是依照無視論邏輯所做的初步梳理。若想獲得結合感情連結牌組、數字象徵與個人問題脈絡的深度 AI 解析，可以解鎖 AI 解牌功能。','This is an initial reading by the Wuxi method. For a deeper AI analysis that weaves in relationship card-combos, numerology, and your personal context, unlock AI readings.');
+  const foot = L('以上為無視論的初步梳理。想要結合感情連結牌組、數字象徵與你個人脈絡的「深度解讀」，可解鎖 AI 解牌。','An initial read by the Wuxi method. Unlock AI readings for a deeper analysis that weaves in card-combos, numerology and your personal context.');
 
   // 醒目「關鍵結論」：依重點牌的正逆與吉凶傾向給一句明確方向（與其他牌陣一致）
   let wuxiV='', wuxiHook='';
@@ -2701,20 +2701,16 @@ function buildInterpPositional(){
       + `「${ob}」（右）方面：優勢是${cardName(bPro.cid)}${revLabel(bPro.rev)}的「${bPro.kw.slice(0,2).join('、')}」，挑戰則是${cardName(bCon.cid)}${revLabel(bCon.rev)}的「${bCon.kw.slice(0,2).join('、')}」。`
       + `而整體建議位置的${cardName(advice.cid)}${revLabel(advice.rev)}提醒你：「${advice.kw.slice(0,3).join('、')}」——這是超越兩個選項本身、更高視角的指引。`;
   } else {
-    storyText = cards.map((c,i)=>{
-      return en
-        ? `In the "${c.pos}" position${c.posDesc?` (${c.posDesc})`:''}, ${cardName(c.cid)}${c.rev?' reversed':''} points to ${kwq(c.kw,3)}`
-        : `${c.posDesc?`「${c.pos}」位置（${c.posDesc}）`:`「${c.pos}」位置`}出現${cardName(c.cid)}${c.rev?'逆位':''}，指向「${c.kw.slice(0,3).join('、')}」`;
-    }).join(en?'. ':'；') + (en?'.':'。');
+    // 逐位敘事已由下方「逐張分析」涵蓋，這裡只留各牌陣的綜合句，避免重複、精簡篇幅
+    storyText = '';
     if(S.type==='three'){
-      storyText += en
-        ? ` On the timeline: the past laid the ground for the present, and the present is shaping where the future heads — read together, the three cards trace how "${S.q}" is developing.`
-        : `從時間軸來看：過去的能量奠定了現在的處境，而現在的狀態正在形塑未來的走向——三張牌連起來，就是「${S.q}」這個問題的發展脈絡。`;
-    }
-    if(S.type==='triangle'){
-      storyText += en
-        ? ` The Holy Triangle turns on the "gap": compare card one and card two — the distance between "what I assume" and "the truth" is exactly your blind spot. The advice card is the key to crossing that gap.`
-        : `聖三角的關鍵在於「落差」：比較第一張與第二張牌的差異——「我以為」與「真實」之間的距離，正是你的盲點所在。而建言位置的牌，就是跨越這個落差的鑰匙。`;
+      storyText = en
+        ? `On the timeline: the past laid the ground for the present, and the present is shaping where the future heads — together the three cards trace how "${S.q}" is developing.`
+        : `從時間軸來看：過去奠定了現在，現在正形塑未來的走向——三張牌連起來，就是「${S.q}」的發展脈絡。`;
+    } else if(S.type==='triangle'){
+      storyText = en
+        ? `The Holy Triangle turns on the "gap" between cards one and two — the distance between "what I assume" and "the truth" is your blind spot, and the advice card is the key to crossing it.`
+        : `聖三角的關鍵在「落差」：比較第一、二張牌——「我以為」與「真實」的距離正是你的盲點，而建言牌就是跨越它的鑰匙。`;
     }
   }
 
@@ -2750,7 +2746,7 @@ function buildInterpPositional(){
   const intro = en
     ? `For your question "${S.q}", the ${spreadNameOf(S.type)||'spread'} drew ${cardNames.join(', ')}.`
     : `針對你的問題「${S.q}」，${spreadNameOf(S.type)||'牌陣'}抽出了 ${cardNames.join('、')}。`;
-  const foot = L('以上是依照牌陣位置所做的初步梳理，詳細牌義請見下方單牌解析。若想獲得結合感情連結牌組、數字象徵與個人問題脈絡的深度 AI 解析，可以解鎖 AI 解牌功能。','This is an initial reading by card position; see the card-by-card section below for full meanings. For a deeper AI analysis weaving in card-combos, numerology, and your personal context, unlock AI readings.');
+  const foot = L('以上為初步梳理，完整牌義見下方單牌解析。想要結合感情連結牌組、數字象徵與你個人脈絡的「深度解讀」，可解鎖 AI 解牌。','An initial read; see the card-by-card section below for full meanings. Unlock AI readings for a deeper analysis that weaves in card-combos, numerology and your personal context.');
 
   return `
     <p class="interp-p">${intro}</p>
@@ -2759,7 +2755,7 @@ function buildInterpPositional(){
       ${rowsHtml}
     </div>
     ${buildVerdict(cards)}
-    <p class="interp-p">${storyText}</p>
+    ${storyText?`<p class="interp-p">${storyText}</p>`:''}
     ${topicHtml}
     ${n>=2 ? buildOverallSummary(cards) : `<p class="interp-p">${toneText}</p>`}
     <p class="interp-p" style="font-size:.82rem;color:rgba(212,175,55,.55);margin-top:6px">${foot}</p>`;
