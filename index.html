@@ -318,6 +318,8 @@ textarea.inp{resize:vertical;min-height:90px}
 .api-ok{background:rgba(39,174,96,.15);color:#27ae60;border:1px solid rgba(39,174,96,.3)}
 .api-none{background:rgba(212,175,55,.1);color:var(--gold);border:1px solid rgba(212,175,55,.25)}
 .hint{font-size:.78rem;color:var(--muted);line-height:1.7;margin-top:6px}
+.eg-chip{display:inline-block;margin:5px 6px 0 0;padding:7px 13px;border:1px solid rgba(212,175,55,.35);border-radius:16px;background:rgba(212,175,55,.06);color:var(--gold);font-size:.76rem;line-height:1.5;cursor:pointer;transition:all .2s;text-align:left;font-family:inherit}
+.eg-chip:hover{background:rgba(212,175,55,.15);border-color:var(--gold)}
 .hint a{color:var(--gold);text-decoration:none}
 .hint a:hover{text-decoration:underline}
 
@@ -618,6 +620,7 @@ textarea.inp{resize:vertical;min-height:90px}
     </div>
     <div id="q-focus-hint" data-i18n-html="q.focus.hint" style="margin-bottom:12px;padding:11px 14px;border-radius:8px;background:rgba(212,175,55,.07);border:1px solid rgba(212,175,55,.2);font-size:.78rem;color:var(--silver);line-height:1.85;text-align:left"></div>
     <div id="q-hint" style="display:none;margin-bottom:14px;padding:10px 14px;border-left:2px solid rgba(212,175,55,.4);background:rgba(212,175,55,.05);font-size:.78rem;color:rgba(212,175,55,.75);line-height:1.8;text-align:left"></div>
+    <div id="q-eg" style="display:none;margin-bottom:14px;text-align:left"></div>
     <label class="lbl" data-i18n="q.label">你的問題</label>
     <textarea class="inp" id="q-input" data-i18n-ph="q.ph" placeholder="寫下你心中想要了解的事..."></textarea>
     <div style="text-align:center;margin-top:8px">
@@ -1261,29 +1264,40 @@ const SPREADS = {
   one:{name:'單張牌陣',nameEn:'Single Card',pos:['核心訊息'],posEn:['Core Message'],
     posDesc:['此刻宇宙給你最重要的一個訊息或指引'],posDescEn:['The single most important message or guidance for you right now'],
     hint:'適合「簡單、明確、只想要一個方向」的問題，例如「今天我該注意什麼？」「對這件事，宇宙想提醒我什麼？」—— 一個問題、一個核心指引。',
-    hintEn:'Best for a simple, focused question wanting one clear pointer — e.g. "What should I focus on today?" or "What does the universe want me to know about this?" One question, one core message.'},
+    hintEn:'Best for a simple, focused question wanting one clear pointer — e.g. "What should I focus on today?" or "What does the universe want me to know about this?" One question, one core message.',
+    eg:['今天的我最需要注意什麼？','關於最近讓我煩心的事，宇宙想提醒我什麼？'],
+    egEn:['What do I most need to pay attention to today?',"What does the universe want me to know about what's been on my mind lately?"]},
   three:{name:'三張牌陣',nameEn:'Three-Card Spread',pos:['過去','現在','未來'],posEn:['Past','Present','Future'],
     posDesc:['影響現在的過去事件或能量模式','你此刻所處的狀態與核心情境','正在形成中的未來趨勢或可能結果'],
     posDescEn:['Past events or energy patterns shaping the present','Your current state and the core of the situation','The emerging trend or likely outcome ahead'],
     hint:'適合想看一件事「來龍去脈與走向」的問題，帶點時間感最好，例如「這段關係接下來會怎麼發展？」「我做這個決定，過去/現在/未來會如何？」',
-    hintEn:'Best for how something unfolds over time — phrase it with a timeline, e.g. "How will this relationship develop next?" or "Past, present and future of this decision?"'},
+    hintEn:'Best for how something unfolds over time — phrase it with a timeline, e.g. "How will this relationship develop next?" or "Past, present and future of this decision?"',
+    eg:['我的感情接下來會如何發展？','我目前的工作狀況是怎麼走到今天的？接下來會怎樣？'],
+    egEn:['How will my love life develop from here?','How did my work situation get to where it is, and where is it heading?']},
   triangle:{name:'聖三角牌陣',nameEn:'Holy Triangle Spread',pos:['我以為的狀況','真實的狀況','建言'],posEn:['What I Assume','The Truth','Advice'],
     posDesc:['你主觀認知中的情況——你以為事情是這樣','事件實際的樣貌——牌要讓你看見的真相','超越盲點之後，宇宙給你的具體指引'],
     posDescEn:['Your subjective view — what you assume is going on','The real shape of things — the truth the cards reveal','Concrete guidance once you see past the blind spot'],
     hint:'建議問法：「針對目前卡關的狀態，請讓我看到事件的真相」或「在現在的事件中，有我沒注意到的盲點嗎？」',
-    hintEn:'Suggested wording: "Show me the truth of where I feel stuck," or "Is there a blind spot I\'m missing in this situation?"'},
+    hintEn:'Suggested wording: "Show me the truth of where I feel stuck," or "Is there a blind spot I\'m missing in this situation?"',
+    eg:['關於最近讓我卡住的事，請讓我看見事件的真相','我對目前這段關係的想法，有什麼盲點嗎？'],
+    egEn:['Show me the truth about the situation where I feel stuck','Is there a blind spot in how I see this relationship?']},
   five:{name:'五張牌陣（無視論）',nameEn:'Five-Card Wuxi Spread',pos:['牌一','牌二','牌三','牌四','牌五'],posEn:['Card 1','Card 2','Card 3','Card 4','Card 5'],
     hint:'適合「深入了解單一主題」的整體能量與走向（綜觀全局、不分位置），例如「接下來這段感情整體會如何？」「我目前的事業運勢整體如何？」—— 鎖定一個主題、看得最深最全面。',
-    hintEn:'Best for the overall energy and direction of one focused topic (read as a whole, not by position), e.g. "How will this relationship go overall?" or "What\'s the overall outlook for my career now?" — pick one theme and go deep.'},
+    hintEn:'Best for the overall energy and direction of one focused topic (read as a whole, not by position), e.g. "How will this relationship go overall?" or "What\'s the overall outlook for my career now?" — pick one theme and go deep.',
+    eg:['我接下來半年的事業運勢整體如何？','這段感情的整體能量與走向如何？'],
+    egEn:['What is the overall outlook for my career in the next six months?','What is the overall energy and direction of this relationship?']},
   choice:{name:'二擇一牌陣',nameEn:'Either-Or Spread',pos:['選項1（左）· 優勢','選項1（左）· 挑戰','選項2（右）· 優勢','選項2（右）· 挑戰','整體建議'],
     posEn:['Option 1 (left) · Strengths','Option 1 (left) · Challenges','Option 2 (right) · Strengths','Option 2 (right) · Challenges','Overall Advice'],
     posDesc:['選項1（左）這條路帶來的好處與正面能量','選項1（左）可能面對的困難與代價','選項2（右）這條路帶來的好處與正面能量','選項2（右）可能面對的困難與代價','超越兩個選項的整體智慧與更高視角'],
-    posDescEn:['Benefits and positive energy of Option 1 (left)','Difficulties and costs of Option 1 (left)','Benefits and positive energy of Option 2 (right)','Difficulties and costs of Option 2 (right)','Higher wisdom that transcends both options']}
+    posDescEn:['Benefits and positive energy of Option 1 (left)','Difficulties and costs of Option 1 (left)','Benefits and positive energy of Option 2 (right)','Difficulties and costs of Option 2 (right)','Higher wisdom that transcends both options'],
+    eg:['眼前這兩條路，哪一條對我比較好？'],
+    egEn:['Of these two paths before me, which one is better for me?']}
 };
 function spreadNameOf(type){ const s=SPREADS[type]; if(!s)return ''; return LANG==='en'?(s.nameEn||s.name):s.name; }
 function spreadPos(type){ const s=SPREADS[type]; if(!s)return []; return LANG==='en'?(s.posEn||s.pos):s.pos; }
 function spreadPosDesc(type){ const s=SPREADS[type]; if(!s)return null; return LANG==='en'?(s.posDescEn||s.posDesc):s.posDesc; }
 function spreadHint(type){ const s=SPREADS[type]; if(!s)return ''; return LANG==='en'?(s.hintEn||s.hint||''):(s.hint||''); }
+function spreadEg(type){ const s=SPREADS[type]; if(!s)return []; return LANG==='en'?(s.egEn||s.eg||[]):(s.eg||[]); }
 
 const PROJ_COLORS = ['#e74c3c','#e67e22','#d4af37','#27ae60','#2980b9','#8e44ad','#c0392b','#16a085'];
 
@@ -1519,6 +1533,22 @@ function pickSpread(type) {
   const hintEl=document.getElementById('q-hint');
   hintEl.style.display=hint?'block':'none';
   if(hint)hintEl.textContent='✦ '+hint;
+  const egs=spreadEg(type);
+  const egEl=document.getElementById('q-eg');
+  egEl.style.display=egs.length?'block':'none';
+  egEl.innerHTML='';
+  if(egs.length){
+    const lab=document.createElement('div');
+    lab.className='hint';lab.style.margin='0 0 2px';
+    lab.textContent=L('✨ 沒靈感？點一個範例問題直接用：','✨ Not sure what to ask? Tap an example:');
+    egEl.appendChild(lab);
+    egs.forEach(q=>{
+      const b=document.createElement('button');
+      b.type='button';b.className='eg-chip';b.textContent=q;
+      b.onclick=()=>{const inp=document.getElementById('q-input');inp.value=q;inp.focus();};
+      egEl.appendChild(b);
+    });
+  }
   go('s-question');
 }
 function renderCustomPos(){
