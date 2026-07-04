@@ -97,6 +97,20 @@ async function handleReport(request, env) {
     ua: (ua || '').toString().slice(0, 200),
   };
   await env.TAROT_KV.put('report:' + id, JSON.stringify(rec), { expirationTtl: 60 * 60 * 24 * 365 });
+  // Telegram 即時通知：設定 TG_BOT_TOKEN + TG_CHAT_ID 兩個 secret 才啟用；
+  // 通知失敗不影響回報本身（KV 已存檔，/reports 一樣看得到）。
+  if (env.TG_BOT_TOKEN && env.TG_CHAT_ID) {
+    const tgText = `${rec.type === 'wish' ? '💡 功能許願' : '🐞 問題回報'}\n\n${rec.message}` +
+      (rec.contact ? `\n\n↩ 聯絡方式：${rec.contact}` : '') +
+      `\n🌐 ${rec.lang || '?'}${rec.ctx ? ' · ' + rec.ctx : ''}`;
+    try {
+      await fetch(`https://api.telegram.org/bot${env.TG_BOT_TOKEN}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: env.TG_CHAT_ID, text: tgText.slice(0, 3800) }),
+      });
+    } catch (e) {}
+  }
   return json({ ok: true }, 200, request);
 }
 
