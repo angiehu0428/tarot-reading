@@ -758,6 +758,7 @@ const T = {};
 function t(k){ const e=T[k]; return e ? (e[LANG]!=null?e[LANG]:e.zh) : k; }
 // 行內雙語助手：用於 JS 動態產生的字串（toast、解讀文案等）
 function L(zh,en){ return LANG==='zh' ? zh : en; }
+function escHtml(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function applyLang(){
   document.documentElement.lang = LANG==='zh' ? 'zh-TW' : 'en';
   document.querySelectorAll('[data-i18n]').forEach(el=>{ el.textContent=t(el.getAttribute('data-i18n')); });
@@ -1452,7 +1453,7 @@ function viewProject(id) {
         <div class="tl-dot"></div>
         <div class="tl-box" onclick="toggleTlItem(this)">
           <div class="tl-date">${LANG==='en'?`#${num}`:`第 ${num} 次`} · ${r.date} · ${r.spread}</div>
-          <div class="tl-q">「${r.q}」</div>
+          <div class="tl-q">「${escHtml(r.q)}」</div>
           <div class="tl-cards">${cardStr}</div>
           <div class="tl-expand">
             <div class="tl-interp">${r.interp||L('（無儲存解讀）','(no saved reading)')}</div>
@@ -1537,7 +1538,7 @@ function skipMeditation(){
   btn.disabled=false;btn.classList.add('btn-glow');
 }
 function beginMeditation(){
-  const q=document.getElementById('q-input').value.trim();
+  const q=document.getElementById('q-input').value.trim().replace(/[<>]/g,'');
   if(!q){toast(t('toast.needq'));return;}
   if(S.type==='custom'){
     S.pos=Array.from(document.querySelectorAll('.cp-inp')).map(el=>el.value||t('pos.default'));
@@ -2814,7 +2815,7 @@ function buildDetails(){
 }
 async function sendChat(){
   const input=document.getElementById('chat-input');
-  const q=input.value.trim();
+  const q=input.value.trim().replace(/[<>]/g,'');
   if(!q)return;
   const key=getApiKey();
   const proxyEmail=isVerified()?getVerifiedEmail():null;
@@ -2886,8 +2887,8 @@ function renderChat(){
   const el=document.getElementById('chat-msgs');
   el.innerHTML=S.chatHistory.map(m=>
     m.role==='user'
-      ?`<div class="chat-msg-user">${m.text}</div>`
-      :`<div class="chat-msg-ai">${m.text.replace(/\n/g,'<br>')}</div>`
+      ?`<div class="chat-msg-user">${escHtml(m.text)}</div>`
+      :`<div class="chat-msg-ai">${escHtml(m.text).replace(/\n/g,'<br>')}</div>`
   ).join('');
   // 捲到最新一則訊息的「頂端」，長回覆讓用戶自己往下捲
   const last=el.lastElementChild;
@@ -3023,15 +3024,15 @@ function renderHistList(){
         const full=fullMap[r.id]||{};
         const canAI = full.cards && full.cards.length; // 有牌面資料即可（type 缺漏會自動反推）
         const aiBtn = canAI ? `<div style="margin-top:10px"><button class="btn btn-sm btn-ghost" style="margin:0" onclick="analyzeWithAI(${r.id})">${full.interp?L('🔄 用 AI 重新解析','🔄 Re-analyze with AI'):L('✦ 用 AI 解析這次占卜','✦ Analyze with AI')}</button></div>` : '';
-        const interpHtml=full.interp?`<div style="margin-top:10px;font-size:.82rem;color:var(--muted);line-height:1.7;border-top:1px solid rgba(212,175,55,.12);padding-top:10px">${full.interp.replace(/\n/g,'<br>')}</div>`:'';
-        const chatHtml=(full.chat&&full.chat.length)?`<div style="margin-top:10px;border-top:1px solid rgba(212,175,55,.1);padding-top:10px">${full.chat.map(m=>m.role==='user'?`<div style="font-size:.78rem;color:var(--gold);margin-bottom:4px">▶ ${m.text}</div>`:`<div style="font-size:.78rem;color:var(--muted);margin-bottom:8px;line-height:1.6">${m.text.replace(/\n/g,'<br>')}</div>`).join('')}</div>`:'';
+        const interpHtml=full.interp?`<div style="margin-top:10px;font-size:.82rem;color:var(--muted);line-height:1.7;border-top:1px solid rgba(212,175,55,.12);padding-top:10px">${escHtml(full.interp).replace(/\n/g,'<br>')}</div>`:'';
+        const chatHtml=(full.chat&&full.chat.length)?`<div style="margin-top:10px;border-top:1px solid rgba(212,175,55,.1);padding-top:10px">${full.chat.map(m=>m.role==='user'?`<div style="font-size:.78rem;color:var(--gold);margin-bottom:4px">▶ ${escHtml(m.text)}</div>`:`<div style="font-size:.78rem;color:var(--muted);margin-bottom:8px;line-height:1.6">${escHtml(m.text).replace(/\n/g,'<br>')}</div>`).join('')}</div>`:'';
         return `<div style="border:1px solid rgba(212,175,55,.18);background:rgba(42,22,96,.18);padding:18px 20px;margin-bottom:12px;position:relative">
           <button onclick="deleteReading(${r.id})" title="${L('刪除這筆記錄','Delete this record')}"
             style="position:absolute;top:10px;right:10px;background:none;border:1px solid rgba(224,85,85,.3);color:rgba(224,85,85,.7);width:26px;height:26px;border-radius:50%;cursor:pointer;font-size:.8rem;line-height:1;transition:all .2s"
             onmouseover="this.style.background='rgba(224,85,85,.15)';this.style.color='var(--red)'"
             onmouseout="this.style.background='none';this.style.color='rgba(224,85,85,.7)'">✕</button>
           <div style="font-size:.72rem;color:var(--muted);margin-bottom:5px;padding-right:30px">${r.date} · ${r.spread}</div>
-          <div style="font-size:.92rem;color:var(--white)">「${r.q}」</div>
+          <div style="font-size:.92rem;color:var(--white)">「${escHtml(r.q)}」</div>
           <div style="font-size:.78rem;color:var(--gold);margin-top:7px">${r.cards.map(c=>`${c.name}${c.rev?'↓':''}`).join(' · ')}</div>
           ${interpHtml}${chatHtml}${aiBtn}
         </div>`;

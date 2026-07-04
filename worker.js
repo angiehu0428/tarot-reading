@@ -154,6 +154,14 @@ const LIFETIME_TTL = 60 * 60 * 24 * 730;
 
 // ── Gumroad webhook ──────────────────────────────────────────
 async function handleWebhook(request, env) {
+  // Shared-secret check: Gumroad "Ping" has no HMAC, so we require a secret token
+  // in the webhook URL (…/webhook?token=XXX). Only enforced once WEBHOOK_SECRET is
+  // set, so deploying this does NOT break live payments before you update Gumroad.
+  if (env.WEBHOOK_SECRET) {
+    const token = new URL(request.url).searchParams.get('token') || '';
+    if (token !== env.WEBHOOK_SECRET) return new Response('Unauthorized', { status: 401 });
+  }
+
   const text = await request.text();
   const params = new URLSearchParams(text);
 
