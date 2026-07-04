@@ -432,6 +432,15 @@ textarea.inp{resize:vertical;min-height:90px}
     <hr class="divider-line" style="margin-top:20px">
     <h3 style="margin-top:16px" data-i18n="set.fair.title">✦ 關於抽牌公平性</h3>
     <p class="hint" style="margin-top:10px" data-i18n-html="set.fair.body"></p>
+    <div id="admin-sec" style="display:none">
+      <hr class="divider-line" style="margin-top:20px">
+      <h3 style="margin-top:16px">🔑 管理後台</h3>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+        <button class="btn btn-sm" onclick="openAdmin('stats')" style="margin:0">📊 使用統計</button>
+        <button class="btn btn-sm" onclick="openAdmin('reports')" style="margin:0">📬 用戶回報</button>
+        <button class="btn btn-sm btn-ghost" onclick="adminLogout()" style="margin:0;opacity:.6">登出管理</button>
+      </div>
+    </div>
     <div style="text-align:center;margin-top:18px">
       <a href="javascript:void(0)" onclick="reportProblem('settings')" style="font-size:.8rem;color:rgba(212,175,55,.7);text-decoration:none;border-bottom:1px dashed rgba(212,175,55,.4);padding-bottom:1px" data-i18n="set.report">🐞 遇到問題？點此回報</a>
     </div>
@@ -3600,6 +3609,24 @@ if(isVerified()) revalidateAccess().then(ok=>{
     if(bar){ bar.style.display='block'; bar.className='api-status api-none';
       bar.textContent=L('輸入你購買時填寫的 Email 即可解鎖 ✦','Enter the email you used at checkout to unlock ✦'); }
   }, 300);
+})();
+
+// ── 管理後台（僅站主）：網址加 #admin 貼一次 STATS_TOKEN，鑰匙只存在
+//    這台裝置的 localStorage（不在原始碼、不上傳），設定頁就會出現管理區塊。
+const ADMIN_KEY_LS='tarot_admin_key';
+function adminKey(){ try{return localStorage.getItem(ADMIN_KEY_LS)||'';}catch(e){return '';} }
+function refreshAdminSec(){ const el=document.getElementById('admin-sec'); if(el) el.style.display=adminKey()?'block':'none'; }
+function openAdmin(p){ const k=adminKey(); if(!k)return; window.open(WORKER_URL+'/'+p+'?key='+encodeURIComponent(k),'_blank'); }
+function adminLogout(){ try{localStorage.removeItem(ADMIN_KEY_LS);}catch(e){} refreshAdminSec(); toast(L('已登出管理模式','Admin mode off')); }
+(function adminEntry(){
+  refreshAdminSec();
+  if(location.hash!=='#admin') return;
+  history.replaceState(null,'',location.pathname+location.search);
+  const k=(prompt(L('貼上管理金鑰（STATS_TOKEN）','Paste your admin key (STATS_TOKEN)'))||'').trim();
+  if(!k) return;
+  try{localStorage.setItem(ADMIN_KEY_LS,k);}catch(e){}
+  refreshAdminSec();
+  toast(L('🔑 管理模式已啟用，管理後台在「設定」頁最下方','🔑 Admin mode on — see the bottom of Settings'));
 })();
 </script>
 </body>
