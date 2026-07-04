@@ -75,6 +75,10 @@ export default {
     if (url.pathname === '/reports' && request.method === 'GET') {
       return handleReports(request, env);
     }
+    // Delete one report — private, key in query
+    if (url.pathname === '/report-del' && request.method === 'POST') {
+      return handleReportDel(request, env);
+    }
 
     return new Response('Not found', { status: 404 });
   },
@@ -127,7 +131,8 @@ async function handleReports(request, env) {
   const esc = s => (s || '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
   const rows = items.map(r => {
     const isWish = r.type === 'wish';
-    return `<div class="card ${isWish ? 'wish' : 'issue'}">
+    return `<div class="card ${isWish ? 'wish' : 'issue'}" data-id="${r.id}">
+      <button class="del" onclick="delReport(this)" title="刪除這筆回報">✕</button>
       <div class="meta"><span class="tag">${isWish ? '💡 許願' : '🐞 問題'}</span><span class="date">${new Date(r.date).toLocaleString('zh-TW')}</span>${r.ctx ? `<span class="ctx">${esc(r.ctx)}</span>` : ''}<span class="lang">${esc(r.lang)}</span></div>
       <div class="msg">${esc(r.message)}</div>
       ${r.contact ? `<div class="contact">↩ ${esc(r.contact)}</div>` : ''}
@@ -142,7 +147,9 @@ async function handleReports(request, env) {
   .wrap{max-width:680px;margin:0 auto}
   h1{font-family:Georgia,serif;color:#d4af37;font-size:1.3rem;text-align:center;letter-spacing:.06em}
   .sub{text-align:center;color:#9a8db5;font-size:.82rem;margin-bottom:22px}
-  .card{background:rgba(42,22,96,.25);border:1px solid rgba(212,175,55,.2);border-radius:12px;padding:16px 18px;margin-bottom:14px}
+  .card{background:rgba(42,22,96,.25);border:1px solid rgba(212,175,55,.2);border-radius:12px;padding:16px 18px;margin-bottom:14px;position:relative}
+  .del{position:absolute;top:10px;right:10px;background:none;border:1px solid rgba(224,85,85,.3);color:rgba(224,85,85,.7);width:26px;height:26px;border-radius:50%;cursor:pointer;font-size:.8rem;line-height:1;transition:all .2s}
+  .del:hover{background:rgba(224,85,85,.15);color:#e05555}
   .card.wish{border-color:rgba(120,180,255,.3)}
   .meta{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:.74rem;color:#9a8db5;margin-bottom:8px}
   .tag{color:#f0d878;font-weight:700}
@@ -156,8 +163,32 @@ async function handleReports(request, env) {
   <h1>✦ 用戶回報 ✦</h1>
   <div class="sub">塔羅神諭 · 🐞 問題 ${issues} 件 · 💡 許願 ${wishes} 件</div>
   ${rows || '<div class="empty">目前還沒有任何回報</div>'}
-</div></body></html>`;
+</div>
+<script>
+async function delReport(btn){
+  if(!confirm('確定刪除這筆回報？（無法復原）'))return;
+  const card=btn.closest('.card');
+  const key=new URLSearchParams(location.search).get('key');
+  btn.disabled=true;
+  const r=await fetch('/report-del?key='+encodeURIComponent(key)+'&id='+encodeURIComponent(card.dataset.id),{method:'POST'}).catch(()=>null);
+  if(r&&r.ok){card.style.opacity='0';setTimeout(()=>card.remove(),250);}
+  else{btn.disabled=false;alert('刪除失敗，請重試');}
+}
+</script>
+</body></html>`;
   return new Response(html, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+}
+
+// ── Delete one report (private) ──────────────────────────────
+async function handleReportDel(request, env) {
+  const url = new URL(request.url);
+  if (!env.STATS_TOKEN || url.searchParams.get('key') !== env.STATS_TOKEN) {
+    return new Response('Forbidden', { status: 403 });
+  }
+  const id = (url.searchParams.get('id') || '').replace(/\D/g, '');
+  if (!id) return new Response('Bad id', { status: 400 });
+  await env.TAROT_KV.delete('report:' + id);
+  return new Response('OK');
 }
 
 // 訂閱存取期限：每次扣款後給約 40 天（月扣款 + 寬限）。Gumroad 每次續扣都會再打一次
