@@ -235,6 +235,35 @@ textarea.inp{resize:vertical;min-height:90px}
   .layout-choice{grid-template-columns:1fr 1fr;gap:10px 14px;max-width:340px}
 }
 
+/* Celtic Cross: traditional cross + staff shape, numbered badges */
+.layout-celtic{display:grid;grid-template-columns:auto auto auto auto;justify-content:center;align-items:center;gap:8px 12px;counter-reset:cc;margin:24px auto 34px}
+.layout-celtic .r-item{counter-increment:cc;position:relative;gap:0}
+.layout-celtic .flip-box{width:78px!important;height:128px!important}
+.layout-celtic .r-pos{display:none}
+.layout-celtic .r-item>div:last-child{display:none}   /* hide 正位/逆位 text (shown in detail list) */
+.layout-celtic .r-item::before{content:counter(cc);position:absolute;top:-7px;left:-7px;z-index:6;width:20px;height:20px;border-radius:50%;background:var(--gold,#d4af37);color:#0d0420;font-family:'Cinzel',serif;font-size:.72rem;font-weight:700;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 4px rgba(0,0,0,.4)}
+/* cross */
+.layout-celtic .r-item:nth-child(1){grid-column:2;grid-row:2;z-index:3}
+.layout-celtic .r-item:nth-child(2){grid-column:2;grid-row:2;z-index:4}
+.layout-celtic .r-item:nth-child(2) .flip-box{transform:rotate(90deg)}
+.layout-celtic .r-item:nth-child(1)::before{left:50%;transform:translateX(-50%);top:-11px}   /* card 1 number pokes above the crossing card */
+.layout-celtic .r-item:nth-child(3){grid-column:2;grid-row:1}
+.layout-celtic .r-item:nth-child(4){grid-column:2;grid-row:3}
+.layout-celtic .r-item:nth-child(5){grid-column:1;grid-row:2}
+.layout-celtic .r-item:nth-child(6){grid-column:3;grid-row:2}
+/* staff (top→bottom: 10,9,8,7) */
+.layout-celtic .r-item:nth-child(7){grid-column:4;grid-row:4}
+.layout-celtic .r-item:nth-child(8){grid-column:4;grid-row:3}
+.layout-celtic .r-item:nth-child(9){grid-column:4;grid-row:2}
+.layout-celtic .r-item:nth-child(10){grid-column:4;grid-row:1}
+.layout-celtic .r-item:nth-child(n+7){margin-left:16px}
+@media(max-width:580px){
+  .layout-celtic{gap:5px 7px}
+  .layout-celtic .flip-box{width:56px!important;height:92px!important}
+  .layout-celtic .r-item::before{width:16px;height:16px;font-size:.6rem;top:-5px;left:-5px}
+  .layout-celtic .r-item:nth-child(n+7){margin-left:9px}
+}
+
 .interp-box{border:1px solid rgba(212,175,55,.25);background:rgba(42,22,96,.18);padding:28px 26px;margin-top:8px;text-align:left}
 .chat-box{border:1px solid rgba(212,175,55,.25);background:rgba(42,22,96,.18);margin-top:18px;overflow:hidden}
 .chat-msgs{padding:20px 24px;max-height:420px;overflow-y:auto;display:flex;flex-direction:column;gap:14px}
@@ -1766,6 +1795,7 @@ function showReading(resumeId){
   spreadEl.className='reading-spread';
   if(S.type==='three') spreadEl.classList.add('layout-three');
   else if(S.type==='five') spreadEl.classList.add('layout-five');
+  else if(S.type==='celtic') spreadEl.classList.add('layout-celtic');
   else if(S.type==='choice'){
     spreadEl.classList.add('layout-choice');
     // insert column headers before cards
