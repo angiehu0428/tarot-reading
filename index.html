@@ -483,6 +483,9 @@ textarea.inp{resize:vertical;min-height:90px}
     <h3 data-i18n="ann.title">✦ 服務通知</h3>
     <p class="hint" style="margin-top:12px;line-height:1.9;text-align:left" data-i18n-html="ann.body"></p>
     <button class="btn btn-sm" style="margin-top:16px" onclick="closeAnnounce()" data-i18n="ann.ok">我知道了</button>
+    <div style="margin-top:14px">
+      <a href="javascript:void(0)" onclick="closeAnnounce();reportProblem('announce')" style="font-size:.78rem;color:rgba(212,175,55,.7);text-decoration:none;border-bottom:1px dashed rgba(212,175,55,.4);padding-bottom:1px" data-i18n="ann.feedback">有問題或想許願新功能？點此回報 →</a>
+    </div>
   </div>
 </div>
 
@@ -913,8 +916,9 @@ Object.assign(T, {
   'set.font.head':{zh:'✦ 字級大小（看不清楚可調大）',en:'✦ Text size (make it bigger if hard to read)'},
   'font.lv0':{zh:'標準',en:'Normal'},'font.lv1':{zh:'大',en:'Large'},'font.lv2':{zh:'特大',en:'X-Large'},'font.lv3':{zh:'超大',en:'XX-Large'},
   'font.btn.title':{zh:'字級大小（點我放大）',en:'Text size (tap to enlarge)'},
-  'ann.title':{zh:'✦ 服務通知',en:'✦ Service Update'},
-  'ann.body':{zh:'6/14 晚間約 7:30（台灣時間 GMT+8），因 AI 服務商的 API 額度已滿，AI 深度解牌曾短暫暫停，造成不便很抱歉 🙏<br><br>目前已經<strong style="color:var(--gold)">提高流量額度、恢復服務</strong>，已付費解鎖的朋友歡迎再回來試試 ✨<br><br>💡 <strong style="color:var(--gold)">已付費的朋友</strong>：如果當時 AI 深度解析跑不出來、但你有<strong>儲存那次占卜</strong>，可到「<strong>占卜記錄</strong>」找到那一筆 → 點「<strong>用 AI 解析</strong>」就能補跑，不用重抽 🔮',en:'Around 7:30pm on Jun 14 (Taiwan time, GMT+8 / ~11:30am UTC), AI deep readings were briefly paused because the AI provider\'s API quota was full — sorry for the hiccup 🙏<br><br>We\'ve now <strong style="color:var(--gold)">raised the quota and restored service</strong> — unlocked members are welcome to try again ✨<br><br>💡 <strong style="color:var(--gold)">If you\'ve unlocked AI</strong>: when a deep reading couldn\'t run earlier but you <strong>saved that reading</strong>, open "<strong>History</strong>", find it, and tap "<strong>Analyze with AI</strong>" to run it now — no need to redraw 🔮'},
+  'ann.title':{zh:'✦ 新牌陣上線 🔮',en:'✦ New Spreads Added 🔮'},
+  'ann.body':{zh:'🔮 <strong style="color:var(--gold)">今天新增了 3 個牌陣！</strong><br><br>✦ <strong>四張牌 · 直指核心</strong>：問題核心 → 障礙 → 對策 → 優勢，一次看清卡關與解方<br>✦ <strong>五張牌 · 感情萬用</strong>：看見雙方現況、對彼此的感情態度，以及可能的走向<br>✦ <strong>賽爾特十字</strong>：塔羅最經典的 10 張綜合大牌陣（傳統十字造型）<br><br>⚡ 還新增「<strong>一鍵快速抽牌</strong>」，抽大牌陣不用一張一張點，一秒抽完！<br><br>快到「選擇牌陣」試試看 ✨',en:'🔮 <strong style="color:var(--gold)">3 new spreads added today!</strong><br><br>✦ <strong>Four-Card · Core Insight</strong>: Core → Obstacle → Move → Strengths — see the block and the way through at once<br>✦ <strong>Five-Card · Relationship</strong>: both people\'s current state, how each feels, and the likely direction<br>✦ <strong>Celtic Cross</strong>: the classic 10-card comprehensive spread (in its traditional cross shape)<br><br>⚡ Plus new <strong>Quick Draw</strong> — draw a whole spread in one tap, no more picking cards one by one!<br><br>Head to "Choose a Spread" to try them ✨'},
+  'ann.feedback':{zh:'有問題或想許願新功能？點此回報 →',en:'Found a bug or have a feature wish? Tell us →'},
   'ann.ok':{zh:'我知道了',en:'Got it'},
   'report.title':{zh:'🐞 回報問題',en:'🐞 Report a Problem'},
   'report.desc':{zh:'遇到問題或有建議嗎？把情況描述寄到下面這個信箱，我會盡快處理 🙏',en:'Hit a problem or have a suggestion? Email the details to the address below and I\'ll get on it 🙏'},
@@ -3457,8 +3461,8 @@ async function submitReport(){
   }finally{ if(btn) btn.disabled=false; }
 }
 // 一次性公告（看過就不再跳；要再對所有人公告，換一個新的 ANNOUNCE_ID 即可）
-const ANNOUNCE_ID = '2026-06-14-quota-restored-v2';
-const ANNOUNCE_EXPIRES = new Date('2026-06-15T00:00:00'); // 過了今天（6/15 起）就不再顯示
+const ANNOUNCE_ID = '2026-07-05-new-spreads';
+const ANNOUNCE_EXPIRES = new Date('2026-07-20T00:00:00'); // 顯示到 7/19，之後自動停止
 function showAnnounce(){
   if(new Date() >= ANNOUNCE_EXPIRES) return; // 公告已過期
   if(localStorage.getItem('tr_announce_'+ANNOUNCE_ID)) return;
