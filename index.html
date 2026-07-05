@@ -595,6 +595,12 @@ textarea.inp{resize:vertical;min-height:90px}
       <div class="spread-desc" data-i18n-html="sp.five.desc">無視論五牌陣<br>重點牌 · 輔助牌 · 元素分析</div>
       <div class="spread-fit" data-i18n="sp.five.fit">適合：想深入了解單一主題的整體能量，如「接下來這段感情的走向」</div>
     </div>
+    <div class="spread-opt" onclick="pickSpread('celtic')">
+      <span class="spread-icon">✚ ▮▮▮▮</span>
+      <div class="spread-name" data-i18n="sp.celtic.name">賽爾特十字</div>
+      <div class="spread-desc" data-i18n-html="sp.celtic.desc">10 張 · 最經典綜合大牌陣<br>現況 · 過去未來 · 內外影響 · 結果</div>
+      <div class="spread-fit" data-i18n="sp.celtic.fit">適合：重要、複雜、想看最深最完整的問題，如「這個合作案最後會如何」</div>
+    </div>
     <div class="spread-opt" onclick="pickSpread('love')">
       <span class="spread-icon">♡ ♡ · ♡ ♡<br>♡</span>
       <div class="spread-name" data-i18n="sp.love.name">五張牌 · 感情萬用</div>
@@ -897,6 +903,9 @@ Object.assign(T, {
   'sp.love.name':{zh:'五張牌 · 感情萬用',en:'Five-Card · Relationship'},
   'sp.love.desc':{zh:'雙方現況 · 對彼此的感情態度 · 可能結果<br>感情問題萬用',en:'Both states · how each feels · likely outcome<br>An all-purpose love reading'},
   'sp.love.fit':{zh:'適合：想了解你和某個特定對象的感情，如「我和◯◯目前的狀況與發展」',en:'Best for: your relationship with one specific person — e.g. "Me and ___, where do we stand and where is it going?"'},
+  'sp.celtic.name':{zh:'賽爾特十字',en:'Celtic Cross'},
+  'sp.celtic.desc':{zh:'10 張 · 最經典綜合大牌陣<br>現況 · 過去未來 · 內外影響 · 結果',en:'10 cards · the classic full spread<br>present · past & future · inner & outer · outcome'},
+  'sp.celtic.fit':{zh:'適合：重要、複雜、想看最深最完整的問題，如「這個合作案最後會如何」',en:'Best for: important, complex questions you want in full depth — e.g. "How will this deal ultimately turn out?"'},
   'sp.five.name':{zh:'五張無視論',en:'Five-Card Wuxi'},
   'sp.rec':{zh:'★ 最推薦',en:'★ Top Pick'},
   'sp.five.desc':{zh:'全方位解牌 · 無視論五牌陣<br>重點牌 · 輔助牌 · 元素分析',en:'All-around reading · Wuxi method<br>Key card · supporting cards · elements'},
@@ -1332,7 +1341,14 @@ const SPREADS = {
     hint:'感情萬用牌陣，一次看見雙方的現況、對彼此的感情態度，以及可能的走向。適合問你和某個特定對象之間的關係。建議問法：「我和◯◯目前的感情狀況如何？可能會怎麼發展？」（結果只給大方向，因為對方一旦改變心意就可能不同）',
     hintEn:'An all-purpose relationship spread — see both people\'s current state, how each feels about the other, and the likely direction. Best for asking about you and one specific person. Suggested wording: "How are things between me and ___ right now, and where might they go?" (the outcome is a direction, not a verdict — it can change if either heart changes.)',
     eg:['我和◯◯目前的感情狀況如何？可能會怎麼發展？','對方現在對我是什麼樣的感情態度？'],
-    egEn:['How are things between me and ___ right now, and where might they go?','What are their feelings toward me at the moment?']}
+    egEn:['How are things between me and ___ right now, and where might they go?','What are their feelings toward me at the moment?']},
+  celtic:{name:'賽爾特十字',nameEn:'Celtic Cross',pos:['現況','影響因素','理想','基礎','過去','未來','自我','環境','希望或恐懼','結果'],posEn:['Present','Influence','Ideal','Foundation','Past','Future','Self','Environment','Hopes / Fears','Outcome'],
+    posDesc:['問卜者目前所看到、所處的狀況','加在現況上的阻力或助力（正面的牌為助力，負面的牌為阻力）','你覺得最理想的狀況，或對這件事的想法','目前已累積的成果，或可以利用的資源','過去發生、影響到現在的事','接下來會發生的事、近期的走向','綜合前六張後，你自身的狀態與心態','外在環境因素，或他人的觀點','你希望發生、或害怕發生的事（正面的牌為希望，負面的牌為恐懼）','事情最後的結果'],
+    posDescEn:['The situation as you currently see and stand in it','The force added to the present — help or obstacle (a positive card helps, a negative card blocks)','What you see as ideal, or your conscious thoughts about the matter','The results already built up, or the resources available to draw on','Past events that led to and shape the present','What is coming next — the near-term direction','Your own state and mindset, summing up cards 1–6','External environment, and how others see it','What you hope will happen, or fear will happen (positive card = hope, negative card = fear)','The final outcome of the matter'],
+    hint:'塔羅最經典的綜合大牌陣（10 張），從現況、過去未來、內在外在到最終結果全面剖析一件事，適合重要、複雜、想看得最深最完整的問題。建議問法：「這個合作案／這件事最後會如何發展？」（牌數多、資訊豐富，適合認真想深入了解的主題）',
+    hintEn:'The classic comprehensive spread (10 cards) — analyzes a matter fully, from the present, past and future to inner and outer influences and the final outcome. Best for important, complex questions you want to see in full depth. Suggested wording: "How will this deal / this matter ultimately turn out?" (many cards and lots of detail — best for a topic you genuinely want to go deep on.)',
+    eg:['這個合作案最後會不會談成功？','這件事從過去到未來、最後的結果會如何發展？'],
+    egEn:['Will this deal ultimately come together?','From past to future, how will this whole matter unfold and end up?']}
 };
 function spreadNameOf(type){ const s=SPREADS[type]; if(!s)return ''; return LANG==='en'?(s.nameEn||s.name):s.name; }
 function spreadPos(type){ const s=SPREADS[type]; if(!s)return []; return LANG==='en'?(s.posEn||s.pos):s.pos; }
@@ -3537,8 +3553,8 @@ function toggleAiInfo(){
 // ══════════════════════════════════════════
 const CHANGELOG = [
   { date:'2026-07-05',
-    zh:['新增「四張牌 · 直指核心」牌陣：問題核心 → 障礙 → 對策 → 優勢，一次看清卡關的關鍵、你遇到的阻力、可行的作法，以及你手邊已有的資源，適合「老是卡關卻說不出問題在哪」的狀況','新增「五張牌 · 感情萬用」牌陣：我的狀態 → 我對對方的態度 → 對方的狀態 → 對方對我的態度 → 可能的結果，一次看見雙方現況與對彼此的感情，適合了解你和某個特定對象的關係走向（結果為大方向，會隨雙方心意改變）'],
-    en:['New "Four-Card · Core Insight" spread: Core → Obstacle → Move → Strengths — pinpoints the real crux of a stuck situation, the resistance you face, the concrete move you can make, and the resources you already have; ideal when you keep stalling but can\'t name the issue','New "Five-Card · Relationship" spread: My State → My Feelings → Their State → Their Feelings → Possible Outcome — see both people\'s current state and how each feels, for understanding where you and one specific person are heading (the outcome is a direction and can shift as either heart changes)'] },
+    zh:['新增「四張牌 · 直指核心」牌陣：問題核心 → 障礙 → 對策 → 優勢，一次看清卡關的關鍵、你遇到的阻力、可行的作法，以及你手邊已有的資源，適合「老是卡關卻說不出問題在哪」的狀況','新增「五張牌 · 感情萬用」牌陣：我的狀態 → 我對對方的態度 → 對方的狀態 → 對方對我的態度 → 可能的結果，一次看見雙方現況與對彼此的感情，適合了解你和某個特定對象的關係走向（結果為大方向，會隨雙方心意改變）','新增「賽爾特十字」牌陣：塔羅最經典的 10 張綜合大牌陣，從現況、過去未來、內在外在到最終結果全面剖析，適合重要、複雜、想看得最深最完整的問題'],
+    en:['New "Four-Card · Core Insight" spread: Core → Obstacle → Move → Strengths — pinpoints the real crux of a stuck situation, the resistance you face, the concrete move you can make, and the resources you already have; ideal when you keep stalling but can\'t name the issue','New "Five-Card · Relationship" spread: My State → My Feelings → Their State → Their Feelings → Possible Outcome — see both people\'s current state and how each feels, for understanding where you and one specific person are heading (the outcome is a direction and can shift as either heart changes)','New "Celtic Cross" spread: the classic 10-card comprehensive layout — a full analysis from the present, past and future to inner and outer influences and the final outcome, for important, complex questions you want to see in full depth'] },
   { date:'2026-07-04',
     zh:['不知道怎麼問？每個牌陣現在都附 1–2 個「範例問題」，點一下自動填入問題欄，沒有占卜經驗也能立刻開始','「說明與回報中心」正式啟用：內建常見問題 FAQ，並可直接送出「🐞 問題回報 / 💡 功能許願」給開發者（站內表單，不必寄信）','頁尾「聯繫我們」改為直接開啟站內回報表單，回覆更快也更保護雙方隱私','安全性全面強化：顯示內容加上防護、付款通知加上來源驗證，你的記錄與存取更安全'],
     en:['Not sure what to ask? Every spread now offers 1–2 tappable example questions — tap one and it fills in your question so you can start right away','The Help & Feedback center is now live: a built-in FAQ plus an in-app form to send "🐞 Report a problem / 💡 Feature wish" to the developer (no email needed)','The footer "Contact Us" link now opens the in-app feedback form directly — faster replies and better privacy for everyone','Security hardening across the site: displayed content is now sanitized and payment notifications are origin-verified, keeping your records and access safer'] },
