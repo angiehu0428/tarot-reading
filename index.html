@@ -719,6 +719,7 @@ textarea.inp{resize:vertical;min-height:90px}
   <div class="rand-badge" data-i18n="sh.badge">🔐 加密隨機算法 · 每次完全獨立</div>
   <div class="shuffle-wrap" id="shuffle-wrap"></div>
   <button class="btn" id="btn-pick" onclick="beginPick()" style="display:none;margin-top:16px" data-i18n="sh.pick">✦ 開始抽牌 ✦</button>
+  <button class="btn btn-ghost btn-sm" id="btn-quick" onclick="quickDraw()" style="display:none;margin-top:8px" data-i18n="sh.quick">⚡ 一鍵快速抽牌</button>
 </div>
 
 <!-- ══ PICK ══ -->
@@ -726,6 +727,7 @@ textarea.inp{resize:vertical;min-height:90px}
   <h2 class="t-section t-gold" id="pick-title" data-i18n="pick.title">選擇牌卡</h2>
   <div class="t-divider">— ✦ —</div>
   <p class="t-muted"><span data-i18n="pick.left.pre">以直覺選擇，還需選擇 </span><span id="pick-left" style="color:var(--gold);font-weight:700"></span><span data-i18n="pick.left.suf"> 張</span></p>
+  <div style="margin-bottom:16px"><button class="btn btn-sm" onclick="quickDraw()" data-i18n="pick.quick">⚡ 一鍵快速抽牌</button></div>
   <div class="cards-grid" id="cards-grid"></div>
 </div>
 
@@ -990,6 +992,8 @@ Object.assign(T, {
   'sh.sub':{zh:'將你的意念注入牌卡之中',en:'Pour your intention into the cards'},
   'sh.badge':{zh:'🔐 加密隨機算法 · 每次完全獨立',en:'🔐 Cryptographic randomness · fully independent each time'},
   'sh.pick':{zh:'✦ 開始抽牌 ✦',en:'✦ Draw Cards ✦'},
+  'sh.quick':{zh:'⚡ 一鍵快速抽牌',en:'⚡ Quick draw'},
+  'pick.quick':{zh:'⚡ 一鍵快速抽牌（隨機）',en:'⚡ Quick draw (random)'},
   // ── Reading head ──
   'rd.head':{zh:'✦ 神諭解讀 ✦',en:'✦ The Oracle Speaks ✦'},
   // ── Pick ──
@@ -1710,7 +1714,7 @@ function beginShuffle(){
       phase++;setTimeout(anim,650);
     } else {
       cards.forEach((c,i)=>{const off=(i-10.5)*2.2;c.style.transform=`translate(calc(-50% + ${off}px),-50%) rotate(${(cryptoRand()-.5)*2}deg)`;c.style.transition='all .6s ease';});
-      setTimeout(()=>{document.getElementById('btn-pick').style.display='inline-block';},900);
+      setTimeout(()=>{document.getElementById('btn-pick').style.display='inline-block';document.getElementById('btn-quick').style.display='inline-block';},900);
     }
   };
   setTimeout(anim,300);
@@ -1737,6 +1741,19 @@ function doPick(idx,el){
   el.classList.add('picked');S.picked.push(idx);
   document.getElementById('pick-left').textContent=need-S.picked.length;
   if(S.picked.length>=need)setTimeout(showReading,600);
+}
+// 一鍵快速抽牌：用加密隨機從整副牌中隨機抽出所需張數，直接進入解讀（免逐張點選）。
+function quickDraw(){
+  const need=S.pos.length;
+  if(!S.deck||!S.deck.length){
+    const arr=fisherYates([...Array(78).keys()]);
+    S.deck=arr.map(cid=>({cid,rev:cryptoRand()<0.35}));
+  }
+  const pool=[...Array(S.deck.length).keys()];
+  const idx=[];
+  for(let i=0;i<need;i++){ const j=Math.floor(cryptoRand()*pool.length); idx.push(pool.splice(j,1)[0]); }
+  S.picked=idx;
+  showReading();
 }
 
 // ══════════════════════════════════════════
@@ -1835,7 +1852,7 @@ function showReading(resumeId){
       </div>
       <div style="font-size:.72rem;margin-top:2px;color:${rev?'var(--red)':'var(--muted)'}">${rev?'逆位':'正位'}</div>`;
     spreadEl.appendChild(item);
-    setTimeout(()=>document.getElementById(`fi-${i}`).classList.add('done'),350+i*420);
+    setTimeout(()=>{const fe=document.getElementById(`fi-${i}`); if(fe) fe.classList.add('done');},350+i*420);
   });
 
   document.getElementById('card-details').innerHTML=buildDetails();
@@ -3583,8 +3600,8 @@ function toggleAiInfo(){
 // ══════════════════════════════════════════
 const CHANGELOG = [
   { date:'2026-07-05',
-    zh:['新增「四張牌 · 直指核心」牌陣：問題核心 → 障礙 → 對策 → 優勢，一次看清卡關的關鍵、你遇到的阻力、可行的作法，以及你手邊已有的資源，適合「老是卡關卻說不出問題在哪」的狀況','新增「五張牌 · 感情萬用」牌陣：我的狀態 → 我對對方的態度 → 對方的狀態 → 對方對我的態度 → 可能的結果，一次看見雙方現況與對彼此的感情，適合了解你和某個特定對象的關係走向（結果為大方向，會隨雙方心意改變）','新增「賽爾特十字」牌陣：塔羅最經典的 10 張綜合大牌陣，從現況、過去未來、內在外在到最終結果全面剖析，適合重要、複雜、想看得最深最完整的問題'],
-    en:['New "Four-Card · Core Insight" spread: Core → Obstacle → Move → Strengths — pinpoints the real crux of a stuck situation, the resistance you face, the concrete move you can make, and the resources you already have; ideal when you keep stalling but can\'t name the issue','New "Five-Card · Relationship" spread: My State → My Feelings → Their State → Their Feelings → Possible Outcome — see both people\'s current state and how each feels, for understanding where you and one specific person are heading (the outcome is a direction and can shift as either heart changes)','New "Celtic Cross" spread: the classic 10-card comprehensive layout — a full analysis from the present, past and future to inner and outer influences and the final outcome, for important, complex questions you want to see in full depth'] },
+    zh:['新增「四張牌 · 直指核心」牌陣：問題核心 → 障礙 → 對策 → 優勢，一次看清卡關的關鍵、你遇到的阻力、可行的作法，以及你手邊已有的資源，適合「老是卡關卻說不出問題在哪」的狀況','新增「五張牌 · 感情萬用」牌陣：我的狀態 → 我對對方的態度 → 對方的狀態 → 對方對我的態度 → 可能的結果，一次看見雙方現況與對彼此的感情，適合了解你和某個特定對象的關係走向（結果為大方向，會隨雙方心意改變）','新增「賽爾特十字」牌陣：塔羅最經典的 10 張綜合大牌陣，從現況、過去未來、內在外在到最終結果全面剖析，適合重要、複雜、想看得最深最完整的問題（並以傳統十字＋權杖造型呈現）','新增「⚡ 一鍵快速抽牌」：不想一張一張點，可在洗牌或抽牌畫面按一下，用加密隨機直接抽出整組牌並進入解讀，抽大牌陣（如賽爾特十字 10 張）更省時'],
+    en:['New "Four-Card · Core Insight" spread: Core → Obstacle → Move → Strengths — pinpoints the real crux of a stuck situation, the resistance you face, the concrete move you can make, and the resources you already have; ideal when you keep stalling but can\'t name the issue','New "Five-Card · Relationship" spread: My State → My Feelings → Their State → Their Feelings → Possible Outcome — see both people\'s current state and how each feels, for understanding where you and one specific person are heading (the outcome is a direction and can shift as either heart changes)','New "Celtic Cross" spread: the classic 10-card comprehensive layout — a full analysis from the present, past and future to inner and outer influences and the final outcome, for important, complex questions you want to see in full depth (shown in the traditional cross + staff shape)','New "⚡ Quick draw": don\'t want to tap cards one by one? Tap once on the shuffle or pick screen to draw the whole spread at once with crypto-random selection and go straight to the reading — a big time-saver for large spreads like the 10-card Celtic Cross'] },
   { date:'2026-07-04',
     zh:['不知道怎麼問？每個牌陣現在都附 1–2 個「範例問題」，點一下自動填入問題欄，沒有占卜經驗也能立刻開始','「說明與回報中心」正式啟用：內建常見問題 FAQ，並可直接送出「🐞 問題回報 / 💡 功能許願」給開發者（站內表單，不必寄信）','頁尾「聯繫我們」改為直接開啟站內回報表單，回覆更快也更保護雙方隱私','安全性全面強化：顯示內容加上防護、付款通知加上來源驗證，你的記錄與存取更安全'],
     en:['Not sure what to ask? Every spread now offers 1–2 tappable example questions — tap one and it fills in your question so you can start right away','The Help & Feedback center is now live: a built-in FAQ plus an in-app form to send "🐞 Report a problem / 💡 Feature wish" to the developer (no email needed)','The footer "Contact Us" link now opens the in-app feedback form directly — faster replies and better privacy for everyone','Security hardening across the site: displayed content is now sanitized and payment notifications are origin-verified, keeping your records and access safer'] },
