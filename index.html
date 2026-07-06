@@ -558,7 +558,8 @@ textarea.inp{resize:vertical;min-height:90px}
 <div id="s-projects" class="screen">
   <h2 class="t-section t-gold" data-i18n="pj.title">專案占卜</h2>
   <div class="t-divider">— ✦ —</div>
-  <p class="t-muted" style="max-width:500px;margin-bottom:24px" data-i18n="pj.intro">針對同一主題持續追蹤，AI 解讀時會結合所有過去紀錄一起分析脈絡</p>
+  <p class="t-muted" style="max-width:500px;margin-bottom:14px" data-i18n="pj.intro">針對同一主題持續追蹤，AI 解讀時會結合所有過去紀錄一起分析脈絡</p>
+  <p class="hint" style="max-width:520px;margin:0 auto 24px;padding:12px 16px;border-radius:8px;background:rgba(212,175,55,.06);border:1px solid rgba(212,175,55,.2);text-align:left;line-height:1.85" data-i18n="pj.note">💡 小提醒：塔羅一般預測未來約 3 個月內的狀況。建議在事件有明顯變化或轉折時，再針對後續重抽；不建議短時間內重複抽同一件事——牌義不會因為重抽而改變，反而容易失焦。</p>
   <div class="proj-list" id="proj-list"></div>
   <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:8px;justify-content:center">
     <button class="btn btn-sm" onclick="go('s-project-new')" data-i18n="pj.new">+ 新建專案</button>
@@ -591,6 +592,7 @@ textarea.inp{resize:vertical;min-height:90px}
       <button class="btn btn-sm" id="pv-start-btn" data-i18n="pv.continue">✦ 繼續占卜此主題 ✦</button>
       <button class="btn btn-sm btn-ghost" id="pv-delete-btn" data-i18n="pv.delete">刪除專案</button>
     </div>
+    <p class="hint" style="margin:-12px auto 24px;padding:12px 16px;border-radius:8px;background:rgba(212,175,55,.06);border:1px solid rgba(212,175,55,.2);line-height:1.85" data-i18n="pj.note">💡 小提醒：塔羅一般預測未來約 3 個月內的狀況。建議在事件有明顯變化或轉折時，再針對後續重抽；不建議短時間內重複抽同一件事——牌義不會因為重抽而改變，反而容易失焦。</p>
     <div class="timeline" id="pv-timeline"></div>
     <div style="text-align:center;margin-top:16px" id="pv-empty"></div>
   </div>
@@ -1020,6 +1022,7 @@ Object.assign(T, {
   // ── Projects ──
   'pj.title':{zh:'專案占卜',en:'Project Readings'},
   'pj.intro':{zh:'針對同一主題持續追蹤，AI 解讀時會結合所有過去紀錄一起分析脈絡',en:'Track one theme over time — AI readings analyze the context using all your past records.'},
+  'pj.note':{zh:'💡 小提醒：塔羅一般預測未來約 3 個月內的狀況。建議在事件有明顯變化或轉折時，再針對後續重抽；不建議短時間內重複抽同一件事——牌義不會因為重抽而改變，反而容易失焦。',en:'💡 Tip: A tarot reading generally reflects roughly the next 3 months. Re-draw for follow-up only when the situation has clearly changed or shifted — avoid repeatedly drawing the same question in a short span. Redrawing won\'t change the cards\' message and tends to blur your focus.'},
   'pj.new':{zh:'+ 新建專案',en:'+ New Project'},
   'pj.skip':{zh:'不使用專案，直接占卜',en:'Skip projects, read directly'},
   'pn.title':{zh:'建立新專案',en:'Create New Project'},
