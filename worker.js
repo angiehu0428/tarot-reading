@@ -14,6 +14,7 @@ function todayKey() { return 'count:' + new Date().toISOString().slice(0, 10); }
 const ALLOWED_ORIGINS = [
   'https://angiehu0428.github.io',
   'https://tarot.angiehu.com',
+  'https://color.hucreates.com', // Ink Match / Pantone converter — shares the /report endpoint
 ];
 
 function corsHeaders(request) {
@@ -86,7 +87,7 @@ export default {
 
 // ── Report / feature wish ────────────────────────────────────
 async function handleReport(request, env) {
-  const { type, message, contact, ctx, lang, ua } = await request.json().catch(() => ({}));
+  const { type, message, contact, ctx, lang, ua, site } = await request.json().catch(() => ({}));
   const msg = (message || '').toString().trim().slice(0, 2000);
   if (!msg) return json({ error: 'empty' }, 400, request);
   const id = Date.now();
@@ -99,12 +100,13 @@ async function handleReport(request, env) {
     ctx: (ctx || '').toString().slice(0, 40),
     lang: (lang || '').toString().slice(0, 8),
     ua: (ua || '').toString().slice(0, 200),
+    site: (site || 'tarot').toString().slice(0, 20), // which site the report came from
   };
   await env.TAROT_KV.put('report:' + id, JSON.stringify(rec), { expirationTtl: 60 * 60 * 24 * 365 });
   // Telegram 即時通知：設定 TG_BOT_TOKEN + TG_CHAT_ID 兩個 secret 才啟用；
   // 通知失敗不影響回報本身（KV 已存檔，/reports 一樣看得到）。
   if (env.TG_BOT_TOKEN && env.TG_CHAT_ID) {
-    const tgText = `${rec.type === 'wish' ? '💡 功能許願' : '🐞 問題回報'}\n\n${rec.message}` +
+    const tgText = `${rec.type === 'wish' ? '💡 功能許願' : '🐞 問題回報'}（${rec.site}）\n\n${rec.message}` +
       (rec.contact ? `\n\n↩ 聯絡方式：${rec.contact}` : '') +
       `\n🌐 ${rec.lang || '?'}${rec.ctx ? ' · ' + rec.ctx : ''}`;
     try {
@@ -133,7 +135,7 @@ async function handleReports(request, env) {
     const isWish = r.type === 'wish';
     return `<div class="card ${isWish ? 'wish' : 'issue'}" data-id="${r.id}">
       <button class="del" onclick="delReport(this)" title="刪除這筆回報">✕</button>
-      <div class="meta"><span class="tag">${isWish ? '💡 許願' : '🐞 問題'}</span><span class="date">${new Date(r.date).toLocaleString('zh-TW')}</span>${r.ctx ? `<span class="ctx">${esc(r.ctx)}</span>` : ''}<span class="lang">${esc(r.lang)}</span></div>
+      <div class="meta"><span class="tag">${isWish ? '💡 許願' : '🐞 問題'}</span><span class="site">${esc(r.site || 'tarot')}</span><span class="date">${new Date(r.date).toLocaleString('zh-TW')}</span>${r.ctx ? `<span class="ctx">${esc(r.ctx)}</span>` : ''}<span class="lang">${esc(r.lang)}</span></div>
       <div class="msg">${esc(r.message)}</div>
       ${r.contact ? `<div class="contact">↩ ${esc(r.contact)}</div>` : ''}
       <div class="ua">${esc(r.ua)}</div>
@@ -155,6 +157,7 @@ async function handleReports(request, env) {
   .tag{color:#f0d878;font-weight:700}
   .card.wish .tag{color:#9ec5ff}
   .ctx,.lang{background:rgba(255,255,255,.06);border-radius:4px;padding:1px 6px}
+  .site{background:rgba(120,180,255,.14);color:#9ec5ff;border-radius:4px;padding:1px 7px;font-weight:700;letter-spacing:.04em}
   .msg{color:#efe9ff;font-size:.95rem;white-space:pre-wrap;line-height:1.7}
   .contact{margin-top:8px;color:#d4af37;font-size:.82rem}
   .ua{margin-top:6px;color:#5a4d75;font-size:.66rem;word-break:break-all}
