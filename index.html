@@ -2419,7 +2419,7 @@ async function fetchRetry(doFetch, tries=3){
 // ── OpenAI 支援：自備 sk- 開頭的 Key 時改走 OpenAI ──
 function AI_SYS_TEXT(){ return LANG==='en'
   ? 'Respond only in English. Never use any markdown syntax (no *, **, #, -, • symbols). Output plain text paragraphs only. Do not assume the gender of the querent or of anyone in their situation; avoid gendered pronouns — use "they/them" or "this person" instead of he/she.'
-  : '你只能用繁體中文回覆。絕對不能使用任何 markdown 語法（不能用 *、**、#、-、• 等符號）。只能輸出純文字段落。不要預設提問者或對方的性別；避免使用「她」「妳」等帶性別的代名詞，改用「對方」「這個人」「TA」或中性的「你／他」。'; }
+  : '你只能用繁體中文回覆。絕對不能使用任何 markdown 語法（不能用 *、**、#、-、• 等符號）。只能輸出純文字段落。不要預設提問者或對方的性別；避免使用「她」「妳」等帶性別的代名詞，一律改用中性的「他」，或視情況用「對方」「這個人」。請不要使用「TA」這種寫法。'; }
 function apiProvider(key){return key&&key.startsWith('sk-')?'openai':'gemini';}
 async function callOpenAI(key, sysText, messages){
   const resp=await fetchRetry(()=>fetch('https://api.openai.com/v1/chat/completions',{
@@ -2990,7 +2990,7 @@ async function sendChat(){
   try{
     const context=LANG==='en'
       ? `You are a tarot reader. Here is the reading just given:\nQuestion: "${S.q}"\nReading: ${S.lastInterpText}\n\nAnswer the querent's follow-up based on this reading. Your answer must be complete and not cut off. Respond entirely in English, no markdown symbols, plain text paragraphs only. Do not assume anyone's gender; avoid gendered pronouns — use "they/them" or "this person".`
-      : `你是一位精通塔羅的占卜師。以下是剛才的占卜結果：\n問題：「${S.q}」\n解讀：${S.lastInterpText}\n\n請根據以上解讀回答問卜者的追問。回答必須完整，不能中途停止。全程用繁體中文，禁止使用 markdown 符號，輸出純文字段落。不要預設任何人的性別，避免使用「她」「妳」等帶性別代名詞，改用「對方」「這個人」「TA」或中性說法。`;
+      : `你是一位精通塔羅的占卜師。以下是剛才的占卜結果：\n問題：「${S.q}」\n解讀：${S.lastInterpText}\n\n請根據以上解讀回答問卜者的追問。回答必須完整，不能中途停止。全程用繁體中文，禁止使用 markdown 符號，輸出純文字段落。不要預設任何人的性別，避免使用「她」「妳」等帶性別代名詞，一律改用中性的「他」，或視情況用「對方」「這個人」。請不要使用「TA」這種寫法。`;
     const history=S.chatHistory.slice(0,-1).map(m=>({role:m.role==='user'?'user':'model',parts:[{text:m.text}]}));
     const geminiBody={
       systemInstruction:{parts:[{text:context}]},
