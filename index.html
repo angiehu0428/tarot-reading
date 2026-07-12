@@ -1713,30 +1713,53 @@ function beginMeditation(){
 // ══════════════════════════════════════════
 //  SHUFFLE — crypto random
 // ══════════════════════════════════════════
-// ── 洗牌音效：Web Audio 即時合成紙牌刷聲（一連串短噪音脈衝＋帶通濾波），零下載 ──
+// ── 洗牌音效：Web Audio 即時合成紙牌刷聲，零下載 ──
+// 擬真關鍵：每一下「啪嗒」各自有不同的濾波頻率／音量／時間抖動（避免機械感），
+// 整體再過一層低通軟化高頻，底下墊一層低頻沙沙聲當牌疊的「厚度」。
 function playShuffleSfx(dur){
   try{
     if(!AC) AC=new (window.AudioContext||window.webkitAudioContext)();
     AC.resume();
-    const n=Math.floor(dur*AC.sampleRate);
-    const buf=AC.createBuffer(1,n,AC.sampleRate);
-    const d=buf.getChannelData(0);
-    const flicks=Math.max(4,Math.floor(dur*26)); // 每秒約 26 下「啪嗒」，模擬牌卡互相刷過
+    const t0=AC.currentTime+.02;
+    const master=AC.createGain(); master.gain.value=.35;
+    const soft=AC.createBiquadFilter(); soft.type='lowpass'; soft.frequency.value=3600; soft.Q.value=.4;
+    master.connect(soft); soft.connect(AC.destination);
+    // 共用一小段白噪音，每下用不同 playbackRate 取樣
+    const nLen=Math.floor(.06*AC.sampleRate);
+    const nBuf=AC.createBuffer(1,nLen,AC.sampleRate);
+    const nd=nBuf.getChannelData(0);
+    for(let i=0;i<nLen;i++) nd[i]=Math.random()*2-1;
+    const flicks=Math.max(5,Math.round(dur*22));
     for(let f=0;f<flicks;f++){
-      const start=Math.floor((f/flicks)*n+Math.random()*(n/flicks)*.5);
-      const len=Math.floor(AC.sampleRate*(.006+Math.random()*.011));
-      const amp=.4+Math.random()*.6;
-      for(let i=0;i<len&&start+i<n;i++) d[start+i]+=(Math.random()*2-1)*amp*Math.pow(1-i/len,2);
+      const prog=f/flicks;
+      const at=t0+dur*(Math.pow(prog,.9)+(Math.random()-.5)*.5/flicks); // 微加速＋抖動，像真的 riffle
+      const src=AC.createBufferSource(); src.buffer=nBuf;
+      src.playbackRate.value=.7+Math.random()*.6;
+      const bp=AC.createBiquadFilter(); bp.type='bandpass';
+      bp.frequency.value=900+Math.random()*1700; bp.Q.value=1.1;
+      const g=AC.createGain();
+      const amp=(.3+Math.random()*.4)*(.45+.55*Math.sin(Math.PI*prog)); // 中段最響、頭尾漸收
+      g.gain.setValueAtTime(0,at);
+      g.gain.linearRampToValueAtTime(amp,at+.005); // 有一點 attack，不是瞬間爆音
+      g.gain.exponentialRampToValueAtTime(.001,at+.035+Math.random()*.03);
+      src.connect(bp); bp.connect(g); g.connect(master);
+      src.start(at); src.stop(at+.09);
     }
-    const src=AC.createBufferSource(); src.buffer=buf;
-    const bp=AC.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=2400; bp.Q.value=.6;
-    const g=AC.createGain();
-    g.gain.setValueAtTime(.16,AC.currentTime);
-    g.gain.setValueAtTime(.16,AC.currentTime+dur*.7);
-    g.gain.linearRampToValueAtTime(0,AC.currentTime+dur);
-    src.connect(bp); bp.connect(g); g.connect(AC.destination);
-    src.start();
-    src.onended=()=>{try{src.disconnect();bp.disconnect();g.disconnect();}catch(e){}};
+    // 低頻沙沙聲鋪底（一階低通後的噪音），讓聲音有「一疊紙牌」的重量
+    const bLen=Math.floor((dur+.05)*AC.sampleRate);
+    const bBuf=AC.createBuffer(1,bLen,AC.sampleRate);
+    const bd=bBuf.getChannelData(0);
+    let lpv=0;
+    for(let i=0;i<bLen;i++){const w=Math.random()*2-1; lpv+=.08*(w-lpv); bd[i]=lpv*2.5;}
+    const bed=AC.createBufferSource(); bed.buffer=bBuf;
+    const bf=AC.createBiquadFilter(); bf.type='lowpass'; bf.frequency.value=650;
+    const bg=AC.createGain();
+    bg.gain.setValueAtTime(0,t0);
+    bg.gain.linearRampToValueAtTime(.09,t0+dur*.3);
+    bg.gain.linearRampToValueAtTime(0,t0+dur);
+    bed.connect(bf); bf.connect(bg); bg.connect(master);
+    bed.start(t0); bed.stop(t0+dur+.05);
+    setTimeout(()=>{try{master.disconnect();soft.disconnect();}catch(e){}},(dur+.3)*1000);
   }catch(e){}
 }
 function beginShuffle(){
