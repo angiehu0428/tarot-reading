@@ -1713,6 +1713,32 @@ function beginMeditation(){
 // ══════════════════════════════════════════
 //  SHUFFLE — crypto random
 // ══════════════════════════════════════════
+// ── 洗牌音效：Web Audio 即時合成紙牌刷聲（一連串短噪音脈衝＋帶通濾波），零下載 ──
+function playShuffleSfx(dur){
+  try{
+    if(!AC) AC=new (window.AudioContext||window.webkitAudioContext)();
+    AC.resume();
+    const n=Math.floor(dur*AC.sampleRate);
+    const buf=AC.createBuffer(1,n,AC.sampleRate);
+    const d=buf.getChannelData(0);
+    const flicks=Math.max(4,Math.floor(dur*26)); // 每秒約 26 下「啪嗒」，模擬牌卡互相刷過
+    for(let f=0;f<flicks;f++){
+      const start=Math.floor((f/flicks)*n+Math.random()*(n/flicks)*.5);
+      const len=Math.floor(AC.sampleRate*(.006+Math.random()*.011));
+      const amp=.4+Math.random()*.6;
+      for(let i=0;i<len&&start+i<n;i++) d[start+i]+=(Math.random()*2-1)*amp*Math.pow(1-i/len,2);
+    }
+    const src=AC.createBufferSource(); src.buffer=buf;
+    const bp=AC.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=2400; bp.Q.value=.6;
+    const g=AC.createGain();
+    g.gain.setValueAtTime(.16,AC.currentTime);
+    g.gain.setValueAtTime(.16,AC.currentTime+dur*.7);
+    g.gain.linearRampToValueAtTime(0,AC.currentTime+dur);
+    src.connect(bp); bp.connect(g); g.connect(AC.destination);
+    src.start();
+    src.onended=()=>{try{src.disconnect();bp.disconnect();g.disconnect();}catch(e){}};
+  }catch(e){}
+}
 function beginShuffle(){
   go('s-shuffle');
   const arr = fisherYates([...Array(78).keys()]);
@@ -1724,9 +1750,11 @@ function beginShuffle(){
   let phase=0;
   const anim=()=>{
     if(phase<3){
+      playShuffleSfx(.55);
       cards.forEach(c=>{const x=(cryptoRand()-.5)*360,y=(cryptoRand()-.5)*180,r=(cryptoRand()-.5)*55;c.style.transform=`translate(calc(-50% + ${x}px),calc(-50% + ${y}px)) rotate(${r}deg)`;c.style.transition=`all ${.3+cryptoRand()*.3}s ease`;});
       phase++;setTimeout(anim,650);
     } else {
+      playShuffleSfx(.3); // 收攏成一疊時較短的一聲
       cards.forEach((c,i)=>{const off=(i-10.5)*2.2;c.style.transform=`translate(calc(-50% + ${off}px),-50%) rotate(${(cryptoRand()-.5)*2}deg)`;c.style.transition='all .6s ease';});
       setTimeout(()=>{document.getElementById('btn-pick').style.display='inline-block';document.getElementById('btn-quick').style.display='inline-block';},900);
     }
