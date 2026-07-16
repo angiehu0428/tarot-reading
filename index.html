@@ -1956,7 +1956,10 @@ function runAIReading(){
     document.getElementById('interp-main').innerHTML=`<p class="interp-p">${formatted}</p>`;
     document.getElementById('chat-area').style.display='block';
     updateChatRemaining(); // 顯示本次可追問次數
-    if(S.currentReadingId) saveReading(true, true); // 先前因失敗已保存 → 更新該筆的解讀
+    // 修正：AI 成功後一律自動保存——新占卜連同專案一起存（用戶反映專案占卜沒有紀錄：
+    // 過去 AI 成功的新占卜完全不自動保存，沒按「儲存記錄」就離開等於白占）；
+    // 已保存過的（草稿/補解析）只更新內容、不重複加入專案
+    saveReading(true, !!S.currentReadingId);
   }).catch(err=>{
     console.error(err);
     const fb=fbRender();
@@ -1973,10 +1976,10 @@ function retryBarHtml(){
     <button class="btn btn-sm" onclick="runAIReading()">${L('🔄 重試 AI 解析','🔄 Retry AI reading')}</button>
   </div>`;
 }
-// AI 無法解析時自動保存目前抽牌（只存歷史、去重；不重複加入專案）
+// AI 無法解析時自動保存目前抽牌（去重；若是從專案開始的占卜，也一併記入該專案）
 function autoSaveDraw(){
   if(S.currentReadingId) return;
-  saveReading(true, true);
+  saveReading(true, false);
 }
 // 從「占卜記錄」用 AI 重新解析某一筆（重建牌局後呼叫 AI，成功後更新該筆解讀）
 // 舊紀錄沒存 type 時，從牌陣名稱 / 張數反推，讓舊記錄也能重新 AI 解析
@@ -3147,13 +3150,18 @@ function saveReading(silent, skipProject){
   fullRecs.unshift(rec);
   if(fullRecs.length>60)fullRecs.pop();
   localStorage.setItem('tr_full',JSON.stringify(fullRecs));
-  // 專案（自動保存時略過，避免重複加入）
+  // 專案同步：任何專案裡已存在同 id 的紀錄 → 一律同步最新內容
+  // （修正：過去 skipProject 的更新只寫入歷史，專案副本會停在舊解讀/空解讀）
+  let inProject=false;
+  S.projects.forEach(p=>{
+    p.readings=p.readings.map(r=>{ if(r.id===id){ inProject=true; return rec; } return r; });
+  });
+  if(inProject) saveProjects();
+  // skipProject 只阻止「新增」進專案（草稿自動保存不加入專案）；既有紀錄的更新不受限
   if(!skipProject){
     const proj = getActiveProject();
     if(proj){
-      if(proj.readings.some(r=>r.id===id)) proj.readings = proj.readings.map(r=>r.id===id?rec:r);
-      else proj.readings.push(rec);
-      saveProjects();
+      if(!proj.readings.some(r=>r.id===id)){ proj.readings.push(rec); saveProjects(); }
       if(!silent) toast(LANG==='en'?`✦ Saved to project "${proj.name}"`:`✦ 已儲存至專案「${proj.name}」`);
     } else if(!silent){
       toast(L('✦ 占卜記錄已儲存','✦ Reading saved'));
