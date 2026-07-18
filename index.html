@@ -3529,16 +3529,23 @@ async function submitReport(){
     toast(L('送出失敗，請稍後再試','Couldn\'t send, please try again later'));
   }finally{ if(btn) btn.disabled=false; }
 }
-// 一次性公告（看過就不再跳；要再對所有人公告，換一個新的 ANNOUNCE_ID 即可）
-const ANNOUNCE_ID = '2026-07-05-new-spreads';
-const ANNOUNCE_EXPIRES = new Date('2026-07-20T00:00:00'); // 顯示到 7/19，之後自動停止
+// 一次性公告（看過就不再跳；要對所有人公告，設定新的 ANNOUNCE_ID 與到期日即可）
+// 目前無進行中的公告（2026-07-05-new-spreads 已提前結束：用戶反映重複跳出很干擾）
+const ANNOUNCE_ID = '';
+const ANNOUNCE_EXPIRES = new Date('2026-07-20T00:00:00');
+// 儲存三層備援：localStorage（跨次）→ sessionStorage（LINE/FB 等 App 內瀏覽器常清 localStorage）
+// → 記憶體（隱私模式下兩者都可能不可用），確保同一次瀏覽絕不重複跳出
+let announceSeen=false;
+function announceGet(k){ try{ if(localStorage.getItem(k)) return true; }catch(e){} try{ if(sessionStorage.getItem(k)) return true; }catch(e){} return announceSeen; }
+function announceSet(k){ announceSeen=true; try{ localStorage.setItem(k,'1'); }catch(e){} try{ sessionStorage.setItem(k,'1'); }catch(e){} }
 function showAnnounce(){
+  if(!ANNOUNCE_ID) return; // 沒有進行中的公告
   if(new Date() >= ANNOUNCE_EXPIRES) return; // 公告已過期
-  if(localStorage.getItem('tr_announce_'+ANNOUNCE_ID)) return;
+  if(announceGet('tr_announce_'+ANNOUNCE_ID)) return;
   const m=document.getElementById('announce-modal'); if(m) m.classList.add('on');
 }
 function closeAnnounce(){
-  localStorage.setItem('tr_announce_'+ANNOUNCE_ID,'1');
+  if(ANNOUNCE_ID) announceSet('tr_announce_'+ANNOUNCE_ID);
   const m=document.getElementById('announce-modal'); if(m) m.classList.remove('on');
 }
 
