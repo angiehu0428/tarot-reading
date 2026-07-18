@@ -3529,10 +3529,10 @@ async function submitReport(){
     toast(L('送出失敗，請稍後再試','Couldn\'t send, please try again later'));
   }finally{ if(btn) btn.disabled=false; }
 }
-// 一次性公告（看過就不再跳；要對所有人公告，設定新的 ANNOUNCE_ID 與到期日即可）
-// 目前無進行中的公告（2026-07-05-new-spreads 已提前結束：用戶反映重複跳出很干擾）
-const ANNOUNCE_ID = '';
-const ANNOUNCE_EXPIRES = new Date('2026-07-20T00:00:00');
+// 一次性公告（沒看過的人會看到一次，關閉後不再跳；要發新公告換新的 ANNOUNCE_ID 即可）
+// 注意：App 內瀏覽器（LINE/FB）可能每次清除儲存，這類用戶每次開啟仍會視為「第一次」看到一次
+const ANNOUNCE_ID = '2026-07-05-new-spreads';
+const ANNOUNCE_EXPIRES = new Date('2026-12-31T00:00:00'); // 到期日：讓第一次來的訪客持續看得到
 // 儲存三層備援：localStorage（跨次）→ sessionStorage（LINE/FB 等 App 內瀏覽器常清 localStorage）
 // → 記憶體（隱私模式下兩者都可能不可用），確保同一次瀏覽絕不重複跳出
 let announceSeen=false;
