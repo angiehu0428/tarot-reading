@@ -270,9 +270,10 @@ textarea.inp{resize:vertical;min-height:90px}
 .chat-msg-user{align-self:flex-end;background:rgba(212,175,55,.15);border:1px solid rgba(212,175,55,.3);color:var(--white);padding:10px 16px;border-radius:16px 16px 4px 16px;font-size:.88rem;line-height:1.7;max-width:80%}
 .chat-msg-ai{align-self:flex-start;background:rgba(42,22,96,.45);border:1px solid rgba(212,175,55,.15);color:var(--silver);padding:12px 18px;border-radius:16px 16px 16px 4px;font-size:.88rem;line-height:1.8;max-width:92%;text-align:left}
 .chat-input-row{display:flex;gap:0;border-top:1px solid rgba(212,175,55,.2)}
-.chat-input{flex:1;background:transparent;border:none;color:var(--white);font-family:'Noto Serif TC',serif;font-size:.88rem;padding:14px 18px;outline:none}
+/* min-width:0：input 有固有最小寬度且隨系統字體放大，不解除的話大字體下會把送出鈕擠出 overflow:hidden 的容器外 */
+.chat-input{flex:1;min-width:0;background:transparent;border:none;color:var(--white);font-family:'Noto Serif TC',serif;font-size:.88rem;padding:14px 18px;outline:none}
 .chat-input::placeholder{color:rgba(255,255,255,.3)}
-.chat-send{background:transparent;border:none;border-left:1px solid rgba(212,175,55,.2);color:var(--gold);font-family:'Cinzel',serif;font-size:.78rem;letter-spacing:.12em;padding:14px 20px;cursor:pointer;transition:background .2s}
+.chat-send{flex-shrink:0;background:transparent;border:none;border-left:1px solid rgba(212,175,55,.2);color:var(--gold);font-family:'Cinzel',serif;font-size:.78rem;letter-spacing:.12em;padding:14px 20px;cursor:pointer;transition:background .2s}
 .chat-send:hover{background:rgba(212,175,55,.1)}
 .interp-h{font-family:'Cinzel',serif;color:var(--gold);font-size:.95rem;letter-spacing:.15em;margin-bottom:14px}
 .interp-p{color:var(--muted);font-size:.93rem;line-height:2;white-space:pre-wrap}
