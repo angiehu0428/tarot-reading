@@ -133,11 +133,17 @@ async function handleReports(request, env) {
   const esc = s => (s || '').replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
   const rows = items.map(r => {
     const isWish = r.type === 'wish';
+    // 聯絡方式是 email → 給「✉ 回覆」按鈕：mailto 預填收件人/主旨/引文，點開信箱 App 即可回信
+    const contact = (r.contact || '').trim();
+    const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact);
+    const mailSubject = encodeURIComponent(isWish ? '回覆你在塔羅神諭的功能許願 ✦' : '回覆你在塔羅神諭的問題回報 ✦');
+    const mailBody = encodeURIComponent(`你好！我是塔羅神諭的站長 🔮\n\n關於你${isWish ? '許願' : '回報'}的內容：\n「${(r.message || '').slice(0, 300)}」\n\n`);
+    const replyBtn = isEmail ? `<a class="reply" href="mailto:${esc(contact)}?subject=${mailSubject}&body=${mailBody}">✉ 回覆</a>` : '';
     return `<div class="card ${isWish ? 'wish' : 'issue'}" data-id="${r.id}">
       <button class="del" onclick="delReport(this)" title="刪除這筆回報">✕</button>
       <div class="meta"><span class="tag">${isWish ? '💡 許願' : '🐞 問題'}</span><span class="site">${esc(r.site || 'tarot')}</span><span class="date">${new Date(r.date).toLocaleString('zh-TW')}</span>${r.ctx ? `<span class="ctx">${esc(r.ctx)}</span>` : ''}<span class="lang">${esc(r.lang)}</span></div>
       <div class="msg">${esc(r.message)}</div>
-      ${r.contact ? `<div class="contact">↩ ${esc(r.contact)}</div>` : ''}
+      ${contact ? `<div class="contact">↩ ${esc(contact)} ${replyBtn}</div>` : ''}
       <div class="ua">${esc(r.ua)}</div>
     </div>`;
   }).join('');
@@ -160,6 +166,8 @@ async function handleReports(request, env) {
   .site{background:rgba(120,180,255,.14);color:#9ec5ff;border-radius:4px;padding:1px 7px;font-weight:700;letter-spacing:.04em}
   .msg{color:#efe9ff;font-size:.95rem;white-space:pre-wrap;line-height:1.7}
   .contact{margin-top:8px;color:#d4af37;font-size:.82rem}
+  .reply{display:inline-block;margin-left:8px;padding:2px 12px;border:1px solid rgba(212,175,55,.5);border-radius:50px;color:#f0d878;text-decoration:none;font-size:.78rem;transition:all .2s}
+  .reply:hover{background:rgba(212,175,55,.15)}
   .ua{margin-top:6px;color:#5a4d75;font-size:.66rem;word-break:break-all}
   .empty{text-align:center;color:#6a5d85;padding:40px}
 </style></head><body><div class="wrap">
