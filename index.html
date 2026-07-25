@@ -1865,8 +1865,10 @@ function unlockCtaHtml(){
         </div>
       </div>`;
 }
-function showReading(resumeId){
-  S.lastInterpText = ''; S.chatHistory=[]; S.currentReadingId = resumeId || null; // resumeId：從記錄補解析時保留原記錄 id
+function showReading(resumeId, restore){ // restore={interp,chat}：從記錄還原顯示、不重跑 AI（繼續追問用）
+  S.lastInterpText = restore ? (restore.interp||'') : '';
+  S.chatHistory = restore ? (restore.chat||[]).map(m=>({...m})) : [];
+  S.currentReadingId = resumeId || null; // resumeId：從記錄補解析時保留原記錄 id
   document.getElementById('chat-area').style.display='none';
   document.getElementById('chat-msgs').innerHTML='';
   go('s-reading');
@@ -1922,7 +1924,16 @@ function showReading(resumeId){
   });
 
   document.getElementById('card-details').innerHTML=buildDetails();
-  runAIReading();
+  if(restore){
+    // 直接顯示已存的解讀與追問對話（格式化方式與 AI 成功路徑一致）
+    const formatted=(restore.interp||'').replace(/\*\*(.+?)\*\*/g,'$1').replace(/\*(.+?)\*/g,'$1').replace(/[*#`_~]/g,'').replace(/\n{2,}/g,'</p><p class="interp-p">').replace(/\n/g,'<br>');
+    document.getElementById('interp-main').innerHTML=`<p class="interp-p">${formatted}</p>`;
+    renderChat();
+    document.getElementById('chat-area').style.display='block';
+    updateChatRemaining();
+  } else {
+    runAIReading();
+  }
 }
 
 // AI 解讀（可重用：首次解讀 + 重試）。失敗/暫停時自動保留抽牌並提供重試。
@@ -2004,7 +2015,11 @@ function analyzeWithAI(id){
   if(AI_PAUSED && verified && !key){ toast(L('AI 解牌暫停服務中，請稍後再試 🙏','AI readings are paused right now, please try again later 🙏')); return; }
   // 還沒解鎖 → 引導去驗證/設定 key；記住這筆，解鎖後自動接著解析
   if(!(key||verified)){ pendingAnalyzeId=id; toast(L('請先解鎖 AI 解牌（或設定自己的 API Key），解鎖後會自動幫你解析這筆','Unlock AI readings (or set your own API key) — we\'ll analyze this one right after')); openSettings(); return; }
-  // 把這筆牌局載回 S，開回完整解牌畫面重跑 AI（含 5 次追問）；以 rec.id 讓 AI 完成後更新原記錄
+  loadRecIntoState(rec);
+  showReading(id); // 重繪牌面 + 跑 AI + 開放追問
+}
+// 把一筆完整記錄載回 S（重建牌局狀態，供「重新解析」與「繼續追問」共用）
+function loadRecIntoState(rec){
   const type=inferReadingType(rec);
   S.type=type;
   S.deck=rec.cards.map(c=>({cid:c.cid,rev:c.rev}));
@@ -2016,7 +2031,15 @@ function analyzeWithAI(id){
     S.optA=(rec.pos[0]||'').replace(/[（(].*$/,'').trim()||L('選項1','Option 1');
     S.optB=(rec.pos[2]||'').replace(/[（(].*$/,'').trim()||L('選項2','Option 2');
   }
-  showReading(id); // 重繪牌面 + 跑 AI + 開放追問
+}
+// 繼續追問：載回舊占卜（含已存解讀與對話），不重跑 AI，接續尚未用完的追問次數
+function resumeChat(id){
+  const arr=JSON.parse(localStorage.getItem('tr_full')||'[]');
+  const rec=arr.find(r=>r.id===id);
+  if(!rec||!rec.interp){ toast(L('這筆記錄沒有已完成的解讀可以續問','This record has no saved reading to continue')); return; }
+  if(!(getApiKey()||isVerified())){ toast(L('請先解鎖 AI 解牌（或設定 API Key）才能繼續追問','Unlock AI readings (or set an API key) to continue asking')); openSettings(); return; }
+  loadRecIntoState(rec);
+  showReading(id, {interp:rec.interp, chat:rec.chat||[]});
 }
 
 // ══════════════════════════════════════════
@@ -3037,6 +3060,7 @@ async function sendChat(){
     S.chatHistory.push({role:'user',text:q});
     S.chatHistory.push({role:'ai',text:L('AI 解牌目前暫停服務中（API 配額已滿），很快會恢復，請稍後再試 🙏','AI readings are paused right now (quota full). Service will be back soon — please try again later 🙏')});
     renderChat();
+    if(S.currentReadingId) saveReading(true, true); // 追問也即時入檔，網頁重整不遺失
     return;
   }
   input.value='';
@@ -3085,6 +3109,7 @@ async function sendChat(){
     S.chatHistory.push({role:'ai',text:L('抱歉，發生錯誤：','Sorry, an error occurred: ')+e.message});
   }
   renderChat();
+  if(S.currentReadingId) saveReading(true, true); // 追問後即時入檔：網頁重整/自動刷新也不會遺失對話與剩餘額度
 }
 function renderChat(){
   const el=document.getElementById('chat-msgs');
@@ -3231,7 +3256,11 @@ function renderHistList(){
     ?list.map(r=>{
         const full=fullMap[r.id]||{};
         const canAI = full.cards && full.cards.length; // 有牌面資料即可（type 缺漏會自動反推）
-        const aiBtn = canAI ? `<div style="margin-top:10px"><button class="btn btn-sm btn-ghost" style="margin:0" onclick="analyzeWithAI(${r.id})">${full.interp?L('🔄 用 AI 重新解析','🔄 Re-analyze with AI'):L('✦ 用 AI 解析這次占卜','✦ Analyze with AI')}</button></div>` : '';
+        const usedT=(full.chat||[]).filter(m=>m.role==='user').length;
+        const chatBtn=(canAI && full.interp && usedT<CHAT_LIMIT)
+          ? `<button class="btn btn-sm" style="margin:0" onclick="resumeChat(${r.id})">${L(`💬 繼續追問（還剩 ${CHAT_LIMIT-usedT} 次）`,`💬 Continue asking (${CHAT_LIMIT-usedT} left)`)}</button>` : '';
+        const aiBtn = canAI ? `<button class="btn btn-sm btn-ghost" style="margin:0" onclick="analyzeWithAI(${r.id})">${full.interp?L('🔄 用 AI 重新解析','🔄 Re-analyze with AI'):L('✦ 用 AI 解析這次占卜','✦ Analyze with AI')}</button>` : '';
+        const btnRow=(chatBtn||aiBtn)?`<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">${chatBtn}${aiBtn}</div>`:'';
         const interpHtml=full.interp?`<div style="margin-top:10px;font-size:.82rem;color:var(--muted);line-height:1.7;border-top:1px solid rgba(212,175,55,.12);padding-top:10px">${escHtml(full.interp).replace(/\n/g,'<br>')}</div>`:'';
         const chatHtml=(full.chat&&full.chat.length)?`<div style="margin-top:10px;border-top:1px solid rgba(212,175,55,.1);padding-top:10px">${full.chat.map(m=>m.role==='user'?`<div style="font-size:.78rem;color:var(--gold);margin-bottom:4px">▶ ${escHtml(m.text)}</div>`:`<div style="font-size:.78rem;color:var(--muted);margin-bottom:8px;line-height:1.6">${escHtml(m.text).replace(/\n/g,'<br>')}</div>`).join('')}</div>`:'';
         return `<div style="border:1px solid rgba(212,175,55,.18);background:rgba(42,22,96,.18);padding:18px 20px;margin-bottom:12px;position:relative">
@@ -3242,7 +3271,7 @@ function renderHistList(){
           <div style="font-size:.72rem;color:var(--muted);margin-bottom:5px;padding-right:30px">${r.date} · ${r.spread}</div>
           <div style="font-size:.92rem;color:var(--white)">「${escHtml(r.q)}」</div>
           <div style="font-size:.78rem;color:var(--gold);margin-top:7px">${r.cards.map(c=>`${c.name}${c.rev?'↓':''}`).join(' · ')}</div>
-          ${interpHtml}${chatHtml}${aiBtn}
+          ${interpHtml}${chatHtml}${btnRow}
         </div>`;
       }).join('')
       + `<div style="text-align:center;margin-top:18px">
