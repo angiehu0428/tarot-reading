@@ -926,8 +926,8 @@ Object.assign(T, {
   'set.font.head':{zh:'✦ 字級大小（看不清楚可調大）',en:'✦ Text size (make it bigger if hard to read)'},
   'font.lv0':{zh:'標準',en:'Normal'},'font.lv1':{zh:'大',en:'Large'},'font.lv2':{zh:'特大',en:'X-Large'},'font.lv3':{zh:'超大',en:'XX-Large'},
   'font.btn.title':{zh:'字級大小（點我放大）',en:'Text size (tap to enlarge)'},
-  'ann.title':{zh:'✦ 新牌陣上線 🔮',en:'✦ New Spreads Added 🔮'},
-  'ann.body':{zh:'🔮 <strong style="color:var(--gold)">今天新增了 3 個牌陣！</strong><br><br>✦ <strong>四張牌 · 直指核心</strong>：問題核心 → 障礙 → 對策 → 優勢，一次看清卡關與解方<br>✦ <strong>五張牌 · 感情萬用</strong>：看見雙方現況、對彼此的感情態度，以及可能的走向<br>✦ <strong>賽爾特十字</strong>：塔羅最經典的 10 張綜合大牌陣（傳統十字造型）<br><br>⚡ 還新增「<strong>一鍵快速抽牌</strong>」，抽大牌陣不用一張一張點，一秒抽完！<br><br>快到「選擇牌陣」試試看 ✨',en:'🔮 <strong style="color:var(--gold)">3 new spreads added today!</strong><br><br>✦ <strong>Four-Card · Core Insight</strong>: Core → Obstacle → Move → Strengths — see the block and the way through at once<br>✦ <strong>Five-Card · Relationship</strong>: both people\'s current state, how each feels, and the likely direction<br>✦ <strong>Celtic Cross</strong>: the classic 10-card comprehensive spread (in its traditional cross shape)<br><br>⚡ Plus new <strong>Quick Draw</strong> — draw a whole spread in one tap, no more picking cards one by one!<br><br>Head to "Choose a Spread" to try them ✨'},
+  'ann.title':{zh:'✦ 更新通知 💬',en:'✦ What\'s New 💬'},
+  'ann.body':{zh:'💬 <strong style="color:var(--gold)">追問功能大升級！</strong><br><br>✦ <strong>繼續追問</strong>：追問次數還沒用完的占卜，現在可以從「占卜記錄」點「繼續追問」回去接著問，不用重抽！<br>✦ <strong>對話即時保存</strong>：每次追問後自動存檔，網頁重整也不會遺失<br>✦ <strong>自動保存占卜</strong>：AI 解讀完成就自動存入記錄（專案占卜也是）<br>✦ 修正大字體下追問送出鈕被擠出畫面的問題<br>✦ 洗牌現在有擬真的刷牌音效 🎴<br><br>一樣歡迎許願新功能 ✨',en:'💬 <strong style="color:var(--gold)">Follow-up questions, upgraded!</strong><br><br>✦ <strong>Continue asking</strong>: readings with follow-ups left now have a "Continue asking" button in History — pick up right where you left off, no redraw needed!<br>✦ <strong>Chats auto-save</strong> after every question, so a page refresh no longer loses them<br>✦ <strong>Readings auto-save</strong> the moment the AI finishes (project readings too)<br>✦ Fixed the send button overflowing at large font sizes<br>✦ Shuffling now has a realistic riffle sound 🎴<br><br>Feature wishes always welcome ✨'},
   'ann.feedback':{zh:'有問題或想許願新功能？點此回報 →',en:'Found a bug or have a feature wish? Tell us →'},
   'ann.ok':{zh:'我知道了',en:'Got it'},
   'report.title':{zh:'🐞 回報問題',en:'🐞 Report a Problem'},
@@ -3561,7 +3561,7 @@ async function submitReport(){
 }
 // 一次性公告（沒看過的人會看到一次，關閉後不再跳；要發新公告換新的 ANNOUNCE_ID 即可）
 // 注意：App 內瀏覽器（LINE/FB）可能每次清除儲存，這類用戶每次開啟仍會視為「第一次」看到一次
-const ANNOUNCE_ID = '2026-07-05-new-spreads';
+const ANNOUNCE_ID = '2026-07-25-resume-chat';
 const ANNOUNCE_EXPIRES = new Date('2026-12-31T00:00:00'); // 到期日：讓第一次來的訪客持續看得到
 // 儲存三層備援：localStorage（跨次）→ sessionStorage（LINE/FB 等 App 內瀏覽器常清 localStorage）
 // → 記憶體（隱私模式下兩者都可能不可用），確保同一次瀏覽絕不重複跳出
@@ -3709,6 +3709,9 @@ function toggleAiInfo(){
 //  更新紀錄 CHANGELOG（新項目加在最上面；中英務必同步）
 // ══════════════════════════════════════════
 const CHANGELOG = [
+  { date:'2026-07-25',
+    zh:['「繼續追問」：追問次數未用完的占卜，可從「占卜記錄」接著提問，不必重抽；追問對話每次問答後即時保存，網頁重整不再遺失','AI 解讀完成自動存入記錄（含專案占卜），忘記按儲存也不會白占','修正：字體設定「大」以上時追問送出鈕被擠出畫面無法點擊','修正：專案占卜的解讀未同步到專案時間軸的問題','洗牌新增即時合成的擬真刷牌音效；公告視窗關閉後不再重複跳出'],
+    en:['"Continue asking": readings with follow-ups left can be resumed from History — no redraw needed; chats now save instantly after every question, so refreshes no longer lose them','Readings auto-save the moment the AI finishes (project readings included)','Fixed: the follow-up send button overflowed off-screen at large font sizes','Fixed: project readings not syncing their interpretation to the project timeline','Shuffling gained a realistic synthesized riffle sound; the announcement popup no longer re-appears after closing'] },
   { date:'2026-07-05',
     zh:['新增「四張牌 · 直指核心」牌陣：問題核心 → 障礙 → 對策 → 優勢，一次看清卡關的關鍵、你遇到的阻力、可行的作法，以及你手邊已有的資源，適合「老是卡關卻說不出問題在哪」的狀況','新增「五張牌 · 感情萬用」牌陣：我的狀態 → 我對對方的態度 → 對方的狀態 → 對方對我的態度 → 可能的結果，一次看見雙方現況與對彼此的感情，適合了解你和某個特定對象的關係走向（結果為大方向，會隨雙方心意改變）','新增「賽爾特十字」牌陣：塔羅最經典的 10 張綜合大牌陣，從現況、過去未來、內在外在到最終結果全面剖析，適合重要、複雜、想看得最深最完整的問題（並以傳統十字＋權杖造型呈現）','新增「⚡ 一鍵快速抽牌」：不想一張一張點，可在洗牌或抽牌畫面按一下，用加密隨機直接抽出整組牌並進入解讀，抽大牌陣（如賽爾特十字 10 張）更省時'],
     en:['New "Four-Card · Core Insight" spread: Core → Obstacle → Move → Strengths — pinpoints the real crux of a stuck situation, the resistance you face, the concrete move you can make, and the resources you already have; ideal when you keep stalling but can\'t name the issue','New "Five-Card · Relationship" spread: My State → My Feelings → Their State → Their Feelings → Possible Outcome — see both people\'s current state and how each feels, for understanding where you and one specific person are heading (the outcome is a direction and can shift as either heart changes)','New "Celtic Cross" spread: the classic 10-card comprehensive layout — a full analysis from the present, past and future to inner and outer influences and the final outcome, for important, complex questions you want to see in full depth (shown in the traditional cross + staff shape)','New "⚡ Quick draw": don\'t want to tap cards one by one? Tap once on the shuffle or pick screen to draw the whole spread at once with crypto-random selection and go straight to the reading — a big time-saver for large spreads like the 10-card Celtic Cross'] },
