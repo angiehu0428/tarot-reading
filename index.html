@@ -267,11 +267,11 @@ textarea.inp{resize:vertical;min-height:90px}
 .interp-box{border:1px solid rgba(212,175,55,.25);background:rgba(42,22,96,.18);padding:28px 26px;margin-top:8px;text-align:left}
 .chat-box{border:1px solid rgba(212,175,55,.25);background:rgba(42,22,96,.18);margin-top:18px;overflow:hidden}
 .chat-msgs{padding:20px 24px;max-height:420px;overflow-y:auto;display:flex;flex-direction:column;gap:14px}
-.chat-msg-user{align-self:flex-end;background:rgba(212,175,55,.15);border:1px solid rgba(212,175,55,.3);color:var(--white);padding:10px 16px;border-radius:16px 16px 4px 16px;font-size:.88rem;line-height:1.7;max-width:80%}
+.chat-msg-user{align-self:flex-end;background:rgba(212,175,55,.15);border:1px solid rgba(212,175,55,.3);color:var(--white);padding:10px 16px;border-radius:16px 16px 4px 16px;font-size:.88rem;line-height:1.7;max-width:80%;white-space:pre-wrap}
 .chat-msg-ai{align-self:flex-start;background:rgba(42,22,96,.45);border:1px solid rgba(212,175,55,.15);color:var(--silver);padding:12px 18px;border-radius:16px 16px 16px 4px;font-size:.88rem;line-height:1.8;max-width:92%;text-align:left}
 .chat-input-row{display:flex;gap:0;border-top:1px solid rgba(212,175,55,.2)}
 /* min-width:0：input 有固有最小寬度且隨系統字體放大，不解除的話大字體下會把送出鈕擠出 overflow:hidden 的容器外 */
-.chat-input{flex:1;min-width:0;background:transparent;border:none;color:var(--white);font-family:'Noto Serif TC',serif;font-size:.88rem;padding:14px 18px;outline:none}
+.chat-input{flex:1;min-width:0;background:transparent;border:none;color:var(--white);font-family:'Noto Serif TC',serif;font-size:.88rem;padding:14px 18px;outline:none;resize:none;line-height:1.5;max-height:120px;overflow-y:auto}
 .chat-input::placeholder{color:rgba(255,255,255,.3)}
 .chat-send{flex-shrink:0;background:transparent;border:none;border-left:1px solid rgba(212,175,55,.2);color:var(--gold);font-family:'Cinzel',serif;font-size:.78rem;letter-spacing:.12em;padding:14px 20px;cursor:pointer;transition:background .2s}
 .chat-send:hover{background:rgba(212,175,55,.1)}
@@ -761,7 +761,7 @@ textarea.inp{resize:vertical;min-height:90px}
         <div class="chat-msgs" id="chat-msgs"></div>
         <div id="chat-remaining" style="padding:8px 24px 0;font-size:.72rem;color:rgba(212,175,55,.75);text-align:right"></div>
         <div class="chat-input-row">
-          <input class="chat-input" id="chat-input" data-i18n-ph="rd.chat.ph" placeholder="針對這次解牌繼續提問..." onkeydown="if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing&&event.keyCode!==229){event.preventDefault();sendChat()}">
+          <textarea class="chat-input" id="chat-input" rows="1" data-i18n-ph="rd.chat.ph" placeholder="針對這次解牌繼續提問..." oninput="autoGrowChat(this)" onkeydown="chatKeydown(event)"></textarea>
           <button class="chat-send" id="chat-send-btn" onclick="sendChat()" data-i18n="rd.chat.send">送出</button>
         </div>
       </div>
@@ -3039,6 +3039,17 @@ function buildDetails(){
     </div>`;
   }).join('');
 }
+// 追問輸入：手機（粗指標裝置）的 Enter＝換行，避免想換行卻誤送出；電腦 Enter 送出、Shift+Enter 換行
+const CHAT_TOUCH = typeof matchMedia==='function' && matchMedia('(pointer: coarse)').matches;
+function chatKeydown(e){
+  if(e.key!=='Enter' || e.shiftKey || e.isComposing || e.keyCode===229) return;
+  if(CHAT_TOUCH) return; // 手機：讓 Enter 正常插入換行，送出只靠「送出」鈕
+  e.preventDefault(); sendChat();
+}
+function autoGrowChat(el){
+  el.style.height='auto';
+  el.style.height=Math.min(el.scrollHeight,120)+'px';
+}
 async function sendChat(){
   const input=document.getElementById('chat-input');
   const q=input.value.trim().replace(/[<>]/g,'');
@@ -3055,7 +3066,7 @@ async function sendChat(){
   }
   // 付費 AI 暫停中（且無自備 key）→ 不呼叫，回覆暫停訊息
   if(AI_PAUSED && proxyEmail && !key){
-    input.value='';
+    input.value=''; input.style.height='auto';
     if(!S.chatHistory) S.chatHistory=[];
     S.chatHistory.push({role:'user',text:q});
     S.chatHistory.push({role:'ai',text:L('AI 解牌目前暫停服務中（API 配額已滿），很快會恢復，請稍後再試 🙏','AI readings are paused right now (quota full). Service will be back soon — please try again later 🙏')});
@@ -3063,7 +3074,7 @@ async function sendChat(){
     if(S.currentReadingId) saveReading(true, true); // 追問也即時入檔，網頁重整不遺失
     return;
   }
-  input.value='';
+  input.value=''; input.style.height='auto';
   if(!S.chatHistory) S.chatHistory=[];
   S.chatHistory.push({role:'user',text:q});
   renderChat();
