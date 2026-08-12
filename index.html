@@ -1409,6 +1409,24 @@ const PROJ_COLORS = ['#e74c3c','#e67e22','#d4af37','#27ae60','#2980b9','#8e44ad'
 // ══════════════════════════════════════════
 //  STATE
 // ══════════════════════════════════════════
+// 記錄正規化：跨裝置同步/舊版本的記錄可能缺欄位（無 cards、q 為 null 等），
+// 一筆壞資料就會讓歷史/專案頁拋例外「按了沒反應」——載入與合併時一律補上安全預設值
+function sanitizeRec(r){
+  if(!r || typeof r!=='object' || r.id==null) return null;
+  r.q = (r.q==null) ? '' : String(r.q);
+  if(!Array.isArray(r.cards)) r.cards = [];
+  if(!Array.isArray(r.chat)) r.chat = [];
+  if(!Array.isArray(r.pos)) r.pos = [];
+  return r;
+}
+function sanitizeRecs(arr){ return (Array.isArray(arr)?arr:[]).map(sanitizeRec).filter(Boolean); }
+// 全域錯誤提示：以後任何未捕捉錯誤都會跳 toast，不再「靜悄悄沒反應」（5 秒節流防洗版）
+let _lastErrToast=0;
+window.addEventListener('error',e=>{
+  const now=Date.now(); if(now-_lastErrToast<5000) return; _lastErrToast=now;
+  try{ toast('⚠️ '+((e&&e.message)||'error').slice(0,90)); }catch(_){}
+});
+
 const S = {
   type:null, pos:[], q:'',
   deck:[], picked:[],
@@ -1416,7 +1434,7 @@ const S = {
   activeProjectId: null,       // project id currently selected
   lastInterpText: '',          // store interpretation after it renders
   projects: loadProjects(),
-  readings: JSON.parse(localStorage.getItem('tr_readings')||'[]')
+  readings: sanitizeRecs(JSON.parse(localStorage.getItem('tr_readings')||'[]'))
 };
 
 // ══════════════════════════════════════════
@@ -1567,7 +1585,7 @@ function viewProject(id) {
     empty.innerHTML='';
     tl.innerHTML = [...proj.readings].reverse().map((r, idx) => {
       const num = proj.readings.length - idx;
-      const cardStr = r.cards.map((c,i)=>`${r.pos[i]}：${cardName(c.cid)}${c.rev?'↓':''}`).join('｜');
+      const cardStr = (r.cards||[]).map((c,i)=>`${(r.pos||[])[i]||''}：${cardName(c.cid)}${c.rev?'↓':''}`).join('｜');
       return `<div class="tl-item">
         <div class="tl-dot"></div>
         <div class="tl-box" onclick="toggleTlItem(this)">
@@ -2035,8 +2053,8 @@ function loadRecIntoState(rec){
 // 繼續追問：載回舊占卜（含已存解讀與對話），不重跑 AI，接續尚未用完的追問次數
 function resumeChat(id){
   const arr=JSON.parse(localStorage.getItem('tr_full')||'[]');
-  const rec=arr.find(r=>r.id===id);
-  if(!rec||!rec.interp){ toast(L('這筆記錄沒有已完成的解讀可以續問','This record has no saved reading to continue')); return; }
+  const rec=sanitizeRec(arr.find(r=>r.id===id));
+  if(!rec||!rec.interp||!rec.cards.length){ toast(L('這筆記錄沒有已完成的解讀可以續問','This record has no saved reading to continue')); return; }
   if(!(getApiKey()||isVerified())){ toast(L('請先解鎖 AI 解牌（或設定 API Key）才能繼續追問','Unlock AI readings (or set an API key) to continue asking')); openSettings(); return; }
   loadRecIntoState(rec);
   showReading(id, {interp:rec.interp, chat:rec.chat||[]});
@@ -2536,6 +2554,7 @@ function kwIsHeavy(kws){
 
 // ── 主題偵測：中英文皆可，從問題文字判斷主題 ──
 function detectTopic(q){
+  q=(q==null)?'':String(q);
   const rules=[
     ['health',/健康|身體|生病|手術|睡眠|體力|療養|health|body|sick|illness|surgery|sleep|wellness|fitness/i],
     ['study',/學業|考試|讀書|學校|論文|證照|升學|成績|stud(y|ies)|exam|test|school|thesis|degree|grade|college|class/i],
@@ -3253,7 +3272,7 @@ function setHistTopic(k){histTopic=k;showHistory();}
 function renderHistList(){
   const el=document.getElementById('hist-list');
   const kw=(document.getElementById('hist-search').value||'').trim().toLowerCase();
-  const fullRecs = JSON.parse(localStorage.getItem('tr_full')||'[]');
+  const fullRecs = sanitizeRecs(JSON.parse(localStorage.getItem('tr_full')||'[]'));
   const fullMap = {};
   fullRecs.forEach(r=>{ fullMap[r.id]=r; });
   let list=S.readings;
@@ -3396,8 +3415,8 @@ async function syncPull(){
     const mergeById=(a,b)=>{const m={};[...a,...b].forEach(x=>{if(x&&x.id!=null)m[x.id]=x;});return Object.values(m).sort((x,y)=>y.id-x.id).slice(0,60);};
     const beforeR=S.readings.length;
     const localFull=JSON.parse(localStorage.getItem('tr_full')||'[]');
-    S.readings=mergeById(S.readings, cloud.readings);
-    const mergedFull=mergeById(localFull, cloud.full||[]);
+    S.readings=sanitizeRecs(mergeById(S.readings, cloud.readings));
+    const mergedFull=sanitizeRecs(mergeById(localFull, cloud.full||[]));
     localStorage.setItem('tr_readings',JSON.stringify(S.readings));
     localStorage.setItem('tr_full',JSON.stringify(mergedFull));
     // 本地有、雲端還沒有的記錄 → 推回讓雲端收斂（另一台裝置下次才拉得到）
