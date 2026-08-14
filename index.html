@@ -19,9 +19,24 @@
     }catch(e){}
   }
   window.onerror=function(msg,src,line,col){
-    errs.push(msg+' @'+line+':'+col);
+    // 跨網域腳本（如 gumroad.js）的錯誤只會回報「Script error.」——標明來源以免誤判成本站問題
+    var from=src?src.replace(/^https?:\/\//,'').split('?')[0]:'';
+    if(String(msg).indexOf('Script error')===0 && !from){
+      errs.push('[第三方腳本錯誤，非本站程式，按鈕正常可忽略] '+msg);
+    }else{
+      errs.push(msg+(from?' ['+from+']':'')+' @'+line+':'+col);
+    }
     show();
   };
+  // 資源載入失敗（script/css 載不進來）也顯示是哪個檔案
+  window.addEventListener('error',function(e){
+    try{
+      if(e && e.target && e.target!==window && (e.target.src||e.target.href)){
+        errs.push('[資源載入失敗] '+(e.target.src||e.target.href).replace(/^https?:\/\//,'').split('?')[0]);
+        show();
+      }
+    }catch(x){}
+  },true);
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',function(){ if(errs.length) show(); });
 })();
 </script>
