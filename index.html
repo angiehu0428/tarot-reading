@@ -1503,6 +1503,7 @@ function _showScreen(id) {
   const el = document.getElementById(id);
   if (!el) return;
   el.style.display='flex'; el.classList.add('on');
+  try{ if(document.activeElement && document.activeElement.blur) document.activeElement.blur(); }catch(e){}
   window.scrollTo(0,0);
   document.getElementById('nav-back').style.display = id==='s-welcome'?'none':'block';
   if (id === 's-projects') renderProjectList();
@@ -3572,7 +3573,7 @@ function openSettings(){
   updateApiStatus();
   document.getElementById('settings-modal').classList.add('on');
 }
-function closeSettings(){document.getElementById('settings-modal').classList.remove('on');}
+function closeSettings(){document.getElementById('settings-modal').classList.remove('on');resetViewport();}
 // ── 字級大小（無障礙）：調整根字級，rem 文字隨之放大；記住選擇 ──
 const FONT_LEVELS=[16,18,20,22];
 function getFontLevel(){ let l=parseInt(localStorage.getItem('tr_fontlvl')||'0',10); return (isNaN(l)||l<0||l>=FONT_LEVELS.length)?0:l; }
@@ -3631,7 +3632,7 @@ function reportProblem(ctx){
   const m2=document.getElementById('report-contact'); if(m2) m2.value='';
   document.getElementById('report-modal').classList.add('on');
 }
-function closeReport(){ document.getElementById('report-modal').classList.remove('on'); }
+function closeReport(){ document.getElementById('report-modal').classList.remove('on'); resetViewport(); }
 async function submitReport(){
   const msgEl=document.getElementById('report-msg');
   const msg=(msgEl.value||'').trim();
@@ -3677,6 +3678,7 @@ function showAnnounce(){
 function closeAnnounce(){
   if(ANNOUNCE_ID) announceSet('tr_announce_'+ANNOUNCE_ID);
   const m=document.getElementById('announce-modal'); if(m) m.classList.remove('on');
+  resetViewport();
 }
 
 // ══════════════════════════════════════════
@@ -3747,6 +3749,14 @@ function stopMusic(){
 // ══════════════════════════════════════════
 //  TOAST
 // ══════════════════════════════════════════
+// iOS Safari 經典 bug：在 fixed 定位視窗（設定/回報/公告）輸入文字時鍵盤把視覺視口推移，
+// 關閉視窗後視口沒復位 → 之後每一次點擊座標都錯位，看起來像「所有按鈕都不能按」。
+// 修法：關閉視窗/切換畫面時強制收鍵盤並重置捲動（iOS 收鍵盤動畫結束後再校正一次）。
+function resetViewport(){
+  try{ if(document.activeElement && document.activeElement.blur) document.activeElement.blur(); }catch(e){}
+  window.scrollTo(0,0);
+  setTimeout(()=>{ window.scrollTo(0,0); },350);
+}
 function toast(msg){
   document.querySelectorAll('.toast').forEach(e=>e.remove());
   const el=document.createElement('div');el.className='toast';el.textContent=msg;
