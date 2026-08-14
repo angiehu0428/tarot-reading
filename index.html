@@ -1409,6 +1409,18 @@ const PROJ_COLORS = ['#e74c3c','#e67e22','#d4af37','#27ae60','#2980b9','#8e44ad'
 // ══════════════════════════════════════════
 //  STATE
 // ══════════════════════════════════════════
+// 安全讀取 localStorage JSON：資料損壞（寫入中斷等）時自動隔離備份並回傳預設值，
+// 避免 JSON.parse 在初始化時拋錯讓整個網站「所有按鈕沒反應」
+function safeParse(key, fallback){
+  const raw = localStorage.getItem(key);
+  if(raw==null) return JSON.parse(fallback);
+  try{ return JSON.parse(raw); }
+  catch(e){
+    try{ localStorage.setItem(key+'_corrupt_bak', raw); localStorage.removeItem(key); }catch(_){}
+    try{ toast('⚠️ '+key+' '+L('資料損壞，已重設（原始內容備份於 '+key+'_corrupt_bak）','data was corrupted and has been reset')); }catch(_){}
+    return JSON.parse(fallback);
+  }
+}
 // 記錄正規化：跨裝置同步/舊版本的記錄可能缺欄位（無 cards、q 為 null 等），
 // 一筆壞資料就會讓歷史/專案頁拋例外「按了沒反應」——載入與合併時一律補上安全預設值
 function sanitizeRec(r){
@@ -1434,7 +1446,7 @@ const S = {
   activeProjectId: null,       // project id currently selected
   lastInterpText: '',          // store interpretation after it renders
   projects: loadProjects(),
-  readings: sanitizeRecs(JSON.parse(localStorage.getItem('tr_readings')||'[]'))
+  readings: sanitizeRecs(safeParse('tr_readings','[]'))
 };
 
 // ══════════════════════════════════════════
@@ -1478,7 +1490,7 @@ function _showScreen(id) {
 //  PROJECTS — load/save
 // ══════════════════════════════════════════
 function loadProjects() {
-  return JSON.parse(localStorage.getItem('tr_projects')||'[]');
+  return safeParse('tr_projects','[]');
 }
 function saveProjects() {
   localStorage.setItem('tr_projects', JSON.stringify(S.projects));
@@ -2026,7 +2038,7 @@ function inferReadingType(rec){
   return 'custom';
 }
 function analyzeWithAI(id){
-  const arr=JSON.parse(localStorage.getItem('tr_full')||'[]');
+  const arr=safeParse('tr_full','[]');
   const rec=arr.find(r=>r.id===id);
   if(!rec||!rec.cards||!rec.cards.length){ toast(L('這筆記錄無法重新解析（缺少牌局資料）','This record can\'t be re-analyzed (missing draw data)')); return; }
   const key=getApiKey(), verified=isVerified();
@@ -2052,7 +2064,7 @@ function loadRecIntoState(rec){
 }
 // 繼續追問：載回舊占卜（含已存解讀與對話），不重跑 AI，接續尚未用完的追問次數
 function resumeChat(id){
-  const arr=JSON.parse(localStorage.getItem('tr_full')||'[]');
+  const arr=safeParse('tr_full','[]');
   const rec=sanitizeRec(arr.find(r=>r.id===id));
   if(!rec||!rec.interp||!rec.cards.length){ toast(L('這筆記錄沒有已完成的解讀可以續問','This record has no saved reading to continue')); return; }
   if(!(getApiKey()||isVerified())){ toast(L('請先解鎖 AI 解牌（或設定 API Key）才能繼續追問','Unlock AI readings (or set an API key) to continue asking')); openSettings(); return; }
@@ -3186,7 +3198,7 @@ function saveReading(silent, skipProject){
   const id = S.currentReadingId || Date.now();
   S.currentReadingId = id;
   // 更新既有記錄時保留原本的占卜日期（補解析不應改到抽牌結果/日期）
-  const prev = JSON.parse(localStorage.getItem('tr_full')||'[]').find(r=>r.id===id);
+  const prev = safeParse('tr_full','[]').find(r=>r.id===id);
   const recDate = (prev && prev.date) ? prev.date : new Date().toLocaleString(LANG==='en'?'en-US':'zh-TW');
   const rec = {
     id, type:S.type, // type 供日後「用 AI 重新解析」重建牌局
@@ -3202,7 +3214,7 @@ function saveReading(silent, skipProject){
   S.readings.unshift(lite);
   if(S.readings.length>60)S.readings.pop();
   localStorage.setItem('tr_readings',JSON.stringify(S.readings));
-  let fullRecs = JSON.parse(localStorage.getItem('tr_full')||'[]').filter(r=>r.id!==id);
+  let fullRecs = safeParse('tr_full','[]').filter(r=>r.id!==id);
   fullRecs.unshift(rec);
   if(fullRecs.length>60)fullRecs.pop();
   localStorage.setItem('tr_full',JSON.stringify(fullRecs));
@@ -3272,7 +3284,7 @@ function setHistTopic(k){histTopic=k;showHistory();}
 function renderHistList(){
   const el=document.getElementById('hist-list');
   const kw=(document.getElementById('hist-search').value||'').trim().toLowerCase();
-  const fullRecs = sanitizeRecs(JSON.parse(localStorage.getItem('tr_full')||'[]'));
+  const fullRecs = sanitizeRecs(safeParse('tr_full','[]'));
   const fullMap = {};
   fullRecs.forEach(r=>{ fullMap[r.id]=r; });
   let list=S.readings;
@@ -3315,7 +3327,7 @@ function deleteReading(id){
   if(!confirm(L('確定要刪除這筆占卜記錄嗎？刪除後無法復原。','Delete this reading? This cannot be undone.')))return;
   S.readings=S.readings.filter(r=>r.id!==id);
   localStorage.setItem('tr_readings',JSON.stringify(S.readings));
-  const fullRecs=JSON.parse(localStorage.getItem('tr_full')||'[]').filter(r=>r.id!==id);
+  const fullRecs=safeParse('tr_full','[]').filter(r=>r.id!==id);
   localStorage.setItem('tr_full',JSON.stringify(fullRecs));
   showHistory();
   toast(L('已刪除該筆記錄','Record deleted'));
@@ -3398,7 +3410,7 @@ async function syncPush(){
   try{
     const r=await fetch(WORKER_URL+'/sync',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({email:getVerifiedEmail(),action:'push',
-        readings:S.readings, full:JSON.parse(localStorage.getItem('tr_full')||'[]')})});
+        readings:S.readings, full:safeParse('tr_full','[]')})});
     if(r&&r.ok) localStorage.setItem('tr_last_sync', new Date().toISOString());
   }catch(e){/* 靜默失敗，本地仍保留 */}
 }
@@ -3414,7 +3426,7 @@ async function syncPull(){
     // 以 id 聯集合併本地與雲端（id 為時間戳，新的在前）
     const mergeById=(a,b)=>{const m={};[...a,...b].forEach(x=>{if(x&&x.id!=null)m[x.id]=x;});return Object.values(m).sort((x,y)=>y.id-x.id).slice(0,60);};
     const beforeR=S.readings.length;
-    const localFull=JSON.parse(localStorage.getItem('tr_full')||'[]');
+    const localFull=safeParse('tr_full','[]');
     S.readings=sanitizeRecs(mergeById(S.readings, cloud.readings));
     const mergedFull=sanitizeRecs(mergeById(localFull, cloud.full||[]));
     localStorage.setItem('tr_readings',JSON.stringify(S.readings));
