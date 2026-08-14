@@ -38,6 +38,24 @@
     }catch(x){}
   },true);
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',function(){ if(errs.length) show(); });
+  // 載入完整性檢查：4G 等不穩網路可能只下載到半份 HTML——畫面看似正常（樣式在前段），
+  // 但檔案尾端的主程式沒載到，所有按鈕都會失效，且 Safari 可能把殘缺版存進快取。
+  // 頁尾旗標沒出現 → 自動以繞過快取的網址重新載入（最多 2 次），仍失敗才顯示提示。
+  function checkLoaded(){
+    if(window.__APP_LOADED__) return;
+    var tries=0;
+    try{ tries=parseInt(sessionStorage.getItem('tr_reload_try')||'0',10)||0; }catch(e){}
+    if(tries<2){
+      try{ sessionStorage.setItem('tr_reload_try',String(tries+1)); }catch(e){}
+      location.replace(location.pathname+'?r='+new Date().getTime());
+      return;
+    }
+    errs.push('網頁未完整載入（網路可能不穩），請手動重新整理 / Page did not fully load — please refresh');
+    show();
+  }
+  if(document.readyState==='complete') setTimeout(checkLoaded,800);
+  else window.addEventListener('load',function(){ setTimeout(checkLoaded,800); });
+  setTimeout(checkLoaded,8000); // load 事件遲遲不來（連線掛住）也要檢查
 })();
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -4006,6 +4024,12 @@ function adminLogout(){ try{localStorage.removeItem(ADMIN_KEY_LS);}catch(e){} re
   refreshAdminSec();
   toast(L('🔑 管理模式已啟用，管理後台在「設定」頁最下方','🔑 Admin mode on — see the bottom of Settings'));
 })();
+</script>
+<script>
+/* 載入完整性旗標：這一行存在＝整份 HTML（含上方主程式）都完整下載並解析成功 */
+window.__APP_LOADED__=true;
+try{ sessionStorage.removeItem('tr_reload_try'); }catch(e){}
+if(location.search.indexOf('r=')>-1 && location.search.indexOf('email=')===-1) history.replaceState(null,'',location.pathname);
 </script>
 </body>
 </html>
