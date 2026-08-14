@@ -2004,7 +2004,11 @@ function showReading(resumeId, restore){ // restore={interp,chat}：從記錄還
       return 'sup'; // tie: no clear minority, show all as supporting (fallback)
     });
   }
-  S.picked.forEach((di,i)=>{
+  // 二擇一：牌序為[A優,A挑,B優,B挑,建議]，但版面是兩欄（左=選項A、右=選項B）逐列填入，
+  // 需以[A優,B優,A挑,B挑,建議]的顯示順序排列，兩欄才會對上欄位標題
+  const dispOrder = (S.type==='choice' && S.picked.length>=5) ? [0,2,1,3,4] : S.picked.map((_,x)=>x);
+  dispOrder.forEach((i,disp)=>{
+    const di=S.picked[i];
     const {cid,rev}=S.deck[di]; const card=C[cid];
     const item=document.createElement('div');item.className='r-item';
     const badgeHTML = wuxiBadges
@@ -2021,7 +2025,7 @@ function showReading(resumeId, restore){ // restore={interp,chat}：從記錄還
       </div>
       <div style="font-size:.72rem;margin-top:2px;color:${rev?'var(--red)':'var(--muted)'}">${rev?'逆位':'正位'}</div>`;
     spreadEl.appendChild(item);
-    setTimeout(()=>{const fe=document.getElementById(`fi-${i}`); if(fe) fe.classList.add('done');},350+i*420);
+    setTimeout(()=>{const fe=document.getElementById(`fi-${i}`); if(fe) fe.classList.add('done');},350+disp*420);
   });
 
   document.getElementById('card-details').innerHTML=buildDetails();
