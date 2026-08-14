@@ -340,7 +340,7 @@ async function handleCheck(request, env) {
 
 // ── History sync (paid users only) ───────────────────────────
 async function handleSync(request, env) {
-  const { email, action, readings, full } = await request.json().catch(() => ({}));
+  const { email, action, readings, full, projects } = await request.json().catch(() => ({}));
   const e = email && email.toLowerCase().trim();
   if (!e) return json({ error: 'no email' }, 400, request);
 
@@ -357,6 +357,7 @@ async function handleSync(request, env) {
     const payload = JSON.stringify({
       readings: Array.isArray(readings) ? readings.slice(0, 60) : [],
       full: Array.isArray(full) ? full.slice(0, 60) : [],
+      projects: Array.isArray(projects) ? projects.slice(0, 30) : [], // 專案也同步（含各自的占卜記錄）
       updated: new Date().toISOString(),
     });
     await env.TAROT_KV.put(key, payload, { expirationTtl: 60 * 60 * 24 * 730 });
