@@ -2,6 +2,29 @@
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
+<script>
+/* 錯誤診斷橫幅：任何 JS 錯誤（含後續主程式的「語法解析錯誤」——toast 抓不到的那種）
+   都會顯示在頁面頂端，方便用戶直接截圖回報。純 ES5，確保任何瀏覽器都能執行。 */
+(function(){
+  var errs=[];
+  function show(){
+    try{
+      var d=document.getElementById('js-err-banner');
+      if(!d){
+        d=document.createElement('div'); d.id='js-err-banner';
+        d.setAttribute('style','position:fixed;top:0;left:0;right:0;z-index:2147483647;background:#7b241c;color:#fff;font:12px/1.6 monospace;padding:8px 12px;white-space:pre-wrap;word-break:break-all');
+        (document.body||document.documentElement).appendChild(d);
+      }
+      d.textContent='⚠ '+errs.join('\n');
+    }catch(e){}
+  }
+  window.onerror=function(msg,src,line,col){
+    errs.push(msg+' @'+line+':'+col);
+    show();
+  };
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',function(){ if(errs.length) show(); });
+})();
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>塔羅神諭 Tarot Oracle｜免費線上塔羅占卜・AI 個人化解牌</title>
 <meta name="description" content="塔羅神諭：免費線上塔羅占卜，78 張偉特塔羅牌、加密隨機洗牌，提供無視論五牌陣、三張牌陣、聖三角等多種牌陣，並以 AI 提供感情、事業、財運的個人化深度解牌。Free online tarot reading with all 78 Rider–Waite cards and AI-powered personalized interpretations for love, career, and money.">
