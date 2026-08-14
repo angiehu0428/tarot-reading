@@ -19,21 +19,21 @@
     }catch(e){}
   }
   window.onerror=function(msg,src,line,col){
-    // 跨網域腳本（如 gumroad.js）的錯誤只會回報「Script error.」——標明來源以免誤判成本站問題
+    // 跨網域腳本（gumroad.js 等）的錯誤只會回報「Script error.」且無來源——
+    // 與本站無關且無法行動，僅記錄到 console，不打擾用戶
     var from=src?src.replace(/^https?:\/\//,'').split('?')[0]:'';
     if(String(msg).indexOf('Script error')===0 && !from){
-      errs.push('[第三方腳本錯誤，非本站程式，按鈕正常可忽略] '+msg);
-    }else{
-      errs.push(msg+(from?' ['+from+']':'')+' @'+line+':'+col);
+      try{ console.warn('[third-party script error ignored]', msg); }catch(e){}
+      return;
     }
+    errs.push(msg+(from?' ['+from+']':'')+' @'+line+':'+col);
     show();
   };
-  // 資源載入失敗（script/css 載不進來）也顯示是哪個檔案
+  // 資源（字型/第三方腳本）載入失敗屬環境因素（廣告攔截器、離線字型），僅記錄不打擾
   window.addEventListener('error',function(e){
     try{
       if(e && e.target && e.target!==window && (e.target.src||e.target.href)){
-        errs.push('[資源載入失敗] '+(e.target.src||e.target.href).replace(/^https?:\/\//,'').split('?')[0]);
-        show();
+        console.warn('[resource failed]', e.target.src||e.target.href);
       }
     }catch(x){}
   },true);
@@ -922,7 +922,7 @@ Object.assign(T, {
   // ── Settings modal ──
   'set.title':{zh:'✦ AI 深度解牌',en:'✦ AI Deep Reading'},
   'set.buy.head':{zh:'✦ 訂閱解鎖 · 支持創作',en:'✦ Unlock by Subscription · Support the Creator'},
-  'set.buy.desc':{zh:'訂閱（每月 US$5）即可解鎖 AI 深度解牌功能：針對你問題的個人化塔羅分析、感情連結牌組解讀、多輪追問對話，以及跨裝置雲端同步歷史記錄。可隨時取消。',en:'Subscribe (US$5/month) to unlock AI deep readings: personalized analysis of your question, relationship card-combo insights, multi-turn follow-up chat, and cloud history sync across devices. Cancel anytime.'},
+  'set.buy.desc':{zh:'訂閱（每月 US$5）即可解鎖 AI 深度解牌功能：針對你問題的個人化塔羅分析、感情連結牌組解讀、多輪追問對話，以及跨裝置雲端同步歷史記錄與專案。可隨時取消。',en:'Subscribe (US$5/month) to unlock AI deep readings: personalized analysis of your question, relationship card-combo insights, multi-turn follow-up chat, and cloud sync of your history and projects across devices. Cancel anytime.'},
   'set.buy.btn':{zh:'✦ 訂閱解鎖 · US$5/月',en:'✦ Subscribe to Unlock · US$5/mo'},
   'set.buy.once.t':{zh:'🎉 一次買斷 · 限時優惠',en:'🎉 One-time unlock · limited offer'},
   'set.buy.once.s':{zh:'💛 建議 US$5，但金額可自訂、歡迎多付一點打賞 😆 · 一次付清含 2 年使用權（到 6/30）',en:'💛 Suggested US$5 — name your own price, tips welcome 😆 · pay once, 2-year access (until Jun 30)'},
@@ -983,7 +983,7 @@ Object.assign(T, {
   'font.lv0':{zh:'標準',en:'Normal'},'font.lv1':{zh:'大',en:'Large'},'font.lv2':{zh:'特大',en:'X-Large'},'font.lv3':{zh:'超大',en:'XX-Large'},
   'font.btn.title':{zh:'字級大小（點我放大）',en:'Text size (tap to enlarge)'},
   'ann.title':{zh:'✦ 更新通知 💫',en:'✦ What\'s New 💫'},
-  'ann.body':{zh:'💫 <strong style="color:var(--gold)">大家的回報我們都修好了！</strong><br><br>✦ <strong>專案名稱可以編輯了</strong>：進入專案點名稱旁的「✎ 編輯」即可修改<br>✦ <strong>手機追問可以換行了</strong>：按「換行」不會再誤送出，想送出按「送出」鈕<br>✦ <strong>訂閱額滿自動切換</strong>：有自備 API Key 的朋友，訂閱當日額度用完會自動改用你的 Key，不中斷<br>✦ 修正字體設定「大」時追問按鈕被擠出畫面的問題<br>✦ 修正部分裝置「按鈕沒反應」的狀況（資料自我修復機制）<br><br>感謝每一位回報的朋友 🙏 歡迎繼續許願 ✨',en:'💫 <strong style="color:var(--gold)">Your reports — all fixed!</strong><br><br>✦ <strong>Project names are now editable</strong>: open a project and tap "✎ Edit" next to its name<br>✦ <strong>Line breaks in follow-up questions on mobile</strong>: the return key now inserts a new line — send with the Send button<br>✦ <strong>Auto-switch when subscription limit is reached</strong>: if you have your own API key, readings continue seamlessly on your key<br>✦ Fixed the follow-up send button overflowing at large font sizes<br>✦ Fixed unresponsive buttons on some devices (data self-repair)<br><br>Thanks to everyone who reported — keep the wishes coming ✨'},
+  'ann.body':{zh:'💫 <strong style="color:var(--gold)">本週更新一次看！</strong><br><br>✦ <strong>專案也雲端同步了</strong>：訂閱用戶的專案（含名稱與記錄）自動跨裝置備份，換手機、清資料都不會不見<br>✦ <strong>專案名稱可以編輯</strong>：進入專案點「✎ 編輯」<br>✦ <strong>手機追問可換行</strong>：按「換行」不再誤送出<br>✦ <strong>訂閱額滿自動切換</strong>：有自備 API Key 會無縫接手<br>✦ 穩定性大修：網路不穩載入不完整會自動重新載入、資料損壞自動修復——「按鈕沒反應」的問題掰掰 🙌<br><br>感謝每一位回報的朋友 🙏 歡迎繼續許願 ✨',en:'💫 <strong style="color:var(--gold)">This week\'s updates!</strong><br><br>✦ <strong>Projects now sync to the cloud</strong>: subscribers\' projects (names & readings) back up across devices — switching phones or clearing data won\'t lose them<br>✦ <strong>Project names are editable</strong>: tap "✎ Edit" inside a project<br>✦ <strong>Line breaks in mobile follow-ups</strong>: return no longer sends by mistake<br>✦ <strong>Auto-switch at subscription limit</strong>: your own API key takes over seamlessly<br>✦ Major stability work: incomplete page loads self-heal, corrupted data auto-repairs — goodbye unresponsive buttons 🙌<br><br>Thanks to everyone who reported — keep the wishes coming ✨'},
   'ann.feedback':{zh:'有問題或想許願新功能？點此回報 →',en:'Found a bug or have a feature wish? Tell us →'},
   'ann.ok':{zh:'我知道了',en:'Got it'},
   'report.title':{zh:'🐞 回報問題',en:'🐞 Report a Problem'},
@@ -3719,7 +3719,7 @@ async function submitReport(){
 }
 // 一次性公告（沒看過的人會看到一次，關閉後不再跳；要發新公告換新的 ANNOUNCE_ID 即可）
 // 注意：App 內瀏覽器（LINE/FB）可能每次清除儲存，這類用戶每次開啟仍會視為「第一次」看到一次
-const ANNOUNCE_ID = '2026-08-14-updates';
+const ANNOUNCE_ID = '2026-08-14-sync';
 const ANNOUNCE_EXPIRES = new Date('2026-12-31T00:00:00'); // 到期日：讓第一次來的訪客持續看得到
 // 儲存三層備援：localStorage（跨次）→ sessionStorage（LINE/FB 等 App 內瀏覽器常清 localStorage）
 // → 記憶體（隱私模式下兩者都可能不可用），確保同一次瀏覽絕不重複跳出
@@ -3877,8 +3877,8 @@ function toggleAiInfo(){
 // ══════════════════════════════════════════
 const CHANGELOG = [
   { date:'2026-08-14',
-    zh:['「專案占卜」的專案名稱可以編輯了：進入專案點名稱旁「✎ 編輯」','手機追問輸入框改為多行：按「換行」不再誤送出，輸入框會自動長高；訊息換行正常顯示','訂閱的 AI 解牌當日額度用完時，若有設定自備 API Key 會自動切換續用，不中斷','穩定性：本機資料損壞時自動隔離修復（修正部分裝置所有按鈕沒反應的問題）；歷史/專案頁對不完整記錄全面防禦；新增全域錯誤提示'],
-    en:['Project names are now editable — open a project and tap "✎ Edit" next to the name','The follow-up input is now multi-line on mobile: the return key inserts a line break instead of sending, and the box grows as you type','When your daily subscription limit is reached, readings automatically continue on your own API key (if set)','Stability: corrupted local data is now auto-quarantined and repaired (fixes all-buttons-unresponsive on some devices); history/project pages harden against incomplete records; global error toast added'] },
+    zh:['專案雲端同步：訂閱用戶的專案（名稱、描述與專案內占卜記錄）自動跨裝置備份合併，清除資料或換裝置不再遺失','「專案占卜」的專案名稱可以編輯了：進入專案點名稱旁「✎ 編輯」','手機追問輸入框改為多行：按「換行」不再誤送出，輸入框會自動長高；訊息換行正常顯示','訂閱的 AI 解牌當日額度用完時，若有設定自備 API Key 會自動切換續用，不中斷','穩定性大修：網路不穩導致頁面載入不完整時自動偵測並重新載入（修正 Safari 按鈕全部失效的問題）；本機資料損壞自動隔離修復；關閉視窗後強制重置鍵盤視口','站內回覆：許願/回報後，站長的回覆會直接顯示在網站上（不需留 email）'],
+    en:['Project cloud sync: subscribers\' projects (names, descriptions and their readings) now back up and merge across devices — clearing data or switching devices no longer loses them','Project names are now editable — open a project and tap "✎ Edit" next to the name','The follow-up input is now multi-line on mobile: the return key inserts a line break instead of sending, and the box grows as you type','When your daily subscription limit is reached, readings automatically continue on your own API key (if set)','Major stability work: incomplete page loads (flaky networks) are now detected and auto-reloaded (fixes all-buttons-dead on Safari); corrupted local data auto-repairs; keyboard viewport resets after closing dialogs','In-app replies: after a wish/report, replies from the site owner appear right on the site (no email needed)'] },
   { date:'2026-07-25',
     zh:['「繼續追問」：追問次數未用完的占卜，可從「占卜記錄」接著提問，不必重抽；追問對話每次問答後即時保存，網頁重整不再遺失','AI 解讀完成自動存入記錄（含專案占卜），忘記按儲存也不會白占','修正：字體設定「大」以上時追問送出鈕被擠出畫面無法點擊','修正：專案占卜的解讀未同步到專案時間軸的問題','洗牌新增即時合成的擬真刷牌音效；公告視窗關閉後不再重複跳出'],
     en:['"Continue asking": readings with follow-ups left can be resumed from History — no redraw needed; chats now save instantly after every question, so refreshes no longer lose them','Readings auto-save the moment the AI finishes (project readings included)','Fixed: the follow-up send button overflowed off-screen at large font sizes','Fixed: project readings not syncing their interpretation to the project timeline','Shuffling gained a realistic synthesized riffle sound; the announcement popup no longer re-appears after closing'] },
