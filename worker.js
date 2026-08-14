@@ -80,6 +80,14 @@ export default {
     if (url.pathname === '/report-del' && request.method === 'POST') {
       return handleReportDel(request, env);
     }
+    // Reply to a report (in-app) — private, key in query
+    if (url.pathname === '/report-reply' && request.method === 'POST') {
+      return handleReportReply(request, env);
+    }
+    // Fetch replies to my own reports — public, requires per-report token
+    if (url.pathname === '/my-replies' && request.method === 'POST') {
+      return handleMyReplies(request, env);
+    }
 
     return new Response('Not found', { status: 404 });
   },
@@ -91,8 +99,10 @@ async function handleReport(request, env) {
   const msg = (message || '').toString().trim().slice(0, 2000);
   if (!msg) return json({ error: 'empty' }, 400, request);
   const id = Date.now();
+  // 每筆回報一個隨機 token：回報者憑 id+token 才能讀取站長回覆（避免用 id 亂猜）
+  const tok = [...crypto.getRandomValues(new Uint8Array(9))].map(x => x.toString(16).padStart(2, '0')).join('');
   const rec = {
-    id,
+    id, tok,
     date: new Date().toISOString(),
     type: type === 'wish' ? 'wish' : 'issue',
     message: msg,
@@ -117,7 +127,7 @@ async function handleReport(request, env) {
       });
     } catch (e) {}
   }
-  return json({ ok: true }, 200, request);
+  return json({ ok: true, id, tok }, 200, request);
 }
 
 // ── View reports (private) ───────────────────────────────────
@@ -144,6 +154,13 @@ async function handleReports(request, env) {
       <div class="meta"><span class="tag">${isWish ? '💡 許願' : '🐞 問題'}</span><span class="site">${esc(r.site || 'tarot')}</span><span class="date">${new Date(r.date).toLocaleString('zh-TW')}</span>${r.ctx ? `<span class="ctx">${esc(r.ctx)}</span>` : ''}<span class="lang">${esc(r.lang)}</span></div>
       <div class="msg">${esc(r.message)}</div>
       ${contact ? `<div class="contact">↩ ${esc(contact)} ${replyBtn}</div>` : ''}
+      <div class="inreply">
+        ${r.reply ? `<div class="replied">💌 已回覆（${r.repliedAt ? new Date(r.repliedAt).toLocaleString('zh-TW') : ''}）：${esc(r.reply)}</div>` : ''}
+        <div class="replyrow">
+          <textarea class="replybox" rows="2" placeholder="站內回覆：用戶下次打開網站會看到「站長回覆」視窗">${r.reply ? esc(r.reply) : ''}</textarea>
+          <button class="replysend" onclick="sendReply(this)">${r.reply ? '更新回覆' : '💬 站內回覆'}</button>
+        </div>
+      </div>
       <div class="ua">${esc(r.ua)}</div>
     </div>`;
   }).join('');
@@ -168,6 +185,12 @@ async function handleReports(request, env) {
   .contact{margin-top:8px;color:#d4af37;font-size:.82rem}
   .reply{display:inline-block;margin-left:8px;padding:2px 12px;border:1px solid rgba(212,175,55,.5);border-radius:50px;color:#f0d878;text-decoration:none;font-size:.78rem;transition:all .2s}
   .reply:hover{background:rgba(212,175,55,.15)}
+  .inreply{margin-top:10px}
+  .replied{color:#8fd19e;font-size:.8rem;margin-bottom:6px;white-space:pre-wrap}
+  .replyrow{display:flex;gap:8px;align-items:flex-end}
+  .replybox{flex:1;min-width:0;background:rgba(8,3,26,.5);border:1px solid rgba(212,175,55,.25);border-radius:8px;color:#efe9ff;font-family:inherit;font-size:.85rem;padding:8px 10px;resize:vertical}
+  .replysend{flex-shrink:0;background:rgba(212,175,55,.12);border:1px solid rgba(212,175,55,.45);border-radius:8px;color:#f0d878;cursor:pointer;font-size:.8rem;padding:8px 14px}
+  .replysend:hover{background:rgba(212,175,55,.22)}
   .ua{margin-top:6px;color:#5a4d75;font-size:.66rem;word-break:break-all}
   .empty{text-align:center;color:#6a5d85;padding:40px}
 </style></head><body><div class="wrap">
@@ -176,6 +199,17 @@ async function handleReports(request, env) {
   ${rows || '<div class="empty">目前還沒有任何回報</div>'}
 </div>
 <script>
+async function sendReply(btn){
+  const card=btn.closest('.card');
+  const txt=card.querySelector('.replybox').value.trim();
+  if(!txt){alert('請先輸入回覆內容');return;}
+  const key=new URLSearchParams(location.search).get('key');
+  btn.disabled=true;btn.textContent='送出中...';
+  const r=await fetch('/report-reply?key='+encodeURIComponent(key),{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({id:card.dataset.id,reply:txt})}).catch(()=>null);
+  if(r&&r.ok){btn.textContent='✓ 已回覆';setTimeout(()=>{btn.disabled=false;btn.textContent='更新回覆';},1200);}
+  else{btn.disabled=false;btn.textContent='送出失敗，重試';}
+}
 async function delReport(btn){
   if(!confirm('確定刪除這筆回報？（無法復原）'))return;
   const card=btn.closest('.card');
@@ -188,6 +222,46 @@ async function delReport(btn){
 </script>
 </body></html>`;
   return new Response(html, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+}
+
+// ── Reply to a report, shown in-app (private) ────────────────
+async function handleReportReply(request, env) {
+  const url = new URL(request.url);
+  if (!env.STATS_TOKEN || url.searchParams.get('key') !== env.STATS_TOKEN) {
+    return new Response('Forbidden', { status: 403 });
+  }
+  const { id, reply } = await request.json().catch(() => ({}));
+  const rid = String(id || '').replace(/\D/g, '');
+  const txt = (reply || '').toString().trim().slice(0, 2000);
+  if (!rid || !txt) return json({ error: 'bad request' }, 400, request);
+  const raw = await env.TAROT_KV.get('report:' + rid);
+  if (!raw) return json({ error: 'not found' }, 404, request);
+  const rec = JSON.parse(raw);
+  rec.reply = txt;
+  rec.repliedAt = new Date().toISOString();
+  await env.TAROT_KV.put('report:' + rid, JSON.stringify(rec), { expirationTtl: 60 * 60 * 24 * 365 });
+  return json({ ok: true }, 200, request);
+}
+
+// ── Fetch replies to my own reports (public, token-gated) ────
+async function handleMyReplies(request, env) {
+  const { items } = await request.json().catch(() => ({}));
+  if (!Array.isArray(items)) return json({ replies: [] }, 200, request);
+  const out = [];
+  for (const it of items.slice(0, 20)) {
+    const rid = String((it && it.id) || '').replace(/\D/g, '');
+    if (!rid) continue;
+    const raw = await env.TAROT_KV.get('report:' + rid);
+    if (!raw) continue;
+    try {
+      const rec = JSON.parse(raw);
+      // token 必須相符（舊回報沒有 tok 則不回傳，避免洩漏）
+      if (!rec.tok || rec.tok !== (it && it.tok)) continue;
+      if (!rec.reply) continue;
+      out.push({ id: rec.id, type: rec.type, message: (rec.message || '').slice(0, 200), reply: rec.reply, repliedAt: rec.repliedAt });
+    } catch (e) {}
+  }
+  return json({ replies: out }, 200, request);
 }
 
 // ── Delete one report (private) ──────────────────────────────

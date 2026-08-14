@@ -3620,9 +3620,18 @@ async function submitReport(){
     const r=await fetch(WORKER_URL+'/report',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({type:reportType, message:msg, contact, ctx:reportCtx, lang:LANG, ua:navigator.userAgent})});
     if(!r.ok) throw new Error('HTTP '+r.status);
+    // 記住這筆回報的憑證（id+tok），之後站長回覆時可在站內收到通知
+    try{
+      const d=await r.json();
+      if(d&&d.id&&d.tok){
+        const mine=safeParse('tr_my_reports','[]');
+        mine.unshift({id:d.id,tok:d.tok,msg:msg.slice(0,80)});
+        localStorage.setItem('tr_my_reports',JSON.stringify(mine.slice(0,20)));
+      }
+    }catch(e){}
     msgEl.value=''; document.getElementById('report-contact').value='';
     closeReport();
-    toast(L('✦ 已送出，感謝你的回報！我們會盡快處理 🙏','✦ Sent — thank you for the feedback! 🙏'));
+    toast(L('✦ 已送出，感謝你的回報！站長回覆時會顯示在這裡 🙏','✦ Sent — thank you! Replies from the site owner will appear here 🙏'));
   }catch(e){
     toast(L('送出失敗，請稍後再試','Couldn\'t send, please try again later'));
   }finally{ if(btn) btn.disabled=false; }
@@ -3830,6 +3839,45 @@ applyLang();
 applyFontScale(); // 套用使用者選的字級
 go('s-welcome');
 showAnnounce(); // 一次性服務公告
+// ── 站長回覆：查詢自己回報的站內回覆，未讀的以視窗顯示 ──
+async function checkOwnerReplies(){
+  try{
+    const mine=safeParse('tr_my_reports','[]');
+    if(!mine.length||!WORKER_URL) return;
+    const r=await fetch(WORKER_URL+'/my-replies',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({items:mine.map(m=>({id:m.id,tok:m.tok}))})});
+    if(!r.ok) return;
+    const data=await r.json();
+    const seen=safeParse('tr_replies_seen','[]');
+    // 同一筆回覆更新過也要再通知：以「id+回覆時間」當已讀鍵
+    const unseen=(data.replies||[]).filter(x=>!seen.includes(x.id+'|'+(x.repliedAt||'')));
+    if(!unseen.length) return;
+    const ov=document.createElement('div');
+    ov.className='modal-overlay on'; ov.style.zIndex='640';
+    ov.onclick=e=>{ if(e.target===ov) closeIt(); };
+    const items=unseen.map(x=>`
+      <div style="text-align:left;margin-top:14px;padding:12px 14px;background:rgba(212,175,55,.06);border:1px solid rgba(212,175,55,.2);border-radius:10px">
+        <div style="font-size:.74rem;color:var(--muted);margin-bottom:6px">${x.type==='wish'?L('💡 你的許願','💡 Your wish'):L('🐞 你的回報','🐞 Your report')}：「${escHtml(x.message)}」</div>
+        <div style="font-size:.9rem;color:var(--white);line-height:1.9;white-space:pre-wrap">💌 ${escHtml(x.reply)}</div>
+      </div>`).join('');
+    ov.innerHTML=`<div class="modal" style="max-width:460px;text-align:center">
+      <button class="modal-close">✕</button>
+      <h3>${L('✦ 站長回覆','✦ Reply from the Site Owner')}</h3>
+      ${items}
+      <button class="btn btn-sm" style="margin-top:16px">${L('我知道了','Got it')}</button>
+    </div>`;
+    const closeIt=()=>{
+      const s2=safeParse('tr_replies_seen','[]');
+      unseen.forEach(x=>s2.push(x.id+'|'+(x.repliedAt||'')));
+      try{ localStorage.setItem('tr_replies_seen',JSON.stringify(s2.slice(-40))); }catch(e){}
+      ov.remove();
+    };
+    ov.querySelector('.modal-close').onclick=closeIt;
+    ov.querySelector('.btn').onclick=closeIt;
+    document.body.appendChild(ov);
+  }catch(e){/* 靜默失敗，不影響網站 */}
+}
+checkOwnerReplies();
 // 新開張一次性買斷優惠：只在 6/30 前顯示，之後自動隱藏（毋須手動改站）
 (function(){ const el=document.getElementById('launch-offer'); if(el && inPromo()) el.style.display='block'; })();
 // 已驗證 email → 先確認訂閱仍有效（可能已到期），再靜默拉回雲端歷史
