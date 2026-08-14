@@ -3493,9 +3493,29 @@ async function syncPush(){
   try{
     const r=await fetch(WORKER_URL+'/sync',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({email:getVerifiedEmail(),action:'push',
-        readings:S.readings, full:safeParse('tr_full','[]')})});
+        readings:S.readings, full:safeParse('tr_full','[]'), projects:S.projects})});
     if(r&&r.ok) localStorage.setItem('tr_last_sync', new Date().toISOString());
   }catch(e){/* 靜默失敗，本地仍保留 */}
+}
+// 專案合併：cloud 先、local 後（同 id 時 local 的名稱/描述/顏色優先），readings 依 id 聯集
+function mergeProjects(local, cloud){
+  const map={};
+  [...(Array.isArray(cloud)?cloud:[]), ...(Array.isArray(local)?local:[])].forEach(p=>{
+    if(!p || p.id==null) return;
+    const recs=sanitizeRecs(p.readings||[]);
+    if(!map[p.id]){
+      map[p.id]={...p, readings:recs};
+    } else {
+      const tgt=map[p.id];
+      const have=new Set(tgt.readings.map(r=>r.id));
+      recs.forEach(r=>{ if(!have.has(r.id)){ tgt.readings.push(r); have.add(r.id); } });
+      if(p.name) tgt.name=p.name;
+      if(p.desc!=null) tgt.desc=p.desc;
+      if(p.color) tgt.color=p.color;
+      if(p.createdAt) tgt.createdAt=p.createdAt;
+    }
+  });
+  return Object.values(map).map(p=>{ p.readings.sort((a,b)=>(a.id||0)-(b.id||0)); return p; });
 }
 async function syncPull(){
   if(!isVerified())return false;
@@ -3514,10 +3534,14 @@ async function syncPull(){
     const mergedFull=sanitizeRecs(mergeById(localFull, cloud.full||[]));
     localStorage.setItem('tr_readings',JSON.stringify(S.readings));
     localStorage.setItem('tr_full',JSON.stringify(mergedFull));
+    // 專案同步合併：以專案 id 聯集；同 id 時名稱/顏色以本機為準，各自的占卜記錄以 id 聯集
+    const beforeP=S.projects.length;
+    S.projects=mergeProjects(S.projects, cloud.projects||[]);
+    saveProjects();
     // 本地有、雲端還沒有的記錄 → 推回讓雲端收斂（另一台裝置下次才拉得到）
-    if(S.readings.length>cloud.readings.length || mergedFull.length>(cloud.full||[]).length) syncPush();
+    if(S.readings.length>cloud.readings.length || mergedFull.length>(cloud.full||[]).length || S.projects.length>(cloud.projects||[]).length) syncPush();
     // 本地因雲端而新增 → 回報 true，供呼叫端重繪 / 提示（無新增則免重繪）
-    return S.readings.length>beforeR || mergedFull.length>localFull.length;
+    return S.readings.length>beforeR || mergedFull.length>localFull.length || S.projects.length>beforeP;
   }catch(e){return false;}
 }
 // 手動同步：明確上傳 + 拉回合併，並回報結果（讓使用者看得到同步有在運作）
@@ -3944,6 +3968,31 @@ async function checkOwnerReplies(){
   }catch(e){/* 靜默失敗，不影響網站 */}
 }
 checkOwnerReplies();
+// 專案救援：專案是空的但存在損壞備份（safeParse 隔離的）→ 嘗試解析救回；
+// 截斷型損壞（寫入到一半中斷）則裁到最後一個完整物件邊界修復
+(function restoreProjectsBackup(){
+  try{
+    if(S.projects.length) return;
+    const raw=localStorage.getItem('tr_projects_corrupt_bak');
+    if(!raw) return;
+    let arr=null;
+    try{ arr=JSON.parse(raw); }catch(e){
+      let tries=0;
+      for(let i=raw.length; i>1 && tries<60; i--){
+        if(raw[i-1]!=='}') continue;
+        tries++;
+        try{ arr=JSON.parse(raw.slice(0,i)+']'); break; }catch(_){}
+        try{ arr=JSON.parse(raw.slice(0,i)+']}]'); break; }catch(_){}
+      }
+    }
+    if(Array.isArray(arr) && arr.length){
+      S.projects=arr.filter(p=>p&&p.id!=null).map(p=>({...p, readings:sanitizeRecs(p.readings||[])}));
+      saveProjects();
+      localStorage.removeItem('tr_projects_corrupt_bak');
+      toast(L('✦ 已從備份救回你的專案','✦ Your projects were recovered from backup'));
+    }
+  }catch(e){/* 備份無法救回，保留原樣 */}
+})();
 // 新開張一次性買斷優惠：只在 6/30 前顯示，之後自動隱藏（毋須手動改站）
 (function(){ const el=document.getElementById('launch-offer'); if(el && inPromo()) el.style.display='block'; })();
 // 已驗證 email → 先確認訂閱仍有效（可能已到期），再靜默拉回雲端歷史
