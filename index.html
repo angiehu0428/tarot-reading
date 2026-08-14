@@ -4079,6 +4079,26 @@ function adminLogout(){ try{localStorage.removeItem(ADMIN_KEY_LS);}catch(e){} re
 window.__APP_LOADED__=true;
 try{ sessionStorage.removeItem('tr_reload_try'); }catch(e){}
 if(location.search.indexOf('r=')>-1 && location.search.indexOf('email=')===-1) history.replaceState(null,'',location.pathname);
+/* Safari 主程式解析失敗自我診斷：頁面完整（本段有執行）但主程式函式不存在
+   → 用「這台裝置自己的解析器」重新解析主程式一次，把原生語法錯誤與 UA 顯示出來。
+   只有主程式死掉時才會執行，正常用戶零影響。 */
+(function(){
+  if(typeof startNoProject==='function') return;
+  try{
+    fetch(location.pathname+'?diag='+new Date().getTime(),{cache:'reload'}).then(function(r){return r.text();}).then(function(html){
+      var re=/<script(?![^>]*src)[^>]*>([\s\S]*?)<\/script>/g, m, best='';
+      while((m=re.exec(html))) if(m[1].length>best.length) best=m[1];
+      var msg;
+      try{ new Function(best); msg='主程式可解析但未生效（可能載入時被截斷，請重新整理）'; }
+      catch(e){ msg='主程式解析失敗 → '+e.name+': '+e.message; }
+      var d=document.getElementById('js-err-banner')||document.createElement('div');
+      d.id='js-err-banner';
+      d.setAttribute('style','position:fixed;top:0;left:0;right:0;z-index:2147483647;background:#7b241c;color:#fff;font:12px/1.6 monospace;padding:8px 12px;white-space:pre-wrap;word-break:break-all');
+      d.textContent='⚠ [診斷] '+msg+'\nUA: '+navigator.userAgent;
+      if(!d.parentNode) document.body.appendChild(d);
+    })['catch'](function(e){});
+  }catch(e){}
+})();
 </script>
 </body>
 </html>
