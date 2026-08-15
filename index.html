@@ -42,7 +42,14 @@
   // 但檔案尾端的主程式沒載到，所有按鈕都會失效，且 Safari 可能把殘缺版存進快取。
   // 頁尾旗標沒出現 → 自動以繞過快取的網址重新載入（最多 2 次），仍失敗才顯示提示。
   function checkLoaded(){
-    if(window.__APP_LOADED__) return;
+    if(window.__APP_LOADED__){
+      // 主程式正常：若先前誤顯示過「未完整載入」訊息（慢速連線誤判），收掉它
+      var d=document.getElementById('js-err-banner');
+      if(d && d.textContent.indexOf('未完整載入')>-1){ try{ d.parentNode.removeChild(d); }catch(e){} }
+      return;
+    }
+    // 慢速連線（4G）大檔可能下載超過數十秒——還在下載就繼續等，不可誤判為損毀
+    if(document.readyState!=='complete'){ setTimeout(checkLoaded,3000); return; }
     var tries=0;
     try{ tries=parseInt(sessionStorage.getItem('tr_reload_try')||'0',10)||0; }catch(e){}
     if(tries<2){
@@ -55,7 +62,7 @@
   }
   if(document.readyState==='complete') setTimeout(checkLoaded,800);
   else window.addEventListener('load',function(){ setTimeout(checkLoaded,800); });
-  setTimeout(checkLoaded,8000); // load 事件遲遲不來（連線掛住）也要檢查
+  setTimeout(checkLoaded,8000); // 連線掛住的保底檢查；下載中只會展延等待，不會誤判
 })();
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
