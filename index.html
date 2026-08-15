@@ -857,6 +857,11 @@ textarea.inp{resize:vertical;min-height:90px}
 </div>
 
 <script>
+/* 載入完整性旗標（設於主程式「開頭」）：本區塊若因下載損毀/截斷而解析失敗，
+   整個區塊不會執行、旗標不會設立 → 頁首檢查將自動繞過快取重新載入。
+   放在開頭而非頁尾，才能偵測「頁面頭尾完好、中段損毀」的快取異常。 */
+window.__APP_LOADED__=true;
+
 // ══════════════════════════════════════════
 //  付費解鎖設定（網站管理員填入）
 // ══════════════════════════════════════════
@@ -4080,8 +4085,8 @@ function adminLogout(){ try{localStorage.removeItem(ADMIN_KEY_LS);}catch(e){} re
 </script>
 <script>
 /* 載入完整性旗標：這一行存在＝整份 HTML（含上方主程式）都完整下載並解析成功 */
-window.__APP_LOADED__=true;
-try{ sessionStorage.removeItem('tr_reload_try'); }catch(e){}
+/* 旗標已移至主程式開頭設定（見該處說明）；此處只負責清理與自我診斷 */
+try{ if(window.__APP_LOADED__) sessionStorage.removeItem('tr_reload_try'); }catch(e){}
 if(location.search.indexOf('r=')>-1 && location.search.indexOf('email=')===-1) history.replaceState(null,'',location.pathname);
 /* Safari 主程式解析失敗自我診斷：頁面完整（本段有執行）但主程式函式不存在
    → 用「這台裝置自己的解析器」重新解析主程式一次，把原生語法錯誤與 UA 顯示出來。
