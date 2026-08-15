@@ -169,6 +169,10 @@ Object.assign(T, {
   'report.mail':{zh:'開啟郵件 App 寄出',en:'Open mail app'},
   // ── Spread select ──
   'sp.title':{zh:'選擇牌陣',en:'Choose a Spread'},
+  'deck.tarot':{zh:'🎴 偉特塔羅 · 78 張',en:'🎴 Rider–Waite Tarot · 78 cards'},
+  'deck.tarot.desc':{zh:'經典塔羅牌，正逆位、元素與星象的深度解讀',en:'The classic tarot — reversals, elements and astrology in depth'},
+  'deck.oracle':{zh:'✦ 星光神諭卡 · 44 張',en:'✦ Starlight Oracle · 44 cards'},
+  'deck.oracle.desc':{zh:'溫柔直接的指引訊息，不分正逆位，適合日常療癒',en:'Gentle, direct guidance messages — no reversals, perfect for daily healing'},
   'sp.three.name':{zh:'三張牌陣',en:'Three-Card Spread'},
   'sp.three.desc':{zh:'過去 · 現在 · 未來<br>探索時間的流動',en:'Past · Present · Future<br>Explore the flow of time'},
   'sp.three.fit':{zh:'適合：想了解一件事的來龍去脈與發展趨勢，如「這段關係會怎麼發展」',en:'Best for: understanding how something unfolds — e.g. "How will this relationship develop?"'},
@@ -577,6 +581,76 @@ const COMBOS = [
 // 數字連結規則：牌號相減等於10或去掉一個1相等（如1與10、2與11、3與12等），在感情中也有特殊呼應。
 // 小阿爾克那人物牌連結：國王+皇后（成熟穩定）、騎士+侍者（充滿衝勁的年輕感情）。
 
+// ══════════════════════════════════════════
+//  星光神諭卡 — 44 張原創神諭卡（本站原創內容，無版權疑慮）
+//  神諭卡不分正逆位；卡面以漸層＋符號呈現，不依賴外部圖片
+// ══════════════════════════════════════════
+const ORACLE = [
+  {id:0,zh:'晨星',en:'Morning Star',sym:'✦',c:['#1a2a6e','#d4af37'],kw:['希望','新的開始','黎明前的指引'],kwEn:['hope','new beginnings','guidance before dawn'],m:'最深的夜色裡，晨星已經升起。你所等待的轉變正在靠近，此刻的黑暗不是終點，而是黎明的前奏。',mEn:'In the deepest night, the morning star has already risen. The change you await is drawing near — this darkness is not the end but the prelude to dawn.',g:'不要在天亮前放棄，為心中的盼望再守候一程。',gEn:'Do not give up just before daybreak; hold your hope a little longer.'},
+  {id:1,zh:'新月',en:'New Moon',sym:'☽',c:['#0d1033','#4a3b8c'],kw:['許願','種下意圖','歸零'],kwEn:['intention','planting seeds','a clean slate'],m:'一切歸於安靜的黑，正是播種意圖的時刻。宇宙的畫布已為你清空，你現在許下的願，將隨月亮一同盈滿。',mEn:'All returns to quiet darkness — the perfect moment to plant an intention. The canvas has been cleared for you; what you wish for now will wax with the moon.',g:'把你真正想要的寫下來，讓開始就是此刻。',gEn:'Write down what you truly want, and let the beginning be now.'},
+  {id:2,zh:'滿月',en:'Full Moon',sym:'○',c:['#2c2a4a','#c9c3e6'],kw:['圓滿','顯化','看見成果'],kwEn:['culmination','manifestation','seeing results'],m:'月亮圓滿，照亮你一路走來累積的一切。付出正在開花結果，同時被照亮的還有你的情緒——允許它們被看見。',mEn:'The moon is full, illuminating all you have built along the way. Your efforts are bearing fruit — and your emotions are lit up too; let them be seen.',g:'慶祝你已完成的，並溫柔釋放不再需要的。',gEn:'Celebrate what is complete, and gently release what you no longer need.'},
+  {id:3,zh:'流星',en:'Shooting Star',sym:'☄',c:['#151b4d','#e8c97e'],kw:['機會','稍縱即逝','快速行動'],kwEn:['opportunity','fleeting moments','swift action'],m:'一道光劃過你的天空——機會來得快，去得也快。這不是深思熟慮的時刻，而是相信直覺、伸手去接的時刻。',mEn:'A streak of light crosses your sky — opportunity arrives fast and leaves faster. This is not the hour for deliberation but for trusting your instinct and reaching out.',g:'那個讓你心跳加速的機會，在它消失前回應它。',gEn:'Answer the opportunity that quickens your pulse before it fades.'},
+  {id:4,zh:'銀河',en:'The Galaxy',sym:'✧',c:['#0b0d2a','#6c5ce7'],kw:['更大的圖景','信任宇宙','時間感'],kwEn:['the bigger picture','trusting the universe','a longer view'],m:'你此刻煩惱的事，放進銀河的尺度裡，會露出它真正的形狀。退後一步，你會看見每個轉折都在把你送往該去的地方。',mEn:'Set against the scale of the galaxy, your worry reveals its true shape. Step back — every turn has been carrying you toward where you are meant to be.',g:'把眼光放遠：三年後回看，你希望自己現在怎麼選？',gEn:'Zoom out: three years from now, how will you wish you had chosen today?'},
+  {id:5,zh:'北極星',en:'North Star',sym:'★',c:['#101f3c','#9ecbff'],kw:['方向','信念','不迷路'],kwEn:['direction','conviction','never lost'],m:'眾星流轉，唯它不動。你心中其實一直清楚那個不變的方向——當外界的聲音太多，回到你的北極星。',mEn:'All stars wander but one. Deep down you have always known your unmoving direction — when the world grows loud, return to your north star.',g:'寫下你最核心的一個價值，用它檢驗眼前的選擇。',gEn:'Name your single deepest value, and test the choice before you against it.'},
+  {id:6,zh:'日出',en:'Sunrise',sym:'☀',c:['#3d1f0e','#f39c12'],kw:['轉機','能量回升','重新開始'],kwEn:['a turning point','returning energy','starting again'],m:'長夜結束了。你的能量、運勢與心境正在回暖，之前停滯的事將重新流動。這是行動力回歸的訊號。',mEn:'The long night is over. Your energy, fortune and spirit are warming; what was stalled begins to move again. Momentum is returning.',g:'趁著光線正好，重啟那件被你擱置的事。',gEn:'While the light is good, restart the thing you set aside.'},
+  {id:7,zh:'極光',en:'Aurora',sym:'≋',c:['#082032','#2ecc71'],kw:['奇蹟','意外的美好','驚喜'],kwEn:['wonder','unexpected beauty','a beautiful surprise'],m:'有些美好無法計畫，只能相遇。生命正準備給你一個超出劇本的驚喜——條件是你願意抬頭，願意相信值得。',mEn:'Some beauty cannot be planned, only met. Life is preparing a surprise beyond your script — if you are willing to look up and believe you deserve it.',g:'放鬆對「一切都要照計畫」的堅持，為驚喜留一扇窗。',gEn:'Loosen your grip on the plan and leave a window open for wonder.'},
+  {id:8,zh:'月蝕',en:'The Eclipse',sym:'●',c:['#1c1024','#8e5ea8'],kw:['隱藏','轉化','暫時的黑暗'],kwEn:['what is hidden','transformation','temporary darkness'],m:'光被遮住的片刻，是為了讓你看見平時看不見的東西。有些真相、有些情緒正在陰影中等你——這段晦暗有它的任務。',mEn:'Light is veiled for a moment so you may see what daylight hides. Certain truths and feelings wait for you in the shadow — this darkness has a purpose.',g:'別急著逃離低潮，先問它想讓你看見什麼。',gEn:'Do not rush out of the dark; first ask what it wants you to see.'},
+  {id:9,zh:'星塵',en:'Stardust',sym:'⋆',c:['#241b3a','#e0c3fc'],kw:['本自具足','內在光芒','價值'],kwEn:['already whole','inner radiance','worth'],m:'你是星塵所造——你尋找的光，原本就在你的組成裡。不需要成為誰、達到什麼，你的價值先於一切表現。',mEn:'You are made of stardust — the light you seek is already part of you. You need not become anyone or achieve anything first; your worth precedes all performance.',g:'今天，把對自己的批評換成一句真心的肯定。',gEn:'Today, replace one self-criticism with one sincere affirmation.'},
+  {id:10,zh:'種子',en:'The Seed',sym:'⊙',c:['#1e2d1a','#a3b18a'],kw:['潛能','醞釀','信任時間'],kwEn:['potential','incubation','trusting time'],m:'地面上還看不到任何動靜，但種子在土裡從未停止工作。你投入的努力正在暗處紮根，看不見不代表沒有發生。',mEn:'Nothing shows above ground yet, but the seed has never stopped working. Your efforts are rooting in the dark — unseen is not undone.',g:'繼續澆水，別因為還沒發芽就挖開土壤確認。',gEn:'Keep watering; do not dig up the seed just to check it is growing.'},
+  {id:11,zh:'嫩芽',en:'The Sprout',sym:'❁',c:['#14301c','#6ab04c'],kw:['成長','初步成果','幼嫩需呵護'],kwEn:['growth','first results','tender and new'],m:'突破土壤的那一刻到了——事情有了具體的起色。但新芽仍然脆弱，此刻它需要的是保護與穩定，而非急於求成。',mEn:'The breakthrough has come — real, visible progress. Yet the sprout is still fragile; what it needs now is protection and steadiness, not haste.',g:'珍惜剛萌芽的進展，先別讓過多的期待壓垮它。',gEn:'Cherish this early growth; do not crush it under too much expectation.'},
+  {id:12,zh:'森林',en:'The Forest',sym:'♣',c:['#0f2417','#2d6a4f'],kw:['休息','紮根','自然的節奏'],kwEn:['rest','rootedness',"nature's rhythm"],m:'森林從不趕路，卻沒有一棵樹停止生長。你被邀請放慢——回到規律的生活、深呼吸、讓身心重新紮根。',mEn:'A forest never hurries, yet no tree stops growing. You are invited to slow down — return to rhythm, breathe deeply, let body and soul take root again.',g:'這週安排一段不為任何目的的休息時光。',gEn:'This week, schedule rest that serves no purpose but itself.'},
+  {id:13,zh:'山岳',en:'The Mountain',sym:'▲',c:['#1b2431','#8395a7'],kw:['堅持','長遠目標','站上高度'],kwEn:['perseverance','the long goal','higher ground'],m:'山不會為任何人降低高度，但每一步攀登都算數。你面對的挑戰值得敬畏，也值得你一步一步走完。',mEn:'The mountain lowers itself for no one, yet every step of the climb counts. Your challenge deserves respect — and deserves to be finished, one step at a time.',g:'把大目標切成今天能完成的一小段，然後完成它。',gEn:"Cut the great goal into today's one small stretch — then complete it."},
+  {id:14,zh:'海洋',en:'The Ocean',sym:'≈',c:['#032539','#1b6ca8'],kw:['情緒之流','深度','涵容'],kwEn:['emotional tides','depth','holding space'],m:'情緒如潮，有漲就有退。你不需要控制海洋，只需要學會與它共游——感受它，但不被它捲走。',mEn:'Emotions move like tides; what rises will recede. You need not command the ocean, only learn to swim with it — feel it fully without being swept away.',g:'讓情緒流過你，說出它、寫下它，但別急著據此做決定。',gEn:'Let the feeling move through you — speak it, write it — but do not decide from inside the wave.'},
+  {id:15,zh:'河流',en:'The River',sym:'≀',c:['#12343b','#43a3ba'],kw:['順流','不強求','改道的智慧'],kwEn:['flowing with','not forcing','the wisdom to reroute'],m:'河流遇到巨石不會硬撞，它繞行，最終仍抵達海洋。目前的阻礙不是要你放棄目的地，而是邀請你換一條路。',mEn:'Meeting a boulder, the river does not ram it — it bends, and still reaches the sea. This obstacle does not cancel your destination; it invites a different route.',g:'保留目標，鬆開路徑：列出第二條可行的走法。',gEn:'Keep the goal, loosen the route: sketch a second way there.'},
+  {id:16,zh:'風',en:'The Wind',sym:'〜',c:['#1f2d3d','#82ccdd'],kw:['改變將至','訊息','自由'],kwEn:['change is coming','messages','freedom'],m:'風向正在轉變，帶來新的消息與新的可能。抓不住風，但可以調整你的帆——改變本身是中性的，姿態決定它成為助力或阻力。',mEn:'The wind is shifting, carrying news and new possibility. You cannot hold the wind, but you can trim your sails — change is neutral; your stance makes it ally or obstacle.',g:'留意近日出現的訊息與邀請，其中有風要給你的方向。',gEn:'Watch the messages and invitations arriving now; the wind is pointing somewhere.'},
+  {id:17,zh:'火焰',en:'The Flame',sym:'♦',c:['#3d0c02','#e25822'],kw:['熱情','行動','點燃'],kwEn:['passion','action','ignition'],m:'你心裡那把火還在——它只是被日常蓋住了。這張牌來提醒你：讓你眼睛發亮的那件事，就是你該投入能量的地方。',mEn:'The fire in you never went out — daily life only banked it. This card is a reminder: the thing that lights your eyes is where your energy belongs.',g:'今天為那件讓你發光的事，採取一個具體行動。',gEn:'Today, take one concrete step toward what makes you shine.'},
+  {id:18,zh:'春雨',en:'The Rain',sym:'☂',c:['#22303f','#6a89a7'],kw:['釋放','洗滌','滋養'],kwEn:['release','cleansing','nourishment'],m:'雨落下來，不是為了淋濕你，而是為了洗去塵埃、滋養乾涸的土地。允許自己流淚或卸下重擔——釋放之後，生長才有空間。',mEn:'Rain falls not to soak you but to wash the dust away and feed the dry earth. Allow the tears, set down the load — release makes room for growth.',g:'找一個安全的出口，把積壓的情緒好好倒出來。',gEn:'Find a safe outlet and pour out what you have been carrying.'},
+  {id:19,zh:'彩虹',en:'The Rainbow',sym:'◠',c:['#2c2c54','#f8a5c2'],kw:['苦盡甘來','承諾','風雨後的禮物'],kwEn:['after the storm','a promise',"the storm's gift"],m:'彩虹只在風雨之後出現。你經歷的那段辛苦沒有白費——它正要兌現成某種具體的美好，一個承諾即將實現。',mEn:'Rainbows appear only after rain. Your hardship was not wasted — it is about to redeem itself as something beautiful; a promise is coming due.',g:'回頭看看你熬過的事，帶著它給你的禮物繼續走。',gEn:'Look back at what you survived, and walk on carrying its gift.'},
+  {id:20,zh:'初雪',en:'First Snow',sym:'❄',c:['#1e2749','#dfe6e9'],kw:['靜止','純淨','留白'],kwEn:['stillness','purity','white space'],m:'雪落下時，整個世界都安靜了。有些答案只在靜止中浮現——現在不是推進的時候，是沉澱的時候。',mEn:'When snow falls, the whole world goes quiet. Some answers surface only in stillness — this is not the hour to push, but to settle.',g:'給自己幾天安靜期，重要決定等雪停了再做。',gEn:'Give yourself a few quiet days; let the snow stop before you decide.'},
+  {id:21,zh:'蝴蝶',en:'The Butterfly',sym:'❋',c:['#2d132c','#c06c84'],kw:['蛻變','破繭','輕盈'],kwEn:['metamorphosis','emerging','lightness'],m:'繭裡的黑暗與擠壓，原來都是翅膀成形的過程。你正在經歷的不適是蛻變的一部分——舊的形狀容不下新的你了。',mEn:'The dark, tight cocoon was the shaping of wings all along. Your discomfort is part of a metamorphosis — the old shape no longer fits who you are becoming.',g:'放下「回到從前」的念頭，練習以新的樣子生活。',gEn:'Release the wish to go back; practice living as the new you.'},
+  {id:22,zh:'鳳凰',en:'The Phoenix',sym:'✺',c:['#3d0000','#ff793f'],kw:['浴火重生','徹底放下','重來的勇氣'],kwEn:['rebirth by fire','total release','courage to begin again'],m:'有些結束必須徹底,重生才能完整。讓燒毀的就此燒毀——灰燼裡已經有新生命的火種，你比自己以為的更有從頭來過的能力。',mEn:'Some endings must be complete for rebirth to be whole. Let what burned stay burned — the ember of new life is already in the ashes, and you are more able to begin again than you know.',g:'為那個結束舉行一個告別，然後把臉轉向新的開始。',gEn:'Give the ending a farewell, then turn your face to the beginning.'},
+  {id:23,zh:'貓頭鷹',en:'The Owl',sym:'◉',c:['#1a1a2e','#b8a04a'],kw:['智慧','看見暗處','直覺'],kwEn:['wisdom','seeing in the dark','intuition'],m:'貓頭鷹在黑暗中看得最清楚。你的直覺已經察覺了某些別人沒說出口的事——那份「怪怪的感覺」是有根據的，別急著否定它。',mEn:'The owl sees best in darkness. Your intuition has already caught what remains unspoken — that odd feeling has grounds; do not dismiss it.',g:'安靜下來聽自己的直覺，它此刻比分析更接近真相。',gEn:'Be still and hear your intuition; right now it is closer to the truth than analysis.'},
+  {id:24,zh:'白鹿',en:'The White Deer',sym:'♢',c:['#22333b','#eae0d5'],kw:['溫柔','珍稀','循跡而行'],kwEn:['gentleness','rarity','following the trail'],m:'白鹿不會出現在喧鬧的地方——珍貴的事物需要你放輕腳步靠近。以溫柔對待眼前的人與事，急躁會驚走正要靠近你的美好。',mEn:'The white deer never appears amid noise — precious things ask for a soft approach. Move gently with what is before you; impatience frightens away the good drawing near.',g:'放輕、放慢，用邀請代替追趕。',gEn:'Soften and slow down; invite rather than chase.'},
+  {id:25,zh:'天鵝',en:'The Swan',sym:'♡',c:['#2b2d42','#edf2f4'],kw:['忠於自己','優雅','真實之美'],kwEn:['true to yourself','grace','authentic beauty'],m:'天鵝從不證明自己是天鵝。你不需要迎合誰的標準——當你忠於真實的自己，你的美自然無可取代。',mEn:'A swan never proves it is a swan. You need not fit anyone\'s standard — faithful to your true self, your beauty is beyond substitute.',g:'在一件小事上停止迎合，誠實表達你的本來樣子。',gEn:'In one small matter today, stop accommodating and show your true shape.'},
+  {id:26,zh:'蜂鳥',en:'The Hummingbird',sym:'❥',c:['#123c69','#ac3b61'],kw:['喜悅','當下','小而快的行動'],kwEn:['joy','the present moment','small swift actions'],m:'蜂鳥用最小的身體完成最遠的飛行——靠的是輕盈與專注當下。快樂不必等大事發生，它藏在今天就能採到的花蜜裡。',mEn:'With the smallest body, the hummingbird makes the farthest flight — by lightness and presence. Joy need not wait for great events; it hides in nectar you can sip today.',g:'今天做三件讓自己開心的小事，不需要任何理由。',gEn:'Do three small joyful things today, no justification required.'},
+  {id:27,zh:'狼',en:'The Wolf',sym:'♠',c:['#212529','#adb5bd'],kw:['本能','界線','忠於同伴'],kwEn:['instinct','boundaries','loyalty to your pack'],m:'狼既忠於族群，也從不失去自己的野性。這張牌問你：你的界線在哪裡？屬於你的位置，需要你自己站穩去守護。',mEn:'The wolf is loyal to the pack yet never loses its wildness. This card asks: where is your boundary? Your rightful place needs you standing firm to guard it.',g:'對消耗你的人事物說「不」，一次就好，練習看看。',gEn:'Say no to what drains you — just once, as practice.'},
+  {id:28,zh:'鑰匙',en:'The Key',sym:'✥',c:['#2f1b0c','#d4af37'],kw:['解答在手','開啟','你已有能力'],kwEn:['the answer in hand','unlocking','already able'],m:'你以為自己被鎖在門外，其實鑰匙一直在你手中。你需要的能力、資源或答案已經具備——缺的只是使用它的決心。',mEn:'You think yourself locked out, yet the key has been in your hand all along. The ability, resource or answer you need is already yours — only the resolve to use it is missing.',g:'問自己：「如果我其實做得到，第一步是什麼？」然後去做。',gEn:'Ask: "If I actually can do this, what is step one?" Then take it.'},
+  {id:29,zh:'門扉',en:'The Door',sym:'∏',c:['#1b263b','#e0aaff'],kw:['新階段','門檻','選擇進入'],kwEn:['a new chapter','the threshold','choosing to enter'],m:'一扇門在你面前打開了——但門不會替你走進去。跨過這道門檻,舊階段就真正結束了。猶豫可以理解，門卻不會永遠開著。',mEn:'A door has opened before you — but a door cannot walk through itself. Cross the threshold and the old chapter truly ends. Hesitation is human; the door, though, will not stay open forever.',g:'給自己一個期限，期限到了就做出進或不進的決定。',gEn:'Set yourself a deadline; when it comes, decide — in or out.'},
+  {id:30,zh:'橋',en:'The Bridge',sym:'⌒',c:['#0f3460','#e2b0ff'],kw:['連結','和解','過渡'],kwEn:['connection','reconciliation','crossing over'],m:'兩岸之間需要一座橋，而橋往往要有人先開始搭。無論是修復一段關係，還是從舊階段走向新階段——第一塊木板由你放下。',mEn:'Between two shores a bridge is needed, and someone must lay the first plank. Whether mending a bond or crossing from old to new — that first plank is yours to place.',g:'主動送出那句話、那個訊息，搭橋不必等對方先動。',gEn:'Send the word, make the call — bridge-building need not wait for the other side.'},
+  {id:31,zh:'羅盤',en:'The Compass',sym:'✛',c:['#13232f','#b68d40'],kw:['校準','內在方向','忠於初衷'],kwEn:['recalibration','inner bearings','true to your why'],m:'走得快不如走得對。這張牌邀請你暫停，重新校準：目前的方向仍然指向你真正想去的地方嗎？還是只是慣性？',mEn:'Better to walk true than fast. This card invites a pause to recalibrate: does your current heading still point where you truly want to go — or is it only momentum?',g:'重讀你的初衷，砍掉一件偏離它的事。',gEn:'Revisit your original why, and cut one thing that strays from it.'},
+  {id:32,zh:'明鏡',en:'The Mirror',sym:'◎',c:['#232931','#4ecca3'],kw:['自我映照','誠實','投射'],kwEn:['reflection','honesty','projection'],m:'讓你煩躁的那個人、那件事，可能正映照出你不願看的自己。鏡子不批判，只如實呈現——看見了，改變才有起點。',mEn:'The person or thing that irritates you may be mirroring what you avoid in yourself. The mirror does not judge; it only shows — and seeing is where change begins.',g:'問自己：「這件事讓我這麼在意，是因為它碰到了我的什麼？」',gEn:'Ask yourself: "What in me does this touch, that it stirs me so?"'},
+  {id:33,zh:'沙漏',en:'The Hourglass',sym:'⧖',c:['#2c1810','#c9a66b'],kw:['時機','一切有時','耐心'],kwEn:['timing','a season for everything','patience'],m:'沙粒以它自己的速度落下，搖晃沙漏並不會讓時間變快。有些事情還沒到時候——不是不會發生，是還在路上。',mEn:'The sand falls at its own pace; shaking the hourglass will not hurry time. Some things are simply not due yet — not denied, just still on their way.',g:'把「為什麼還沒好」換成「等待期間我能準備什麼」。',gEn:'Trade "why isn\'t it here yet" for "what can I prepare while I wait."'},
+  {id:34,zh:'錨',en:'The Anchor',sym:'⚓',c:['#0a2342','#7d98a1'],kw:['穩定','安全感','停泊'],kwEn:['stability','security','safe harbor'],m:'風浪之中，你需要的不是更快的船，而是一個穩固的錨。回到讓你安定的人、地方與習慣——先站穩，再前行。',mEn:'In rough water you need not a faster ship but a firm anchor. Return to the people, places and rhythms that steady you — stand firm first, then sail.',g:'列出三個讓你感到安穩的事物，這週刻意靠近它們。',gEn:'Name three things that steady you, and deliberately draw near them this week.'},
+  {id:35,zh:'王冠',en:'The Crown',sym:'♛',c:['#2b1b0e','#ffd700'],kw:['自我價值','主權','承擔'],kwEn:['self-worth','sovereignty','stepping up'],m:'王冠不是別人頒發的，是你決定戴上的。停止等待許可——你人生的主權在你手上，而戴上王冠也意味著為自己的選擇負起全責。',mEn:'A crown is not conferred; it is chosen. Stop waiting for permission — sovereignty over your life is yours, and wearing the crown means owning every choice.',g:'今天替自己做一個不需要任何人批准的決定。',gEn:'Make one decision today that requires no one\'s approval.'},
+  {id:36,zh:'玫瑰',en:'The Rose',sym:'✿',c:['#2d0a14','#e84393'],kw:['愛','綻放','柔軟的勇氣'],kwEn:['love','blooming','the courage to be soft'],m:'玫瑰的美在於它敢於全然綻放，即使綻放意味著暴露。愛需要冒險——柔軟不是軟弱，是最需要勇氣的姿態。',mEn:'The rose is beautiful because it dares to open fully, though opening means exposure. Love requires risk — softness is not weakness but the bravest posture of all.',g:'向重要的人表達一次真實的情感，不設防、不預演。',gEn:'Tell someone dear one true feeling — unguarded, unrehearsed.'},
+  {id:37,zh:'蓮花',en:'The Lotus',sym:'✽',c:['#1a2634','#f8b195'],kw:['出淤泥','清淨','困境中的成長'],kwEn:['rising from the mud','clarity','growth through adversity'],m:'蓮花的根扎在淤泥裡,花卻開在水面之上。你正在經歷的混亂與困頓，恰恰是滋養你綻放的養分——不必等環境完美才開始成長。',mEn:'The lotus roots in mud yet blooms above the water. The mess you are in is the very nourishment of your blossoming — growth need not wait for perfect conditions.',g:'在目前的限制裡找一件仍然做得到的事，把它做好。',gEn:'Within your present limits, find one thing still possible — and do it well.'},
+  {id:38,zh:'羽毛',en:'The Feather',sym:'⇣',c:['#1e272e','#f5f6fa'],kw:['放下重擔','輕盈','溫柔的信息'],kwEn:['setting burdens down','lightness','a gentle sign'],m:'一根羽毛飄落在你的路上——那是溫柔的提醒：你背的太重了。有些責任根本不屬於你，有些擔憂幫不了任何人。',mEn:'A feather drifts onto your path — a gentle reminder that you carry too much. Some burdens were never yours; some worries help no one.',g:'寫下你背負的所有事，劃掉不屬於你的那幾件。',gEn:'List everything you carry, and cross off what was never yours.'},
+  {id:39,zh:'海螺',en:'The Conch',sym:'☊',c:['#26323f','#f7d794'],kw:['傾聽內在','慢慢打開','內在的海'],kwEn:['listening within','opening slowly','the ocean inside'],m:'把海螺貼近耳朵，聽見的其實是你自己內在的海。答案不在更多的意見裡——你已經聽了太多外面的聲音，現在該聽自己的。',mEn:'Hold the conch to your ear and what you hear is your own inner sea. The answer is not in more opinions — you have heard enough voices; now hear your own.',g:'暫停徵詢意見，獨處一小時，聽聽自己怎麼說。',gEn:'Pause the polling; spend one hour alone and hear what you say.'},
+  {id:40,zh:'水晶',en:'The Crystal',sym:'◇',c:['#16213e','#a8dadc'],kw:['清晰','聚焦','淨化'],kwEn:['clarity','focus','purification'],m:'水晶之所以透亮，因為它結構單純。你的處境需要的不是更多資訊,而是刪減——當你只留下真正重要的，答案自然清晰。',mEn:'A crystal is clear because its structure is simple. Your situation needs not more input but subtraction — keep only what truly matters and the answer clarifies itself.',g:'把眼前的事排出優先順序，砍掉最末的三項。',gEn:'Rank what is on your plate, and cut the bottom three.'},
+  {id:41,zh:'燭光',en:'The Candle',sym:'❈',c:['#1a120b','#e9b44c'],kw:['微小而持續','守候','溫暖他人'],kwEn:['small and steady','keeping vigil','warming others'],m:'燭光微小，卻足以照亮一整個房間的黑。不要小看你正在做的小事——持續的微光，勝過偶爾的煙火。',mEn:'A candle is small, yet it lights a whole dark room. Do not despise the small things you keep doing — a steady glow outshines occasional fireworks.',g:'守住那個小習慣、小承諾，它的複利正在累積。',gEn:'Keep the small habit, the small promise; its compound interest is building.'},
+  {id:42,zh:'泉源',en:'The Spring',sym:'♁',c:['#0d2b36','#87ceeb'],kw:['補給','源頭活水','照顧自己'],kwEn:['replenishment','the living source','self-care'],m:'井要有水，才能給人打水。你已經付出很久了——現在輪到你回到源頭補給。照顧自己不是自私，是讓給予得以持續的前提。',mEn:'A well must hold water before anyone can draw from it. You have given long enough — now return to the source and refill. Self-care is not selfish; it is what makes giving sustainable.',g:'這週為自己安排一次真正的補給：睡飽、獨處或親近自然。',gEn:'This week, truly replenish: sleep well, be alone, or be in nature.'},
+  {id:43,zh:'星圖',en:'The Star Map',sym:'✵',c:['#0b132b','#ffd166'],kw:['人生藍圖','俯瞰','一切有跡可循'],kwEn:['the life blueprint','the aerial view','a pattern in it all'],m:'把你走過的點連起來，其實是一張有方向的星圖。過去那些看似繞路的經歷，正在此刻串成意義——你比想像中更接近你的藍圖。',mEn:'Connect the dots of where you have been and a directed star map appears. The detours are threading into meaning right now — you are closer to your blueprint than you think.',g:'寫下三段「當時不懂、現在懂了」的經歷，看見自己的軌跡。',gEn:'Write down three "I get it now" moments, and see your own trajectory.'}
+];
+// 目前使用的牌組（'tarot' | 'oracle'），記住使用者的選擇
+function deckPref(){ return localStorage.getItem('tr_deck')==='oracle' ? 'oracle' : 'tarot'; }
+function isOracle(){ return S.deckKind==='oracle'; }
+function deckSize(){ return isOracle() ? ORACLE.length : 78; }
+function nameOfDeck(kind,cid){
+  if(kind==='oracle') return ORACLE[cid] ? (LANG==='en'?ORACLE[cid].en:ORACLE[cid].zh) : '';
+  return C[cid] ? (LANG==='en'?(C[cid].en||C[cid].zh):C[cid].zh) : '';
+}
+function setDeck(kind){
+  S.deckKind = kind==='oracle' ? 'oracle' : 'tarot';
+  localStorage.setItem('tr_deck', S.deckKind);
+  updateDeckUI();
+}
+function updateDeckUI(){
+  document.querySelectorAll('.deck-opt').forEach(el=>{
+    const on = el.dataset.deck===S.deckKind;
+    el.classList.toggle('sel', on);
+  });
+}
+
 const SPREADS = {
   one:{name:'單張牌陣',nameEn:'Single Card',pos:['核心訊息'],posEn:['Core Message'],
     posDesc:['此刻宇宙給你最重要的一個訊息或指引'],posDescEn:['The single most important message or guidance for you right now'],
@@ -674,6 +748,7 @@ window.addEventListener('error',e=>{
 
 const S = {
   type:null, pos:[], q:'',
+  deckKind: deckPref(),
   deck:[], picked:[],
   timer:null,
   activeProjectId: null,       // project id currently selected
@@ -718,6 +793,7 @@ function _showScreen(id) {
   document.getElementById('nav-back').style.display = id==='s-welcome'?'none':'block';
   if (id === 's-projects') renderProjectList();
   if (id === 's-project-new') renderColorSwatches();
+  if (id === 's-spread'){ S.deckKind = deckPref(); updateDeckUI(); } // 回到牌陣頁還原使用者偏好（重新解析舊記錄會暫時切換牌組）
 }
 
 // ══════════════════════════════════════════
@@ -832,7 +908,7 @@ function viewProject(id) {
     empty.innerHTML='';
     tl.innerHTML = [...proj.readings].reverse().map((r, idx) => {
       const num = proj.readings.length - idx;
-      const cardStr = (r.cards||[]).map((c,i)=>`${(r.pos||[])[i]||''}：${cardName(c.cid)}${c.rev?'↓':''}`).join('｜');
+      const cardStr = (r.cards||[]).map((c,i)=>`${(r.pos||[])[i]||''}：${nameOfDeck(r.deckKind||'tarot',c.cid)}${c.rev?'↓':''}`).join('｜');
       return `<div class="tl-item">
         <div class="tl-dot"></div>
         <div class="tl-box" onclick="toggleTlItem(this)">
@@ -1041,14 +1117,18 @@ function playShuffleSfx(dur){
     setTimeout(()=>{try{master.disconnect();soft.disconnect();}catch(e){}},(dur+.3)*1000);
   }catch(e){}
 }
+// 依目前牌組洗出一副新牌（神諭卡不分正逆位）
+function freshDeck(){
+  return fisherYates([...Array(deckSize()).keys()]).map(cid => ({ cid, rev: isOracle() ? false : cryptoRand() < 0.35 }));
+}
 function beginShuffle(){
   go('s-shuffle');
-  const arr = fisherYates([...Array(78).keys()]);
-  S.deck = arr.map(cid => ({ cid, rev: cryptoRand() < 0.35 }));
+  S.deck = freshDeck();
   const wrap=document.getElementById('shuffle-wrap');wrap.innerHTML='';
   const cards=[];
   for(let i=0;i<22;i++){const d=document.createElement('div');d.className='shuf-c';d.style.zIndex=i;wrap.appendChild(d);cards.push(d);}
   document.getElementById('btn-pick').style.display='none';
+  document.getElementById('btn-quick').style.display='none'; // 上一輪殘留的快速抽牌鈕也要藏，動畫結束才顯示
   let phase=0;
   const anim=()=>{
     if(phase<3){
@@ -1089,10 +1169,8 @@ function doPick(idx,el){
 // 一鍵快速抽牌：用加密隨機從整副牌中隨機抽出所需張數，直接進入解讀（免逐張點選）。
 function quickDraw(){
   const need=S.pos.length;
-  if(!S.deck||!S.deck.length){
-    const arr=fisherYates([...Array(78).keys()]);
-    S.deck=arr.map(cid=>({cid,rev:cryptoRand()<0.35}));
-  }
+  // 牌堆不存在、或與目前牌組張數不符（例如切換牌組後經返回鍵回到舊洗牌畫面）→ 重建
+  if(!S.deck||S.deck.length!==deckSize()) S.deck=freshDeck();
   const pool=[...Array(S.deck.length).keys()];
   const idx=[];
   for(let i=0;i<need;i++){ const j=Math.floor(cryptoRand()*pool.length); idx.push(pool.splice(j,1)[0]); }
@@ -1104,6 +1182,7 @@ function quickDraw(){
 //  CARD FACE HTML
 // ══════════════════════════════════════════
 function cardFaceHTML(card,rev){
+  if(isOracle()) return oracleFaceHTML(card);
   const imgUrl=IMG_BASE+CARD_IMG_FILES[card.id]+'&width=300';
   const colors=CARD_COLORS[card.id];
   const g=`linear-gradient(135deg,${colors[0]},${colors[1]})`;
@@ -1120,6 +1199,19 @@ function cardFaceHTML(card,rev){
     </div>
   </div>`;
 }
+// 神諭卡卡面：漸層底＋符號＋牌名（純 CSS，不需外部圖片）
+function oracleFaceHTML(card){
+  const g=`linear-gradient(160deg,${card.c[0]},${card.c[1]})`;
+  return `<div class="cf">
+    <div class="cf-oracle" style="background:${g}">
+      <div class="cf-oracle-stars">✦ ✧ ✦</div>
+      <div class="cf-oracle-sym">${card.sym}</div>
+      <div class="cf-oracle-zh">${card.zh}</div>
+      <div class="cf-oracle-en">${card.en}</div>
+      <div class="cf-oracle-stars">✧ ✦ ✧</div>
+    </div>
+  </div>`;
+}
 
 // ══════════════════════════════════════════
 //  READING
@@ -1129,7 +1221,9 @@ function unlockCtaHtml(){
   return `
       <div style="margin-top:22px;padding:16px;background:rgba(212,175,55,.07);border:1px solid rgba(212,175,55,.25);border-radius:12px;text-align:center">
         <div style="font-family:'Cinzel',serif;font-size:.78rem;color:var(--gold);letter-spacing:.1em;margin-bottom:8px">${L('✦ 解鎖 AI 深度解牌','✦ Unlock AI Deep Reading')}</div>
-        <p class="hint" style="margin:0 0 10px;font-size:.82rem">${L(`獲得針對「${S.q}」的個人化深度解析、感情連結牌組判讀，以及多輪追問對話。`,`Get a personalized deep reading of "${S.q}", relationship card-combo insights, and multi-turn follow-up chat.`)}</p>
+        <p class="hint" style="margin:0 0 10px;font-size:.82rem">${isOracle()
+          ? L(`獲得針對「${S.q}」的個人化深度指引，以及多輪追問對話。`,`Get personalized deep guidance for "${S.q}" and multi-turn follow-up chat.`)
+          : L(`獲得針對「${S.q}」的個人化深度解析、感情連結牌組判讀，以及多輪追問對話。`,`Get a personalized deep reading of "${S.q}", relationship card-combo insights, and multi-turn follow-up chat.`)}</p>
         <div style="display:flex;justify-content:center;gap:18px;font-size:.76rem;color:var(--muted);margin-bottom:14px;flex-wrap:wrap">
           <span>${L('① 點下方「前往解鎖方案」','① Tap "See unlock options"')}</span>
           <span style="color:rgba(212,175,55,.35)">→</span>
@@ -1163,12 +1257,12 @@ function showReading(resumeId, restore){ // restore={interp,chat}：從記錄還
     spreadEl.classList.add('layout-choice');
     // insert column headers before cards
     spreadEl.innerHTML=`
-      <div style="font-family:'Cinzel',serif;font-size:.72rem;color:rgba(212,175,55,.55);letter-spacing:.12em;padding-bottom:4px;border-bottom:1px solid rgba(212,175,55,.18)">選項 A</div>
-      <div style="font-family:'Cinzel',serif;font-size:.72rem;color:rgba(212,175,55,.55);letter-spacing:.12em;padding-bottom:4px;border-bottom:1px solid rgba(212,175,55,.18)">選項 B</div>`;
+      <div style="font-family:'Cinzel',serif;font-size:.72rem;color:rgba(212,175,55,.55);letter-spacing:.12em;padding-bottom:4px;border-bottom:1px solid rgba(212,175,55,.18)">${L('選項 A','Option A')}</div>
+      <div style="font-family:'Cinzel',serif;font-size:.72rem;color:rgba(212,175,55,.55);letter-spacing:.12em;padding-bottom:4px;border-bottom:1px solid rgba(212,175,55,.18)">${L('選項 B','Option B')}</div>`;
   }
-  // Compute 無視論 重點/輔助 for five-card spread
+  // Compute 無視論 重點/輔助 for five-card spread（神諭卡不分正逆位，不適用）
   let wuxiBadges = null;
-  if(S.type==='five'){
+  if(S.type==='five' && !isOracle()){
     const revCount = S.picked.filter(di=>S.deck[di].rev).length;
     const uprCount = 5 - revCount;
     // minority = 重點牌; if tied fall back to major arcana number split
@@ -1186,7 +1280,7 @@ function showReading(resumeId, restore){ // restore={interp,chat}：從記錄還
   const dispOrder = (S.type==='choice' && S.picked.length>=5) ? [0,2,1,3,4] : S.picked.map((_,x)=>x);
   dispOrder.forEach((i,disp)=>{
     const di=S.picked[i];
-    const {cid,rev}=S.deck[di]; const card=C[cid];
+    const {cid,rev}=S.deck[di]; const card=isOracle()?ORACLE[cid]:C[cid];
     const item=document.createElement('div');item.className='r-item';
     const badgeHTML = wuxiBadges
       ? `<div><span class="wuxi-badge ${wuxiBadges[i]}">${wuxiBadges[i]==='key'?'重點':'輔助'}</span></div>`
@@ -1200,7 +1294,7 @@ function showReading(resumeId, restore){ // restore={interp,chat}：從記錄還
           <div class="flip-b${rev?' rev-border':''}">${cardFaceHTML(card,rev)}</div>
         </div>
       </div>
-      <div style="font-size:.72rem;margin-top:2px;color:${rev?'var(--red)':'var(--muted)'}">${rev?'逆位':'正位'}</div>`;
+      <div style="font-size:.72rem;margin-top:2px;color:${rev?'var(--red)':'var(--muted)'}">${isOracle()?L('神諭訊息','Oracle message'):(rev?L('逆位','Reversed'):L('正位','Upright'))}</div>`;
     spreadEl.appendChild(item);
     setTimeout(()=>{const fe=document.getElementById(`fi-${i}`); if(fe) fe.classList.add('done');},350+disp*420);
   });
@@ -1304,6 +1398,7 @@ function analyzeWithAI(id){
 function loadRecIntoState(rec){
   const type=inferReadingType(rec);
   S.type=type;
+  S.deckKind=rec.deckKind||'tarot'; // 舊記錄沒存 deckKind 時視為塔羅
   S.deck=rec.cards.map(c=>({cid:c.cid,rev:c.rev}));
   S.picked=rec.cards.map((_,i)=>i);
   S.pos=(rec.pos&&rec.pos.length)?rec.pos:spreadPos(type);
@@ -1569,10 +1664,10 @@ TOPIC_EXTRA_EN={
 76:{u:{'$':"A money style both practical and warm, turning resources into real care.",h:"The wisdom of living close to the land: good food, good surroundings, a good body."},r:{'$':"Fretting over others' finances while neglecting your own; take care of yourself first.",h:"Busy caring for everyone, you alone forget your own check-up."}},
 77:{u:{'$':"The commanding presence of a wealth empire; career and assets enter a mature, abundant harvest.",h:"The ease of ample resources steadies body and mind; enjoy success while keeping restraint."},r:{'$':"Miserly stubbornness or showy extravagance — your view of wealth needs recalibrating.",h:"A health deficit built from socializing and comfort; the more affluent, the more you must mind your wellness."}}
 };
-function cardName(cid){ return LANG==='en' ? (C[cid].en||C[cid].zh) : C[cid].zh; }
-function cardPL(cid){ return LANG==='en' ? (EN_CARD[cid]&&EN_CARD[cid].pl||C[cid].pl) : C[cid].pl; }
-function cardKw(cid,rev){ const e=LANG==='en'&&EN_CARD[cid]?EN_CARD[cid][rev?'r':'u']:null; return (e&&e.kw)?e.kw:(rev?C[cid].r:C[cid].u).kw; }
-function cardMeaning(cid,rev){ const e=LANG==='en'&&EN_CARD[cid]?EN_CARD[cid][rev?'r':'u']:null; return (e&&e.m)?e.m:(rev?C[cid].r:C[cid].u).m; }
+function cardName(cid){ return nameOfDeck(S.deckKind,cid); }
+function cardPL(cid){ if(isOracle()) return ''; return LANG==='en' ? (EN_CARD[cid]&&EN_CARD[cid].pl||C[cid].pl) : C[cid].pl; }
+function cardKw(cid,rev){ if(isOracle()) return LANG==='en'?ORACLE[cid].kwEn:ORACLE[cid].kw; const e=LANG==='en'&&EN_CARD[cid]?EN_CARD[cid][rev?'r':'u']:null; return (e&&e.kw)?e.kw:(rev?C[cid].r:C[cid].u).kw; }
+function cardMeaning(cid,rev){ if(isOracle()) return LANG==='en'?(ORACLE[cid].mEn+' '+ORACLE[cid].gEn):(ORACLE[cid].m+' '+ORACLE[cid].g); const e=LANG==='en'&&EN_CARD[cid]?EN_CARD[cid][rev?'r':'u']:null; return (e&&e.m)?e.m:(rev?C[cid].r:C[cid].u).m; }
 function loreOf(cid){ return LANG==='en'&&LORE_EN[cid]?LORE_EN[cid]:LORE[cid]; }
 function topicExtraOf(cid){ return LANG==='en'&&TOPIC_EXTRA_EN[cid]?TOPIC_EXTRA_EN[cid]:TOPIC_EXTRA[cid]; }
 const SEP = ()=> LANG==='en' ? ', ' : '、';
@@ -1589,6 +1684,9 @@ async function callGemini(key, proxyEmail=null){
 
   const cardLines=S.picked.map((di,i)=>{
     const {cid,rev}=S.deck[di];
+    if(isOracle()) return en
+      ? `  ${S.pos[i]}: ${cardName(cid)}\n  Keywords: ${cardKw(cid,false).join(', ')}\n  Message: ${cardMeaning(cid,false)}`
+      : `  ${S.pos[i]}：${cardName(cid)}\n  關鍵字：${cardKw(cid,false).join('、')}\n  訊息：${cardMeaning(cid,false)}`;
     return en
       ? `  ${S.pos[i]}: ${cardName(cid)}${rev?' (reversed)':' (upright)'}\n  Keywords: ${cardKw(cid,rev).join(', ')}\n  Meaning: ${cardMeaning(cid,rev)}`
       : `  ${S.pos[i]}：${cardName(cid)}（${rev?'逆位':'正位'}）\n  關鍵字：${cardKw(cid,rev).join('、')}\n  牌義：${cardMeaning(cid,rev)}`;
@@ -1601,9 +1699,9 @@ async function callGemini(key, proxyEmail=null){
     if (past.length) {
       projectCtx = en
         ? `\n\n[Project theme] ${proj.name}${proj.desc?'\nDescription: '+proj.desc:''}\nThis is reading #${proj.readings.length+1} for this project. Past records (most recent ${past.length}):\n`
-          + past.map((r,i)=>`\n#${i+1} (${r.date}): "${r.q}"\nSpread: ${r.spread}\nCards: ${r.cards.map((c,j)=>`${r.pos[j]} ${cardName(c.cid)}${c.rev?'(rev)':''}`).join(', ')}${r.interp?'\nSummary: '+r.interp.slice(0,120)+'…':''}`).join('\n─────\n')
+          + past.map((r,i)=>`\n#${i+1} (${r.date}): "${r.q}"\nSpread: ${r.spread}\nCards: ${r.cards.map((c,j)=>`${r.pos[j]} ${nameOfDeck(r.deckKind||'tarot',c.cid)}${c.rev?'(rev)':''}`).join(', ')}${r.interp?'\nSummary: '+r.interp.slice(0,120)+'…':''}`).join('\n─────\n')
         : `\n\n【專案主題】${proj.name}${proj.desc?'\n主題描述：'+proj.desc:''}\n這是此專案第 ${proj.readings.length+1} 次占卜。以下是過去的記錄（最近 ${past.length} 次）：\n`
-          + past.map((r,i)=>`\n第${i+1}次（${r.date}）：「${r.q}」\n牌陣：${r.spread}\n抽到：${r.cards.map((c,j)=>`${r.pos[j]} ${cardName(c.cid)}${c.rev?'↓':''}`).join('、')}${r.interp?'\n解讀摘要：'+r.interp.slice(0,120)+'…':''}`).join('\n─────\n');
+          + past.map((r,i)=>`\n第${i+1}次（${r.date}）：「${r.q}」\n牌陣：${r.spread}\n抽到：${r.cards.map((c,j)=>`${r.pos[j]} ${nameOfDeck(r.deckKind||'tarot',c.cid)}${c.rev?'↓':''}`).join('、')}${r.interp?'\n解讀摘要：'+r.interp.slice(0,120)+'…':''}`).join('\n─────\n');
     } else {
       projectCtx = en
         ? `\n\n[Project theme] ${proj.name}${proj.desc?'\nDescription: '+proj.desc:''} (reading #1 for this project)`
@@ -1612,7 +1710,46 @@ async function callGemini(key, proxyEmail=null){
   }
 
   let prompt;
-  if(S.type==='five'){
+  if(isOracle()){
+    // 神諭卡解讀：不分正逆位、不用無視論/數字/元素系統，語氣溫柔直接
+    prompt = en ? `[IMPORTANT] Respond entirely in English. Do NOT use any markdown symbols (*, **, #, -, •). Output plain text paragraphs only.
+
+You are a warm, insightful oracle-card reader working with the "Starlight Oracle", a 44-card deck of gentle guidance messages. Oracle cards carry no reversals — each card is a direct message.${projectCtx}
+
+[This reading]
+Question: "${S.q}"
+Spread: ${spreadName}
+
+${cardLines}
+
+[Requirements]
+Write one flowing, nurturing guidance essay. Do not use position names or card names as headings, and do not list card-by-card. Card names may flow naturally into sentences, but the whole must read as one complete answer to "${S.q}".
+
+Structure (seamless, no visible headings):
+Para 1: The overall message — what theme do these cards weave together for this question?
+Para 2: Go deeper into each position's message and how they connect to the querent's situation.${proj && proj.readings.length ? '\nWeave in the past records to show how this theme is developing.' : ''}
+Para 3: Close with concrete, gentle, empowering guidance — what small real-world steps do the cards suggest?
+
+About 300-400 words. Begin directly; no self-introduction.` : `【重要指令】你必須全程使用繁體中文回覆，禁止使用任何英文或其他語言。禁止使用 markdown 符號（*、**、#、-、•）。只能輸出純文字段落。
+
+你是一位溫暖而有洞察力的神諭卡解讀師，使用的是「星光神諭卡」——一副 44 張、以溫柔指引訊息為核心的原創神諭卡。神諭卡不分正逆位，每張卡都是一個直接的訊息。${projectCtx}
+
+【本次占卜】
+問題：「${S.q}」
+牌陣：${spreadName}
+
+${cardLines}
+
+【解讀要求】
+請寫成一篇流暢、滋養人心的指引文章，不得用位置名稱或卡名當段落標題，不得逐卡列點。卡名可以自然融入句子中，但整體必須像一篇針對「${S.q}」寫的完整回應，讓人讀來一氣呵成。
+
+文章結構（內容無縫銜接，不需要顯示標題）：
+第一段：綜觀整體訊息——這幾張卡共同編織出什麼主題？它們如何回應這個問題的核心？
+第二段：深入每個位置的訊息，說明它們與問卜者處境的連結。${proj && proj.readings.length ? '\n結合過去占卜紀錄，指出此主題的發展脈絡。' : ''}
+第三段：以具體、溫柔而有力量的指引作結——卡片建議問卜者在現實中踏出哪些小步？
+
+約 400-500 字。請直接開始寫文章，不需要自我介紹。`;
+  } else if(S.type==='five'){
     // 無視論解牌法 - 五張無位置牌陣
     const cards = S.picked.map((di,i)=>{
       const {cid,rev}=S.deck[di];
@@ -1980,9 +2117,29 @@ function buildTopicHtml(topic, indices){
 }
 
 function buildInterpBuiltin(){
+  if(isOracle()) return buildInterpOracle();
   // 無視論（重點牌/輔助牌）解法只適用於五張無視論牌陣
   if(S.type==='five') return buildInterpWuxi();
   return buildInterpPositional();
+}
+
+// ── 神諭卡內建解讀：以每張卡的訊息串成溫柔的整體指引 ──
+function buildInterpOracle(){
+  const en=LANG==='en';
+  const cards=S.picked.map((di,i)=>({oc:ORACLE[S.deck[di].cid],pos:S.pos[i]}));
+  const names=cards.map(c=>en?c.oc.en:c.oc.zh);
+  const allKw=cards.flatMap(c=>(en?c.oc.kwEn:c.oc.kw).slice(0,2));
+  const opening = en
+    ? `<p class="interp-p">For your question "${escHtml(S.q)}", the Starlight Oracle answers with ${names.join(', ')} — an energy of ${allKw.slice(0,4).join(', ')}.</p>`
+    : `<p class="interp-p">針對「${escHtml(S.q)}」這個問題，星光神諭卡以「${names.join('、')}」回應你——整體能量圍繞著「${allKw.slice(0,4).join('、')}」。</p>`;
+  const lines=cards.map(c=> en
+    ? `<div style="padding:8px 0;border-bottom:1px solid rgba(212,175,55,.08);font-size:.9rem;line-height:1.8"><span style="color:var(--muted);font-size:.78rem;margin-right:6px">${escHtml(c.pos)}</span><span style="color:var(--gold)">${c.oc.en}</span> — ${c.oc.mEn}</div>`
+    : `<div style="padding:8px 0;border-bottom:1px solid rgba(212,175,55,.08);font-size:.9rem;line-height:1.8"><span style="color:var(--muted);font-size:.78rem;margin-right:6px">${escHtml(c.pos)}</span><span style="color:var(--gold)">${c.oc.zh}</span>——${c.oc.m}</div>`).join('');
+  const guides=cards.map(c=>en?c.oc.gEn:c.oc.g);
+  const closing = en
+    ? `<p class="interp-p" style="margin-top:12px">${guides.join(' ')} Take the message that resonates most, and let it be your next small step.</p>`
+    : `<p class="interp-p" style="margin-top:12px">${guides.join('')}從中選擇最觸動你的那一句，把它化成你的下一小步。</p>`;
+  return opening+lines+closing;
 }
 
 // ── 無視論五張牌陣：少數牌 = 重點牌，定整體方向 ──
@@ -2292,7 +2449,32 @@ function buildInterpPositional(){
     <p class="interp-p" style="font-size:.82rem;color:rgba(212,175,55,.55);margin-top:6px">${foot}</p>`;
 }
 
+// 神諭卡詳解：牌名＋關鍵字＋核心訊息＋行動指引（無正逆位/星象/圖像學）
+function buildDetailsOracle(){
+  const en=LANG==='en';
+  const pd=spreadPosDesc(S.type);
+  return S.picked.map((di,i)=>{
+    const {cid}=S.deck[di]; const oc=ORACLE[cid];
+    const posDesc = pd ? pd[i] : '';
+    const g=`linear-gradient(160deg,${oc.c[0]},${oc.c[1]})`;
+    return `<div class="card-block">
+      <div style="display:flex;gap:14px;align-items:flex-start;margin-bottom:12px">
+        <div style="flex-shrink:0;width:72px;height:110px;border-radius:6px;background:${g};display:flex;align-items:center;justify-content:center;font-size:1.9rem;box-shadow:0 2px 12px rgba(0,0,0,.5)">${oc.sym}</div>
+        <div style="flex:1;min-width:0">
+          <div class="card-block-title" style="margin-bottom:6px">${escHtml(S.pos[i])}${L('：',': ')}${en?oc.en:oc.zh}
+            <span style="color:var(--muted);font-size:.72rem;margin-left:6px">${en?oc.zh:oc.en}</span></div>
+          <div class="kw-list" style="margin-bottom:8px">${(en?oc.kwEn:oc.kw).map(k=>`<span class="kw">${k}</span>`).join('')}</div>
+        </div>
+      </div>
+      <div class="interp-p">${en?oc.mEn:oc.m}</div>
+      <div class="interp-p" style="margin-top:8px;padding:10px 14px;border-left:2px solid rgba(212,175,55,.4);background:rgba(212,175,55,.05)">
+        <span style="color:var(--gold);font-size:.78rem">${L('✦ 行動指引：','✦ Guidance: ')}</span>${en?oc.gEn:oc.g}</div>
+      ${posDesc?`<div class="lore-pos-desc" style="margin-top:8px">${en?`✦ The "${escHtml(S.pos[i])}" position represents: ${posDesc}`:`✦ 此位置「${escHtml(S.pos[i])}」代表：${posDesc}`}</div>`:''}
+    </div>`;
+  }).join('');
+}
 function buildDetails(){
+  if(isOracle()) return buildDetailsOracle();
   const topic = detectTopic(S.q);
   const en=LANG==='en';
   const pd=spreadPosDesc(S.type);
@@ -2396,9 +2578,12 @@ async function sendChat(){
   msgsEl.appendChild(loadingEl);
   msgsEl.scrollTop=msgsEl.scrollHeight;
   try{
+    const persona=isOracle()
+      ? (LANG==='en'?'You are a warm oracle-card reader.':'你是一位溫暖的神諭卡解讀師。')
+      : (LANG==='en'?'You are a tarot reader.':'你是一位精通塔羅的占卜師。');
     const context=LANG==='en'
-      ? `You are a tarot reader. Here is the reading just given:\nQuestion: "${S.q}"\nReading: ${S.lastInterpText}\n\nAnswer the querent's follow-up based on this reading. Your answer must be complete and not cut off. Respond entirely in English, no markdown symbols, plain text paragraphs only. Do not assume anyone's gender; avoid gendered pronouns — use "they/them" or "this person".`
-      : `你是一位精通塔羅的占卜師。以下是剛才的占卜結果：\n問題：「${S.q}」\n解讀：${S.lastInterpText}\n\n請根據以上解讀回答問卜者的追問。回答必須完整，不能中途停止。全程用繁體中文，禁止使用 markdown 符號，輸出純文字段落。不要預設任何人的性別，避免使用「她」「妳」等帶性別代名詞，一律改用中性的「他」，或視情況用「對方」「這個人」。請不要使用「TA」這種寫法。`;
+      ? `${persona} Here is the reading just given:\nQuestion: "${S.q}"\nReading: ${S.lastInterpText}\n\nAnswer the querent's follow-up based on this reading. Your answer must be complete and not cut off. Respond entirely in English, no markdown symbols, plain text paragraphs only. Do not assume anyone's gender; avoid gendered pronouns — use "they/them" or "this person".`
+      : `${persona}以下是剛才的占卜結果：\n問題：「${S.q}」\n解讀：${S.lastInterpText}\n\n請根據以上解讀回答問卜者的追問。回答必須完整，不能中途停止。全程用繁體中文，禁止使用 markdown 符號，輸出純文字段落。不要預設任何人的性別，避免使用「她」「妳」等帶性別代名詞，一律改用中性的「他」，或視情況用「對方」「這個人」。請不要使用「TA」這種寫法。`;
     const history=S.chatHistory.slice(0,-1).map(m=>({role:m.role==='user'?'user':'model',parts:[{text:m.text}]}));
     const geminiBody={
       systemInstruction:{parts:[{text:context}]},
@@ -2502,7 +2687,7 @@ function saveReading(silent, skipProject){
   const prev = safeParse('tr_full','[]').find(r=>r.id===id);
   const recDate = (prev && prev.date) ? prev.date : new Date().toLocaleString(LANG==='en'?'en-US':'zh-TW');
   const rec = {
-    id, type:S.type, // type 供日後「用 AI 重新解析」重建牌局
+    id, type:S.type, deckKind:S.deckKind, // type/deckKind 供日後「用 AI 重新解析」重建牌局
     date:recDate,
     q:S.q, spread:spreadName, pos:S.pos,
     cards:S.picked.map(di=>({cid:S.deck[di].cid, rev:S.deck[di].rev})),

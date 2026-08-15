@@ -206,6 +206,20 @@ textarea.inp{resize:vertical;min-height:90px}
 .breath-word{font-size:1rem;color:var(--gold);margin-top:12px;min-height:26px;letter-spacing:.15em}
 .timer-num{font-family:'Cinzel',serif;font-size:3.5rem;color:var(--gold);margin:16px 0;min-height:60px}
 
+/* ── Deck Switch ── */
+.deck-switch{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:0 auto 26px;max-width:640px}
+.deck-opt{flex:1;min-width:240px;padding:13px 16px;border:1px solid rgba(212,175,55,.22);background:rgba(8,3,26,.4);cursor:pointer;transition:all .3s;text-align:left;border-radius:10px}
+.deck-opt:hover{border-color:rgba(212,175,55,.5)}
+.deck-opt.sel{border-color:var(--gold);background:rgba(212,175,55,.1);box-shadow:0 0 18px rgba(212,175,55,.15)}
+.deck-opt-name{font-family:'Cinzel',serif;font-size:.82rem;color:var(--gold);letter-spacing:.08em;margin-bottom:4px}
+.deck-opt-desc{font-size:.72rem;color:var(--muted);line-height:1.6}
+/* ── Oracle card face ── */
+.cf-oracle{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;padding:10px}
+.cf-oracle-sym{font-size:2.6rem;line-height:1;filter:drop-shadow(0 0 12px rgba(255,255,255,.35))}
+.cf-oracle-zh{color:#fff;font-weight:700;font-size:1rem;letter-spacing:.15em;text-shadow:0 1px 8px rgba(0,0,0,.5)}
+.cf-oracle-en{color:rgba(255,255,255,.75);font-family:'Cinzel',serif;font-size:.62rem;letter-spacing:.14em;text-transform:uppercase}
+.cf-oracle-stars{color:rgba(255,255,255,.5);font-size:.6rem;letter-spacing:.4em}
+
 /* ── Shuffle Area ── */
 .shuffle-wrap{width:100%;max-width:680px;height:280px;position:relative;margin:24px auto}
 .shuf-c{position:absolute;width:76px;height:124px;border-radius:7px;background:linear-gradient(145deg,var(--p),var(--mp));border:1px solid rgba(212,175,55,.4);top:50%;left:50%;transform:translate(-50%,-50%);transition:all .45s ease;display:flex;align-items:center;justify-content:center;pointer-events:none}
@@ -649,6 +663,17 @@ textarea.inp{resize:vertical;min-height:90px}
   <div class="proj-banner" id="spread-banner"></div>
   <h2 class="t-section t-gold" data-i18n="sp.title">選擇牌陣</h2>
   <div class="t-divider">— ✦ —</div>
+  <!-- 牌組選擇：偉特塔羅 / 星光神諭卡 -->
+  <div class="deck-switch">
+    <div class="deck-opt" data-deck="tarot" onclick="setDeck('tarot')">
+      <div class="deck-opt-name" data-i18n="deck.tarot">🎴 偉特塔羅 · 78 張</div>
+      <div class="deck-opt-desc" data-i18n="deck.tarot.desc">經典塔羅牌，正逆位、元素與星象的深度解讀</div>
+    </div>
+    <div class="deck-opt" data-deck="oracle" onclick="setDeck('oracle')">
+      <div class="deck-opt-name" data-i18n="deck.oracle">✦ 星光神諭卡 · 44 張</div>
+      <div class="deck-opt-desc" data-i18n="deck.oracle.desc">溫柔直接的指引訊息，不分正逆位，適合日常療癒</div>
+    </div>
+  </div>
   <div class="spread-grid">
     <div class="spread-opt" onclick="pickSpread('three')">
       <span class="spread-icon">☽ ☉ ☾</span>
