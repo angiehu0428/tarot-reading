@@ -1,0 +1,3226 @@
+
+/* 載入完整性旗標（設於主程式「開頭」）：本區塊若因下載損毀/截斷而解析失敗，
+   整個區塊不會執行、旗標不會設立 → 頁首檢查將自動繞過快取重新載入。
+   放在開頭而非頁尾，才能偵測「頁面頭尾完好、中段損毀」的快取異常。 */
+window.__APP_LOADED__=true;
+
+// ══════════════════════════════════════════
+//  付費解鎖設定（網站管理員填入）
+// ══════════════════════════════════════════
+const GUMROAD_URL = 'https://huisangie.gumroad.com/l/tarotmonthly';
+const GUMROAD_ONCE_URL = 'https://huisangie.gumroad.com/l/tarotreading'; // 限時一次買斷
+const PROMO_END = new Date('2026-07-01T00:00:00'); // 買斷優惠到 6/30
+function inPromo(){ return new Date() < PROMO_END; }
+const WORKER_URL = 'https://tarot-worker.angiehu.workers.dev';
+// 付費 AI 解牌暫停開關（API 配額已滿時設 true；恢復服務時改回 false）
+const AI_PAUSED = false;
+// 每次占卜可追問的次數上限（避免無止境聊天、控制成本）。想多/少就改這個數字。
+const CHAT_LIMIT = 5;
+// 付費 AI 暫停時顯示的通知橫幅（付費用戶看到，內建解讀照常）
+function pauseNoticeHtml(){
+  return `<div style="margin-bottom:14px;padding:13px 16px;background:rgba(224,85,85,.1);border:1px solid rgba(224,85,85,.4);border-radius:10px;font-size:.86rem;color:#f0b8b8;line-height:1.7">${L('⚠ AI 深度解牌暫時停用：目前 API 配額已滿，我們正在處理、很快會恢復，請稍後再試 🙏 以下先提供免費的內建牌義解讀。','⚠ AI deep readings are temporarily paused: the API quota is currently full. We\'re on it and will restore service shortly — please try again later 🙏 Here\'s the free built-in reading for now.')}</div>`;
+}
+
+// ══════════════════════════════════════════
+//  i18n 多語系（瀏覽器自動偵測 + 手動切換）
+// ══════════════════════════════════════════
+let LANG = (function(){
+  const saved = localStorage.getItem('tr_lang');
+  if(saved==='zh'||saved==='en') return saved;
+  return /^zh/i.test(navigator.language||navigator.userLanguage||'') ? 'zh' : 'en';
+})();
+const T = {};
+function t(k){ const e=T[k]; return e ? (e[LANG]!=null?e[LANG]:e.zh) : k; }
+// 行內雙語助手：用於 JS 動態產生的字串（toast、解讀文案等）
+function L(zh,en){ return LANG==='zh' ? zh : en; }
+function escHtml(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function applyLang(){
+  document.documentElement.lang = LANG==='zh' ? 'zh-TW' : 'en';
+  document.querySelectorAll('[data-i18n]').forEach(el=>{ el.textContent=t(el.getAttribute('data-i18n')); });
+  document.querySelectorAll('[data-i18n-html]').forEach(el=>{ el.innerHTML=t(el.getAttribute('data-i18n-html')); });
+  document.querySelectorAll('[data-i18n-ph]').forEach(el=>{ el.setAttribute('placeholder', t(el.getAttribute('data-i18n-ph'))); });
+  document.querySelectorAll('[data-i18n-title]').forEach(el=>{ el.setAttribute('title', t(el.getAttribute('data-i18n-title'))); });
+  const lb=document.getElementById('lang-btn'); if(lb) lb.textContent=(LANG==='zh'?'EN':'中');
+  document.title = LANG==='en'
+    ? 'Tarot Oracle｜Free Online Tarot Reading with AI Interpretations'
+    : '塔羅神諭 Tarot Oracle｜免費線上塔羅占卜・AI 個人化解牌';
+}
+function setLang(l){ LANG=l; localStorage.setItem('tr_lang',l); applyLang(); if(typeof onLangChange==='function') onLangChange(); }
+function toggleLang(){ setLang(LANG==='zh'?'en':'zh'); }
+// 若使用者正停在某個畫面，切換語言時重繪動態內容
+function onLangChange(){
+  const cur=document.querySelector('.screen.on');
+  if(!cur) return;
+  if(cur.id==='s-history') showHistory();
+  if(cur.id==='s-projects' && typeof renderProjectList==='function') renderProjectList();
+  if(cur.id==='s-changelog' && typeof showChangelog==='function') showChangelog();
+  if(typeof updateProjectBanners==='function') updateProjectBanners();
+  if(typeof updateApiStatus==='function' && document.getElementById('settings-modal').classList.contains('on')) updateApiStatus();
+  if(typeof renderFontBtns==='function') renderFontBtns(getFontLevel()); // 字級按鈕標籤隨語言更新
+}
+
+Object.assign(T, {
+  'brand':{zh:'塔羅神諭',en:'Tarot Oracle'},
+  'nav.back':{zh:'← 返回',en:'← Back'},
+  'nav.back2':{zh:'返回',en:'Back'},
+  'settings.btn.label':{zh:'AI 解牌設定',en:'AI Reading'},
+  'settings.btn.title':{zh:'解鎖 AI 深度解牌 / API 設定',en:'Unlock AI reading / API settings'},
+  'music.btn.title':{zh:'靜心音場 開/關：海浪聲＋theta 靜心音波（建議戴耳機）',en:'Meditation sound on/off: ocean waves + theta soundwave (headphones recommended)'},
+  // ── Settings modal ──
+  'set.title':{zh:'✦ AI 深度解牌',en:'✦ AI Deep Reading'},
+  'set.buy.head':{zh:'✦ 訂閱解鎖 · 支持創作',en:'✦ Unlock by Subscription · Support the Creator'},
+  'set.buy.desc':{zh:'訂閱（每月 US$5）即可解鎖 AI 深度解牌功能：針對你問題的個人化塔羅分析、感情連結牌組解讀、多輪追問對話，以及跨裝置雲端同步歷史記錄與專案。可隨時取消。',en:'Subscribe (US$5/month) to unlock AI deep readings: personalized analysis of your question, relationship card-combo insights, multi-turn follow-up chat, and cloud sync of your history and projects across devices. Cancel anytime.'},
+  'set.buy.btn':{zh:'✦ 訂閱解鎖 · US$5/月',en:'✦ Subscribe to Unlock · US$5/mo'},
+  'set.buy.once.t':{zh:'🎉 一次買斷 · 限時優惠',en:'🎉 One-time unlock · limited offer'},
+  'set.buy.once.s':{zh:'💛 建議 US$5，但金額可自訂、歡迎多付一點打賞 😆 · 一次付清含 2 年使用權（到 6/30）',en:'💛 Suggested US$5 — name your own price, tips welcome 😆 · pay once, 2-year access (until Jun 30)'},
+  'set.buy.sub.t':{zh:'✦ 月訂閱 · US$5／月',en:'✦ Monthly · US$5/mo'},
+  'set.buy.sub.s':{zh:'每月自動續扣，可隨時取消',en:'Auto-renews monthly, cancel anytime'},
+  'set.buy.launch':{zh:'🎉 新開張優惠 · 一次買斷',en:'🎉 Launch deal · one-time unlock'},
+  'set.buy.launchnote':{zh:'限時新開張：一次付清、不需每月續訂（僅到 6/30）',en:'Limited launch deal: pay once, no monthly renewal (until Jun 30)'},
+  'set.buy.fx':{zh:'※ 全部以美金（USD）計價。非美國地區看到的當地幣別（如 NT$）為即時換算僅供參考；信用卡實際以美金扣款，部分發卡銀行可能另收一筆外幣交易手續費。',en:'※ All prices are in USD. Local-currency amounts shown outside the US (e.g. NT$) are real-time conversions for reference only; your card is charged in USD, and some banks may add a foreign-transaction fee.'},
+  'set.buy.note':{zh:'以購買 / 訂閱時填寫的 email 驗證解鎖',en:'Unlock by verifying with your checkout email'},
+  'set.buy.label':{zh:'已訂閱？輸入訂閱時的 Email 驗證',en:'Already subscribed? Enter your checkout email'},
+  'set.buy.verify':{zh:'驗證解鎖',en:'Verify & Unlock'},
+  'set.buy.clear':{zh:'清除驗證',en:'Clear'},
+  'set.buy.sync':{zh:'☁ 立即同步歷史記錄',en:'☁ Sync history now'},
+  'set.key.head':{zh:'✦ 使用自己的 API Key',en:'✦ Use Your Own API Key'},
+  'set.key.why':{zh:'為什麼在這裡用自己的 Key，比直接貼給 AI 更好？',en:'Why use your own key here instead of pasting it into a chatbot?'},
+  'set.key.b1':{zh:'✦ 本站已針對塔羅深度調教 AI 提示詞，包含無視論解牌法、重點牌 vs 輔助牌邏輯、元素分析架構',en:'✦ Prompts fine-tuned for tarot — Wuxi method, key vs. supporting cards, elemental analysis'},
+  'set.key.b2':{zh:'✦ 内建 78 張牌的感情、事業、逆位細節，以及感情連結牌組、數字象徵等專業解讀資料庫',en:'✦ Built-in database of all 78 cards: love, career, reversals, card combos, numerology'},
+  'set.key.b3':{zh:'✦ 自動整合你的占卜脈絡，支援多輪追問對話',en:'✦ Weaves in your reading context, supports multi-turn follow-up chat'},
+  'set.key.b4':{zh:'✦ 你只要有 Key，其餘全部幫你設定好了',en:'✦ Just bring a key — everything else is set up for you'},
+  'set.key.gethtml':{zh:'支援兩種 Key（自動辨識）：<br>✦ Gemini（免費）：<a href="https://aistudio.google.com" target="_blank" style="color:var(--gold)">aistudio.google.com</a> → Get API Key → Create API Key<br>✦ OpenAI（付費）：<a href="https://platform.openai.com/api-keys" target="_blank" style="color:var(--gold)">platform.openai.com/api-keys</a> → Create new secret key',en:'Two key types supported (auto-detected):<br>✦ Gemini (free): <a href="https://aistudio.google.com" target="_blank" style="color:var(--gold)">aistudio.google.com</a> → Get API Key → Create API Key<br>✦ OpenAI (paid): <a href="https://platform.openai.com/api-keys" target="_blank" style="color:var(--gold)">platform.openai.com/api-keys</a> → Create new secret key'},
+  'set.key.label':{zh:'貼上你的 Gemini 或 OpenAI API Key',en:'Paste your Gemini or OpenAI API key'},
+  'set.key.save':{zh:'儲存並啟用',en:'Save & Enable'},
+  'set.key.clear':{zh:'清除',en:'Clear'},
+  'set.key.test':{zh:'測試連線',en:'Test'},
+  'set.fair.title':{zh:'✦ 關於抽牌公平性',en:'✦ On Shuffle Fairness'},
+  'set.fair.body':{zh:'本程式使用 <strong style="color:var(--gold)">crypto.getRandomValues()</strong>——瀏覽器的加密安全隨機算法，與任何對話記憶、AI、或過去紀錄完全無關。<br><br>每次洗牌都是獨立事件，結果由當下按下洗牌的瞬間決定，無任何偏向。',en:'This app uses <strong style="color:var(--gold)">crypto.getRandomValues()</strong> — the browser\'s cryptographically secure randomizer, completely independent of any chat memory, AI, or past records.<br><br>Every shuffle is an independent event, decided at the moment you shuffle, with no bias.'},
+  // ── Welcome ──
+  'w.sub':{zh:'讓牌卡引領你走向內心的真相',en:'Let the cards guide you to your inner truth'},
+  'w.start':{zh:'✦ 開始占卜 ✦',en:'✦ Begin Reading ✦'},
+  'w.project':{zh:'✦ 專案占卜 ✦',en:'✦ Project Reading ✦'},
+  'w.history':{zh:'歷史記錄',en:'History'},
+  'w.changelog':{zh:'✦ 更新紀錄',en:'✦ Changelog'},
+  'w.poe':{zh:'🙏 擲筊占卜（新上線）',en:'🙏 Jiaobei Divination (new)'},
+  'w.mysite':{zh:'🌐 我的其他作品',en:'🌐 More of my work'},
+  'cl.title':{zh:'更新紀錄',en:'Changelog'},
+  'cl.intro':{zh:'塔羅神諭持續進化中，這裡記錄每一次的更新。',en:'Tarot Oracle keeps evolving — every update is logged here.'},
+  'w.addhome':{zh:'⭐ 加入書籤 / 手機桌面',en:'⭐ Bookmark / Add to Home'},
+  'w.tagline':{zh:'大阿爾克那 · 22張主牌 · 偉特圖像 · 加密隨機',en:'Major & Minor Arcana · 78 cards · Rider–Waite · Crypto-random'},
+  'w.ai.q':{zh:'✦ 如何啟用 AI 個人化解牌？',en:'✦ How to enable personalized AI readings?'},
+  'w.ai.intro':{zh:'本程式支援 <strong style="color:var(--gold)">Google Gemini</strong> 與 <strong style="color:var(--gold)">OpenAI</strong> 解牌，針對你的問題與牌陣給出深度個人化分析。<br>未設定時也可正常使用，以內建牌義解讀。',en:'Supports <strong style="color:var(--gold)">Google Gemini</strong> and <strong style="color:var(--gold)">OpenAI</strong> for readings — deep personalized analysis of your question and spread.<br>Works without setup too, using built-in card meanings.'},
+  'w.ai.m1':{zh:'方法一：購買解鎖（推薦）',en:'Option 1: Unlock by purchase (recommended)'},
+  'w.ai.m1.s':{zh:'1. 點右上角 <strong style="color:var(--silver)">⚙</strong> → 點「訂閱解鎖」<br>2. 在彈出視窗中完成訂閱<br>3. 輸入訂閱時填寫的 Email → 點「驗證解鎖」',en:'1. Tap <strong style="color:var(--silver)">⚙</strong> top-right → "Subscribe to Unlock"<br>2. Complete checkout in the popup<br>3. Enter your checkout email → "Verify & Unlock"'},
+  'w.ai.m2':{zh:'方法二：自備 API Key（支援 Gemini / OpenAI）',en:'Option 2: Bring your own API key (Gemini / OpenAI)'},
+  'w.ai.m2.s':{zh:'1. Gemini 免費取得：<a href="https://aistudio.google.com" target="_blank" style="color:var(--gold);text-decoration:none;border-bottom:1px solid rgba(212,175,55,.4)">aistudio.google.com</a>，或 OpenAI：<a href="https://platform.openai.com/api-keys" target="_blank" style="color:var(--gold);text-decoration:none;border-bottom:1px solid rgba(212,175,55,.4)">platform.openai.com</a><br>2. 點右上角 <strong style="color:var(--silver)">⚙</strong> → 貼上 API Key → 儲存（自動辨識種類）',en:'1. Get Gemini free at <a href="https://aistudio.google.com" target="_blank" style="color:var(--gold);text-decoration:none;border-bottom:1px solid rgba(212,175,55,.4)">aistudio.google.com</a>, or OpenAI at <a href="https://platform.openai.com/api-keys" target="_blank" style="color:var(--gold);text-decoration:none;border-bottom:1px solid rgba(212,175,55,.4)">platform.openai.com</a><br>2. Tap <strong style="color:var(--silver)">⚙</strong> top-right → paste key → save (auto-detected)'},
+  'w.ai.foot':{zh:'✦ 訂閱每月 US$5，解鎖跨裝置 AI 解牌，可隨時取消<br>✦ 自備 Key 完全免費，每分鐘可解牌 15 次<br>✦ 兩種方式皆不會對外傳送個人資料',en:'✦ Subscribe for US$5/month to unlock AI readings across devices — cancel anytime<br>✦ Your own key is free, ~15 readings per minute<br>✦ Neither method sends your personal data anywhere'},
+  'w.copyright':{zh:'© 2026 塔羅神諭 · All Rights Reserved',en:'© 2026 Tarot Oracle · All Rights Reserved'},
+  'w.contact':{zh:'聯繫我們',en:'Contact Us'},
+  'set.report':{zh:'✦ 說明與回報 · 功能許願',en:'✦ Help, feedback & feature wishes'},
+  'help.title':{zh:'✦ 說明與回報',en:'✦ Help & Feedback'},
+  'help.faq.head':{zh:'✦ 常見問題',en:'✦ FAQ'},
+  'help.form.head':{zh:'✦ 找不到答案？告訴我們',en:'✦ Didn\'t find it? Tell us'},
+  'help.type.issue':{zh:'🐞 問題回報',en:'🐞 Report a problem'},
+  'help.type.wish':{zh:'💡 功能許願',en:'💡 Feature wish'},
+  'help.ph':{zh:'描述你遇到的問題，或想要的功能...',en:'Describe the problem you hit, or a feature you\'d like...'},
+  'help.contact.ph':{zh:'（選填）想收到回覆就留 email 或 IG',en:'(optional) Leave email or IG if you\'d like a reply'},
+  'help.submit':{zh:'送出',en:'Send'},
+  'set.font.head':{zh:'✦ 字級大小（看不清楚可調大）',en:'✦ Text size (make it bigger if hard to read)'},
+  'font.lv0':{zh:'標準',en:'Normal'},'font.lv1':{zh:'大',en:'Large'},'font.lv2':{zh:'特大',en:'X-Large'},'font.lv3':{zh:'超大',en:'XX-Large'},
+  'font.btn.title':{zh:'字級大小（點我放大）',en:'Text size (tap to enlarge)'},
+  'ann.title':{zh:'✦ 更新通知 💫',en:'✦ What\'s New 💫'},
+  'ann.body':{zh:'💫 <strong style="color:var(--gold)">本週更新一次看！</strong><br><br>✦ <strong>專案也雲端同步了</strong>：訂閱用戶的專案（含名稱與記錄）自動跨裝置備份，換手機、清資料都不會不見<br>✦ <strong>專案名稱可以編輯</strong>：進入專案點「✎ 編輯」<br>✦ <strong>手機追問可換行</strong>：按「換行」不再誤送出<br>✦ <strong>訂閱額滿自動切換</strong>：有自備 API Key 會無縫接手<br>✦ 穩定性大修：網路不穩載入不完整會自動重新載入、資料損壞自動修復——「按鈕沒反應」的問題掰掰 🙌<br><br>感謝每一位回報的朋友 🙏 歡迎繼續許願 ✨',en:'💫 <strong style="color:var(--gold)">This week\'s updates!</strong><br><br>✦ <strong>Projects now sync to the cloud</strong>: subscribers\' projects (names & readings) back up across devices — switching phones or clearing data won\'t lose them<br>✦ <strong>Project names are editable</strong>: tap "✎ Edit" inside a project<br>✦ <strong>Line breaks in mobile follow-ups</strong>: return no longer sends by mistake<br>✦ <strong>Auto-switch at subscription limit</strong>: your own API key takes over seamlessly<br>✦ Major stability work: incomplete page loads self-heal, corrupted data auto-repairs — goodbye unresponsive buttons 🙌<br><br>Thanks to everyone who reported — keep the wishes coming ✨'},
+  'ann.feedback':{zh:'有問題或想許願新功能？點此回報 →',en:'Found a bug or have a feature wish? Tell us →'},
+  'ann.ok':{zh:'我知道了',en:'Got it'},
+  'report.title':{zh:'🐞 回報問題',en:'🐞 Report a Problem'},
+  'report.desc':{zh:'遇到問題或有建議嗎？把情況描述寄到下面這個信箱，我會盡快處理 🙏',en:'Hit a problem or have a suggestion? Email the details to the address below and I\'ll get on it 🙏'},
+  'report.copy':{zh:'複製',en:'Copy'},
+  'report.mail':{zh:'開啟郵件 App 寄出',en:'Open mail app'},
+  // ── Spread select ──
+  'sp.title':{zh:'選擇牌陣',en:'Choose a Spread'},
+  'sp.three.name':{zh:'三張牌陣',en:'Three-Card Spread'},
+  'sp.three.desc':{zh:'過去 · 現在 · 未來<br>探索時間的流動',en:'Past · Present · Future<br>Explore the flow of time'},
+  'sp.three.fit':{zh:'適合：想了解一件事的來龍去脈與發展趨勢，如「這段關係會怎麼發展」',en:'Best for: understanding how something unfolds — e.g. "How will this relationship develop?"'},
+  'sp.tri.name':{zh:'聖三角牌陣',en:'Holy Triangle Spread'},
+  'sp.tri.desc':{zh:'我以為的狀況 · 真實的狀況 · 建言<br>看見事件的真相與盲點',en:'What I assume · The truth · Advice<br>See the reality and your blind spots'},
+  'sp.tri.fit':{zh:'適合：卡關、想不通的事，如「在現在的事件中，有我沒注意到的盲點嗎」',en:'Best for: feeling stuck — e.g. "Is there a blind spot I\'m missing in this situation?"'},
+  'sp.core.name':{zh:'四張牌 · 直指核心',en:'Four-Card · Core Insight'},
+  'sp.core.desc':{zh:'問題核心 · 障礙 · 對策 · 優勢<br>一次看清卡關與解方',en:'Core · Obstacle · Move · Strengths<br>See the block and the way through at once'},
+  'sp.core.fit':{zh:'適合：不知道問題核心在哪、老是卡關，如「事業一直沒起色，我能做什麼」',en:'Best for: can\'t pin down the real issue and keep stalling — e.g. "My career won\'t take off, what can I do?"'},
+  'sp.love.name':{zh:'五張牌 · 感情萬用',en:'Five-Card · Relationship'},
+  'sp.love.desc':{zh:'雙方現況 · 對彼此的感情態度 · 可能結果<br>感情問題萬用',en:'Both states · how each feels · likely outcome<br>An all-purpose love reading'},
+  'sp.love.fit':{zh:'適合：想了解你和某個特定對象的感情，如「我和◯◯目前的狀況與發展」',en:'Best for: your relationship with one specific person — e.g. "Me and ___, where do we stand and where is it going?"'},
+  'sp.celtic.name':{zh:'賽爾特十字',en:'Celtic Cross'},
+  'sp.celtic.desc':{zh:'10 張 · 最經典綜合大牌陣<br>現況 · 過去未來 · 內外影響 · 結果',en:'10 cards · the classic full spread<br>present · past & future · inner & outer · outcome'},
+  'sp.celtic.fit':{zh:'適合：重要、複雜、想看最深最完整的問題，如「這個合作案最後會如何」',en:'Best for: important, complex questions you want in full depth — e.g. "How will this deal ultimately turn out?"'},
+  'sp.five.name':{zh:'五張無視論',en:'Five-Card Wuxi'},
+  'sp.rec':{zh:'★ 最推薦',en:'★ Top Pick'},
+  'sp.five.desc':{zh:'全方位解牌 · 無視論五牌陣<br>重點牌 · 輔助牌 · 元素分析',en:'All-around reading · Wuxi method<br>Key card · supporting cards · elements'},
+  'sp.five.fit':{zh:'最推薦！全方位解讀單一主題的整體能量，層次最豐富，如「接下來這段感情的走向」',en:'Most recommended! The richest, most all-around reading of a single theme — e.g. "Where is this relationship heading?"'},
+  'sp.choice.name':{zh:'二擇一牌陣',en:'Either-Or Spread'},
+  'sp.choice.desc':{zh:'選項1（左）vs 選項2（右）<br>各自分析優勢與挑戰',en:'Option 1 (left) vs Option 2 (right)<br>strengths & challenges of each'},
+  'sp.choice.fit':{zh:'適合：在兩個選項間猶豫，下一步會請你寫明「選項1（左）／選項2（右）」各是什麼',en:'Best for: deciding between two options — next you\'ll name Option 1 (left) and Option 2 (right)'},
+  'q.choice.tip':{zh:'✦ 先寫清楚你要二選一的兩條路，牌會分別分析「選項 1（左）」與「選項 2（右）」的優勢與挑戰。',en:'✦ Name your two options first — the cards will analyze the strengths & challenges of "Option 1 (left)" and "Option 2 (right)" separately.'},
+  'q.choice.a':{zh:'選項 1（左）是什麼？',en:'What is Option 1 (left)?'},
+  'q.choice.aph':{zh:'例：留在現職',en:'e.g. Stay in my current job'},
+  'q.choice.b':{zh:'選項 2（右）是什麼？',en:'What is Option 2 (right)?'},
+  'q.choice.bph':{zh:'例：接受新工作',en:'e.g. Take the new offer'},
+  'sp.one.name':{zh:'單張牌陣',en:'Single Card'},
+  'sp.one.desc':{zh:'今日訊息 · 快速指引<br>一牌道盡核心',en:'Daily message · quick guidance<br>One card, one core insight'},
+  'sp.one.fit':{zh:'適合：簡單明確的問題或每日指引，如「今天我該注意什麼」',en:'Best for: simple questions or daily guidance — e.g. "What should I watch for today?"'},
+  'sp.custom.name':{zh:'自訂牌陣',en:'Custom Spread'},
+  'sp.custom.desc':{zh:'設計你專屬的牌陣<br>最多 12 張（可排整年運勢）',en:'Design your own spread<br>Up to 12 cards (e.g. a 12-month year ahead)'},
+  'sp.custom.fit':{zh:'適合：有自己習慣的牌陣，自由定義每個位置的意義',en:'Best for: your own layouts — define what each position means'},
+  // ── Question ──
+  'q.title':{zh:'輸入你的問題',en:'Enter Your Question'},
+  'q.title.custom':{zh:'自訂牌陣設定',en:'Custom Spread Setup'},
+  'q.n.label':{zh:'牌陣張數（1–12）',en:'Number of cards (1–12)'},
+  'q.label':{zh:'你的問題',en:'Your question'},
+  'q.ph':{zh:'寫下你心中想要了解的事...',en:'Write down what you wish to understand...'},
+  'q.go':{zh:'✦ 進入冥想 ✦',en:'✦ Enter Meditation ✦'},
+  'q.focus.hint':{zh:'💡 <strong style="color:var(--gold)">先聚焦你的問題</strong>：想清楚你主要想問哪一個面向 —— 💗 感情 · 💼 事業 · 💰 財運 · 🩺 健康 · 📖 學業。問題越具體聚焦（例如「我和某人這段關係下半年會如何發展？」比「我會幸福嗎？」更好），牌義就越能切中你的方向。',en:'💡 <strong style="color:var(--gold)">Focus your question first</strong>: decide which area you mainly want to ask about — 💗 Love · 💼 Career · 💰 Money · 🩺 Health · 📖 Study. The more specific and focused your question (e.g. "How will my relationship with ___ develop in the second half of this year?" beats "Will I be happy?"), the more precisely the cards can speak to your situation.'},
+  // ── Meditation ──
+  'med.title':{zh:'靜心冥想',en:'Meditation'},
+  'med.guide':{zh:'請專注於問題，讓答案從心中自然升起',en:'Focus on your question; let the answer rise from within'},
+  'med.shuffle':{zh:'✦ 開始洗牌 ✦',en:'✦ Shuffle ✦'},
+  'med.skip':{zh:'跳過冥想',en:'Skip meditation'},
+  'med.snd.head':{zh:'♪ 關於靜心音場',en:'♪ About the Sound Field'},
+  'med.snd.body':{zh:'<strong style="color:var(--gold)">海浪聲</strong>——由近浪、遠浪與碎浪三層交織而成，節奏彼此錯開，如真實海岸般自然不重複。<br><strong style="color:var(--gold)">Theta 靜心音波</strong>——海浪之下墊著極輕的雙耳節拍（左耳 108Hz、右耳 114Hz），大腦會感知到 6Hz 的差頻，對應深度放鬆與冥想時的 theta 腦波頻率。<br><br><span style="color:rgba(212,175,55,.7)">✦ 建議戴耳機聆聽</span>——雙耳節拍需要左右耳接收不同頻率才有效果。<br><span style="color:rgba(154,141,181,.6)">音場由瀏覽器即時生成，每次聆聽都是獨一無二的海。右下角 ♪ 可隨時開關。</span>',en:'<strong style="color:var(--gold)">Ocean waves</strong> — three layers (near, far, and breaking surf) interweave at offset rhythms, never repeating, like a real shoreline.<br><strong style="color:var(--gold)">Theta soundwave</strong> — beneath the waves sits a faint binaural beat (108Hz left, 114Hz right); your brain perceives the 6Hz difference, matching the theta brainwave of deep relaxation and meditation.<br><br><span style="color:rgba(212,175,55,.7)">✦ Headphones recommended</span> — binaural beats need each ear to hear a different frequency.<br><span style="color:rgba(154,141,181,.6)">Generated live by your browser — every listen is a unique sea. Toggle anytime with ♪ at bottom-right.</span>'},
+  // ── Reading ──
+  'rd.interp':{zh:'✦ 整體解讀',en:'✦ Overall Reading'},
+  'rd.chat':{zh:'✦ 繼續提問',en:'✦ Follow-up Questions'},
+  'rd.chat.hint':{zh:'✦ 可以追問任何細節，例如「為什麼是這張牌？」「具體該怎麼做？」「時間點大概是什麼時候？」——AI 會根據這次解牌延伸回答。',en:'✦ Ask for any detail — e.g. "Why this card?", "What exactly should I do?", "Roughly when?" — the AI answers based on this reading.'},
+  'rd.chat.ph':{zh:'針對這次解牌繼續提問...',en:'Ask a follow-up about this reading...'},
+  'rd.chat.send':{zh:'送出',en:'Send'},
+  'rd.detail':{zh:'✦ 單牌解析',en:'✦ Card-by-Card'},
+  'rd.save':{zh:'儲存記錄',en:'Save'},
+  'rd.again':{zh:'再占一次',en:'Read Again'},
+  'rd.home':{zh:'回首頁',en:'Home'},
+  // ── Meditation breath ──
+  'med.breath.in':{zh:'吸氣...',en:'Inhale...'},
+  'med.breath.hold':{zh:'屏息...',en:'Hold...'},
+  'med.breath.out':{zh:'呼氣...',en:'Exhale...'},
+  'med.ready':{zh:'準備好了～',en:'Ready ✦'},
+  'toast.needq':{zh:'請先輸入你的問題',en:'Please enter your question first'},
+  'pos.default':{zh:'位置',en:'Position'},
+  // ── Shuffle ──
+  'sh.title':{zh:'洗牌中',en:'Shuffling'},
+  'sh.sub':{zh:'將你的意念注入牌卡之中',en:'Pour your intention into the cards'},
+  'sh.badge':{zh:'🔐 加密隨機算法 · 每次完全獨立',en:'🔐 Cryptographic randomness · fully independent each time'},
+  'sh.pick':{zh:'✦ 開始抽牌 ✦',en:'✦ Draw Cards ✦'},
+  'sh.quick':{zh:'⚡ 一鍵快速抽牌',en:'⚡ Quick draw'},
+  'pick.quick':{zh:'⚡ 一鍵快速抽牌（隨機）',en:'⚡ Quick draw (random)'},
+  // ── Reading head ──
+  'rd.head':{zh:'✦ 神諭解讀 ✦',en:'✦ The Oracle Speaks ✦'},
+  // ── Pick ──
+  'pick.title':{zh:'選擇牌卡',en:'Choose Your Cards'},
+  'pick.left.pre':{zh:'以直覺選擇，還需選擇 ',en:'Choose intuitively — '},
+  'pick.left.suf':{zh:' 張',en:' more to go'},
+  // ── History ──
+  'h.title':{zh:'占卜記錄',en:'Reading History'},
+  'h.search.ph':{zh:'🔍 搜尋關鍵字（問題、牌名、解讀內容）...',en:'🔍 Search (question, card name, reading text)...'},
+  'h.clearall':{zh:'🗑 清除全部記錄',en:'🗑 Clear All History'},
+  'h.empty':{zh:'還沒有占卜記錄',en:'No readings yet'},
+  'h.noresult':{zh:'沒有符合條件的記錄，試試其他關鍵字或分類',en:'No matching records — try other keywords or a different category'},
+  'h.topic.all':{zh:'全部',en:'All'},
+  'h.topic.love':{zh:'感情',en:'Love'},
+  'h.topic.career':{zh:'事業',en:'Career'},
+  'h.topic.money':{zh:'財務',en:'Money'},
+  'h.topic.health':{zh:'健康',en:'Health'},
+  'h.topic.study':{zh:'學業',en:'Study'},
+  'h.topic.general':{zh:'其他',en:'Other'},
+  // ── Projects ──
+  'pj.title':{zh:'專案占卜',en:'Project Readings'},
+  'pj.intro':{zh:'針對同一主題持續追蹤，AI 解讀時會結合所有過去紀錄一起分析脈絡',en:'Track one theme over time — AI readings analyze the context using all your past records.'},
+  'pj.note':{zh:'💡 小提醒：塔羅一般預測未來約 3 個月內的狀況。建議在事件有明顯變化或轉折時，再針對後續重抽；不建議短時間內重複抽同一件事——牌義不會因為重抽而改變，反而容易失焦。',en:'💡 Tip: A tarot reading generally reflects roughly the next 3 months. Re-draw for follow-up only when the situation has clearly changed or shifted — avoid repeatedly drawing the same question in a short span. Redrawing won\'t change the cards\' message and tends to blur your focus.'},
+  'pj.new':{zh:'+ 新建專案',en:'+ New Project'},
+  'pj.skip':{zh:'不使用專案，直接占卜',en:'Skip projects, read directly'},
+  'pn.title':{zh:'建立新專案',en:'Create New Project'},
+  'pn.name':{zh:'專案名稱',en:'Project name'},
+  'pn.name.ph':{zh:'例如：2024 感情追蹤',en:'e.g. 2026 Love Journey'},
+  'pn.desc':{zh:'主題描述（可選）',en:'Theme description (optional)'},
+  'pn.desc.ph':{zh:'這個專案想探索什麼？背景描述有助 AI 給出更深入的解讀...',en:'What does this project explore? Background helps the AI give deeper readings...'},
+  'pn.color':{zh:'顏色標記',en:'Color tag'},
+  'pn.create':{zh:'✦ 建立並開始占卜 ✦',en:'✦ Create & Begin Reading ✦'},
+  'pv.continue':{zh:'✦ 繼續占卜此主題 ✦',en:'✦ Continue This Theme ✦'},
+  'pv.delete':{zh:'刪除專案',en:'Delete Project'}
+});
+
+// ══════════════════════════════════════════
+//  CRYPTO RANDOM — zero memory, zero bias
+// ══════════════════════════════════════════
+function cryptoRand() {
+  const buf = new Uint32Array(1);
+  crypto.getRandomValues(buf);
+  return buf[0] / (0xFFFFFFFF + 1);
+}
+function fisherYates(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(cryptoRand() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+// ══════════════════════════════════════════
+//  CARD DATA
+// ══════════════════════════════════════════
+const IMG_BASE = 'https://commons.wikimedia.org/w/index.php?title=Special:Redirect/file/';
+const CARD_IMG_FILES = [
+  // Major Arcana 0-21
+  'RWS_Tarot_00_Fool.jpg','RWS_Tarot_01_Magician.jpg','RWS_Tarot_02_High_Priestess.jpg',
+  'RWS_Tarot_03_Empress.jpg','RWS_Tarot_04_Emperor.jpg','RWS_Tarot_05_Hierophant.jpg',
+  'RWS_Tarot_06_Lovers.jpg','RWS_Tarot_07_Chariot.jpg','RWS_Tarot_08_Strength.jpg',
+  'RWS_Tarot_09_Hermit.jpg','RWS_Tarot_10_Wheel_of_Fortune.jpg','RWS_Tarot_11_Justice.jpg',
+  'RWS_Tarot_12_Hanged_Man.jpg','RWS_Tarot_13_Death.jpg','RWS_Tarot_14_Temperance.jpg',
+  'RWS_Tarot_15_Devil.jpg','RWS_Tarot_16_Tower.jpg','RWS_Tarot_17_Star.jpg',
+  'RWS_Tarot_18_Moon.jpg','RWS_Tarot_19_Sun.jpg','RWS_Tarot_20_Judgement.jpg',
+  'RWS_Tarot_21_World.jpg',
+  // Wands 22-35
+  'Wands01.jpg','Wands02.jpg','Wands03.jpg','Wands04.jpg','Wands05.jpg','Wands06.jpg',
+  'Wands07.jpg','Wands08.jpg','Wands09.jpg','Wands10.jpg','Wands11.jpg','Wands12.jpg',
+  'Wands13.jpg','Wands14.jpg',
+  // Cups 36-49
+  'Cups01.jpg','Cups02.jpg','Cups03.jpg','Cups04.jpg','Cups05.jpg','Cups06.jpg',
+  'Cups07.jpg','Cups08.jpg','Cups09.jpg','Cups10.jpg','Cups11.jpg','Cups12.jpg',
+  'Cups13.jpg','Cups14.jpg',
+  // Swords 50-63
+  'Swords01.jpg','Swords02.jpg','Swords03.jpg','Swords04.jpg','Swords05.jpg','Swords06.jpg',
+  'Swords07.jpg','Swords08.jpg','Swords09.jpg','Swords10.jpg','Swords11.jpg','Swords12.jpg',
+  'Swords13.jpg','Swords14.jpg',
+  // Pentacles 64-77
+  'Pents01.jpg','Pents02.jpg','Pents03.jpg','Pents04.jpg','Pents05.jpg','Pents06.jpg',
+  'Pents07.jpg','Pents08.jpg','Pents09.jpg','Pents10.jpg','Pents11.jpg','Pents12.jpg',
+  'Pents13.jpg','Pents14.jpg'
+];
+const CARD_COLORS = [
+  // Major Arcana 0-21
+  ['#c8a96e','#e8c97e'],['#c0392b','#e74c3c'],['#1a3a7e','#2e86c1'],
+  ['#1e8449','#27ae60'],['#922b21','#c0392b'],['#6c3483','#9b59b6'],
+  ['#c0392b','#e74c3c'],['#1a3a6e','#2e4a8e'],['#d35400','#f39c12'],
+  ['#5d6d7e','#7f8c8d'],['#6c3483','#2471a3'],['#1a5276','#2980b9'],
+  ['#1e8449','#148f77'],['#17202a','#2c3e50'],['#148f77','#1abc9c'],
+  ['#7b241c','#1a0a2e'],['#a93226','#e74c3c'],['#1a6fa5','#85c1e9'],
+  ['#2c3e50','#6c3483'],['#d4ac0d','#f39c12'],['#7d3c98','#c0392b'],
+  ['#1e8449','#2471a3'],
+  // Wands 22-35 (fire: oranges/reds)
+  ['#c0392b','#e67e22'],['#a93226','#d35400'],['#922b21','#e67e22'],['#d35400','#f39c12'],
+  ['#c0392b','#a93226'],['#e67e22','#f39c12'],['#922b21','#c0392b'],['#d35400','#e74c3c'],
+  ['#a93226','#e67e22'],['#7b241c','#c0392b'],['#e67e22','#d35400'],['#c0392b','#f39c12'],
+  ['#a04000','#d35400'],['#922b21','#e74c3c'],
+  // Cups 36-49 (water: blues/teals)
+  ['#1a5276','#2e86c1'],['#1a3a7e','#2471a3'],['#148f77','#1abc9c'],['#1a5276','#5dade2'],
+  ['#2471a3','#1abc9c'],['#1a3a7e','#148f77'],['#1f618d','#2980b9'],['#17618d','#2e86c1'],
+  ['#1a5276','#148f77'],['#2e86c1','#5dade2'],['#1a3a7e','#2471a3'],['#148f77','#1f618d'],
+  ['#1a5276','#1abc9c'],['#1a3a7e','#2e86c1'],
+  // Swords 50-63 (air: grays/silvers)
+  ['#5d6d7e','#2c3e50'],['#7f8c8d','#5d6d7e'],['#6c757d','#495057'],['#5d6d7e','#adb5bd'],
+  ['#6c757d','#2c3e50'],['#7f8c8d','#4a5568'],['#5d6d7e','#6c757d'],['#495057','#2c3e50'],
+  ['#6c757d','#7f8c8d'],['#2c3e50','#5d6d7e'],['#7f8c8d','#6c757d'],['#5d6d7e','#495057'],
+  ['#6c757d','#2c3e50'],['#5d6d7e','#7f8c8d'],
+  // Pentacles 64-77 (earth: greens/browns)
+  ['#1e8449','#27ae60'],['#196f3d','#1e8449'],['#1a5c3a','#27ae60'],['#1e8449','#2ecc71'],
+  ['#145a32','#196f3d'],['#1e8449','#52be80'],['#196f3d','#27ae60'],['#1a5c3a','#1e8449'],
+  ['#27ae60','#2ecc71'],['#145a32','#1e8449'],['#196f3d','#52be80'],['#1e8449','#27ae60'],
+  ['#1a5c3a','#196f3d'],['#145a32','#27ae60']
+];
+const CARD_SYMS = [
+  // Major Arcana 0-21
+  '○','∞','☽','♀','♂','✝','♡','⚔','∞','☯','☸','⚖','⊕','✦','△','⛧','⚡','★','☾','☀','☿','◎',
+  // Wands 22-35
+  '✦','✦','✦','✦','✦','✦','✦','✦','✦','✦','✦','✦','✦','✦',
+  // Cups 36-49
+  '♡','♡','♡','♡','♡','♡','♡','♡','♡','♡','♡','♡','♡','♡',
+  // Swords 50-63
+  '⚔','⚔','⚔','⚔','⚔','⚔','⚔','⚔','⚔','⚔','⚔','⚔','⚔','⚔',
+  // Pentacles 64-77
+  '◈','◈','◈','◈','◈','◈','◈','◈','◈','◈','◈','◈','◈','◈'
+];
+
+const C = [
+  {id:0,zh:'愚者',en:'The Fool',pl:'天王星',u:{kw:['新開始','冒險','純真','自由','無限可能'],m:'愚者象徵踏上全新旅程的勇氣，你正站在一個嶄新的起點，帶著開放的心靈迎接未知的冒險。感情上，這張牌預示一段充滿新鮮感的相遇，或在現有感情中重新燃起赤子之心的勇氣，不帶任何前提地愛。事業上，象徵大膽嘗試新方向、跨出舒適圈，可能是創業、換跑道或接受一個看似瘋狂卻充滿潛力的機遇。放下對結果的執著，相信宇宙的引導，每一步都是靈魂的學習。'},r:{kw:['魯莽','輕率','不顧後果','天真過頭','逃避責任'],m:'逆位的愚者提醒你，勇敢與魯莽之間有一線之隔。感情上可能意味著不成熟的表現、逃避承諾，或在感情中過於衝動而造成傷害。事業上，警惕草率決策、缺乏計畫就貿然行動的風險。在行動之前，請更謹慎地評估風險，衝動可能帶來不必要的困境。'}},
+  {id:1,zh:'魔術師',en:'The Magician',pl:'水星',u:{kw:['意志力','技能','創造','行動','資源'],m:'魔術師代表你擁有實現願望所需的一切能力，是行動力與創造力的巔峰象徵。感情上，對方或你自己充滿魅力與主動性，善於表達、積極追求，這段關係因為行動力而充滿活力；若單身，主動出擊的時機到了。事業上，你的才能正獲得充分發揮的舞台，談判、簡報、創業提案都能展現說服力，此刻是行動而非等待的時機。'},r:{kw:['欺騙','操控','技能未用','欠缺計畫','虛張聲勢'],m:'逆位的魔術師警示欺騙與操控的危機。感情上可能遇到花言巧語、言行不一的對象，或你自己在關係中並不誠實。事業上，小心虛張聲勢卻缺乏實力的情況，或有人用手段而非真才實學取得資源。重新檢視你的動機，確保行動出於真誠而非投機。'}},
+  {id:2,zh:'女祭司',en:'The High Priestess',pl:'月亮',u:{kw:['直覺','神秘','潛意識','內在智慧','靜默'],m:'女祭司邀請你向內探索，傾聽潛意識那深沉而清晰的聲音。感情上，這段關係有著難以言說的深刻連結，或暗示感情尚在醞釀、尚未公開，你的直覺正告訴你真相，要相信那個感覺。事業上，此刻不宜強行推進，而是靜觀其變、收集情報、做好內部準備；隱藏的資訊即將浮現。答案並不在外界，而是藏在你內心最深處，保持靜默，讓靈感自然浮現。'},r:{kw:['壓抑直覺','隱藏秘密','封閉','表面化','被矇蔽'],m:'逆位的女祭司暗示直覺被壓抑，或有重要的事情被刻意隱瞞。感情上可能有秘密、謊言或第三者因素未被揭露，也可能是自己不願面對內心真實的感受。事業上，資訊不透明或你被蒙在鼓裡，需要更深入探查真相。請更誠實地面對自己的感受，不要讓恐懼阻止你看見現實。'}},
+  {id:3,zh:'女皇',en:'The Empress',pl:'金星',u:{kw:['豐盛','創造力','母性','感官','滋養'],m:'女皇象徵大地之母無條件的豐盛能量，代表愛、美麗與豐收。感情上，這是極為吉祥的牌，預示充滿溫情的穩定關係、婚姻的可能，或是懷孕、新生命的降臨；以全身心去愛，讓伴侶感到被深深滋養。事業上，創意產業、美學、教育、照顧他人相關的工作將大放異彩，同時也預示財務的豐收與事業的蓬勃成長。現在是播種與孕育的時機，用心灌溉，豐收即將到來。'},r:{kw:['創意受阻','依賴','忽視自我','匱乏感','控制欲'],m:'逆位的女皇暗示豐盛的能量受到阻礙。感情上可能出現過度依賴或控制的傾向，也可能是自我價值感低落而難以接受愛；創意靈感枯竭或懷孕計畫受阻也是可能的徵兆。事業上，資源短缺或過於保守而無法擴展。重新連結大地的能量，先好好滋養自己，豐盛自然流向你。'}},
+  {id:4,zh:'皇帝',en:'The Emperor',pl:'牡羊座',u:{kw:['權威','結構','秩序','領導力','穩定'],m:'皇帝代表建立秩序與穩固基礎的力量，是理性、紀律與保護的象徵。感情上，代表一位成熟穩重、有責任感的伴侶，他用行動而非言語表達愛，給予安全感與可靠的承諾；這段感情有清晰的規則與長遠的方向。事業上，是領導力的巔峰，適合建立制度、主導團隊、談判或與政府機構打交道，你的決策力與執行力正獲得認可。建立清晰的界線與結構，穩定的基礎將帶給你長久的成就。'},r:{kw:['控制欲','獨裁','缺乏紀律','不負責任','過於強硬'],m:'逆位的皇帝警示過度控制或威權主義的陰影。感情上可能出現一方過於支配、情感霸凌，或雙方在權力關係上嚴重失衡；也可能是一位不負責任、無法給予穩定的伴侶。事業上，面臨獨裁的上司、刻板的制度，或是自身紀律崩散、拖延怠惰的問題。找回負責任的力量，在掌控與信任之間重新尋找平衡。'}},
+  {id:5,zh:'教皇',en:'The Hierophant',pl:'金牛座',u:{kw:['傳統','精神指引','信仰','智慧傳承','制度'],m:'教皇代表傳統智慧與精神指引的力量，在人與神聖之間架起橋樑。感情上，傾向傳統、穩定、受到家人認可的正式關係，可能預示訂婚或結婚；雙方共同的信仰或價值觀是這段關係的核心基礎。事業上，在傳統行業、教育、宗教、法律或大型機構中能找到立足點，遵循既有規範與前輩指引將帶來穩步晉升的機會。信任已被驗證的智慧，群體的力量給你支持。'},r:{kw:['打破傳統','叛逆','質疑權威','非傳統','不合群'],m:'逆位的教皇反映出對傳統束縛的反抗。感情上可能是一段不被家人接受的戀情、非傳統的關係模式，或是因為過於守舊的觀念而窒息了感情的發展。事業上，你正在挑戰既有的制度或尋找創新的路徑，打破框架雖有風險但也帶來突破的可能。保持開放，找到適合自己的道路。'}},
+  {id:6,zh:'戀人',en:'The Lovers',pl:'雙子座',u:{kw:['愛情','選擇','結合','和諧','價值觀'],m:'戀人牌象徵靈魂層次的深刻結合與重要的人生抉擇。感情上，這是所有牌中最直接代表戀情的牌，預示一段建立在真實吸引與共同價值觀上的美好關係；雙方彼此理解、靈魂呼應，這不只是迷戀，而是真正的選擇與承諾。事業上，面臨一個需要從心出發的重要抉擇，可能是兩條截然不同的道路，選擇符合內心價值觀的那條才會帶來真正的滿足。'},r:{kw:['關係失衡','錯誤選擇','自我衝突','不忠','三角關係'],m:'逆位的戀人暗示關係的裂痕或錯誤的抉擇。感情上可能出現不忠、三角關係，或是雙方的價值觀根本不相容；也可能是一方對這段感情猶豫不決，無法真正投入。事業上，你在兩個選項間搖擺不定，或做出了違背內心的選擇而悔恨。重新確認什麼對你才是真正重要的，誠實面對自己的心。'}},
+  {id:7,zh:'戰車',en:'The Chariot',pl:'巨蟹座',u:{kw:['勝利','意志力','控制','前進','決心'],m:'戰車代表以強大意志力駕馭一切、邁向勝利的力量。感情上，代表主動追求、勇於表白，以行動推進關係的發展；若在感情中遇到困難，強大的意志力能讓你克服阻礙，守住這段關係。事業上，是競爭中脫穎而出的象徵，考試、比賽、商業談判都能憑藉決心與策略取得勝利；出行、搬遷或跨地域的工作機會也是這張牌常見的暗示。掌控你的情緒與方向，勝利就在眼前。'},r:{kw:['失控','侵略性','方向不明','衝動魯莽','受阻'],m:'逆位的戰車暗示失去掌控或方向的混亂。感情上，可能是一方強迫推進、操控關係走向，或是因為情緒化而說出傷人的話語；也可能預示交通事故或行程受阻。事業上，計畫推進遇到強烈阻力，或因為過於急進而適得其反。放慢腳步，重新評估策略，再次出發。'}},
+  {id:8,zh:'力量',en:'Strength',pl:'獅子座',u:{kw:['內在力量','勇氣','耐心','自我掌控','溫柔征服'],m:'力量牌代表以溫柔與耐心馴服內心野性的真正強大。感情上，這是一段用愛與包容化解衝突的關係；你或你的伴侶有足夠的成熟度去接納對方的缺點，以溫柔而非強迫的方式讓關係更深厚。也可能代表你需要用愛的力量去面對感情中的困難時期。事業上，你擁有足夠的韌性與情緒管理能力去面對壓力，即使在困境中也能保持優雅，最終以實力贏得他人的尊重。'},r:{kw:['軟弱','自我懷疑','情緒失控','低自尊','怯懦'],m:'逆位的力量暗示內在力量的流失或信心的崩塌。感情上，可能出現情緒化爆發、說出無法收回的話，或因為自我懷疑而無法在關係中展現真實的自己；也可能是你正在忍耐一段不健康的關係卻沒有勇氣離開。事業上，在壓力下退縮，讓恐懼阻止你發揮應有的實力。重新連結你內心深處的勇氣，你比你所知道的更強大。'}},
+  {id:9,zh:'隱士',en:'The Hermit',pl:'處女座',u:{kw:['內省','孤獨','智慧','靈性探索','自我引導'],m:'隱士邀請你退出外界的喧囂，轉向內在尋找真正的答案。感情上，這張牌常暗示一段需要獨處與反思的時期，可能是在開始新關係前重新認識自己，或在感情中需要一些個人空間；它也可能代表一位內斂、慢熱、需要時間建立信任的伴侶。事業上，是深度研究、獨立作業、靈性事業或諮詢顧問類工作的吉兆；此刻適合整理思路、累積實力，而非高調行動。孤獨不是懲罰，而是通往智慧的神聖途徑。'},r:{kw:['孤立','退縮','拒絕幫助','迷失方向','固執己見'],m:'逆位的隱士警示過度的自我封閉或固執。感情上，可能是一方過於封閉、拒絕溝通，讓另一方感到被推開；或是你孤立自己、拒絕走入新的關係，用冷漠來保護受傷的心。事業上，閉門造車而錯失外部的寶貴建議，或陷入孤僻而與團隊脫節。允許他人靠近你，智慧不只在孤獨中，也在與他人的連結裡。'}},
+  {id:10,zh:'命運之輪',en:'Wheel of Fortune',pl:'木星',u:{kw:['命運','轉機','循環','好運','轉捩點'],m:'命運之輪象徵生命的循環與命運的轉動，一切都在流動與改變中。感情上，這張牌常帶來命中注定的相遇感，或預示一段停滯的感情即將迎來重大轉機；舊緣可能重聚，緣分的流轉都有其天意。事業上，是運勢上升的強烈信號，把握眼前到來的機遇，時機稍縱即逝；過去的努力將在此刻開始得到回報。接受命運的流動，順勢而為，宇宙正在為你安排最好的時機。'},r:{kw:['厄運','抗拒改變','命運捉弄','時機不對','困境持續'],m:'逆位的命運之輪暗示運勢下行或時機不佳的困境。感情上，緣分似乎與你擦肩而過，或舊有的問題反覆出現，讓你感到陷入了輪迴。事業上，計畫屢屢受挫，外在環境的不利因素讓你難以突破。放下對控制的執著，低潮期終將過去，等待時機重新出現的那一刻。'}},
+  {id:11,zh:'正義',en:'Justice',pl:'天秤座',u:{kw:['公正','真相','因果','平衡','責任'],m:'正義牌代表因果法則、公平與理性的力量。感情上，這段關係建立在相互尊重與平等的基礎上，雙方各自為關係承擔責任；也可能預示著一段感情的公正結局——付出的會有所回報，傷害也終將得到清算。事業上，在法律、合約、仲裁相關事務上有正面的結果；誠實行事將帶來應得的認可，公正的評價即將到來。'},r:{kw:['不公正','逃避責任','偏見','不誠實','訴訟不利'],m:'逆位的正義暗示不公正的對待或因果的失衡。感情上，可能是一方付出遠多於另一方而感到委屈，或有欺騙、背叛的行為未被正視。事業上，可能面臨不公平的待遇、不利的法律結果，或有人逃避應負的責任。勇敢正視問題，不要讓不公正的狀況繼續惡化。'}},
+  {id:12,zh:'倒吊人',en:'The Hanged Man',pl:'海王星',u:{kw:['暫停','等待','犧牲','新視角','靈性開悟'],m:'倒吊人以自願懸掛的姿態展示了靜止中的深刻智慧——有時候停下來才是最好的行動。感情上，這段關係正進入一個需要等待與觀察的階段，不宜強行推進；也可能代表你正在為了這段感情做出某種犧牲，而這份犧牲是有意義的。事業上，時機尚未成熟，此刻是累積、準備、轉換視角的時期，而非衝刺的時刻。放下固有的思維框架，從截然不同的角度重新看待你的困境，答案就在視角的轉換中。'},r:{kw:['拖延','抗拒犧牲','固執','停滯不前','自我犧牲過度'],m:'逆位的倒吊人暗示無謂的停滯或過度犧牲。感情上，可能是你在一段不值得的關係中過度委屈自己，或用拖延逃避必要的決定。事業上，拖拖拉拉、不願意為改變付出代價，讓機會悄悄流逝。停止無謂的等待，該放手的放手，該行動的行動，讓生命重新流動。'}},
+  {id:13,zh:'死神',en:'Death',pl:'天蠍座',u:{kw:['轉變','終結','新生','放下過去','蛻變'],m:'死神象徵舊章節的終結與全新生命的誕生，是蛻變與轉化最強烈的象徵。感情上，可能代表一段關係的結束，但這個終結是為了讓更適合的緣分進入你的生命；也可能是感情進入全新的階段，舊有的模式徹底死去，更深刻的連結在廢墟中誕生。事業上，舊工作、舊身份或舊的工作方式正在瓦解，這看似痛苦，卻是為更好的未來清除障礙。讓舊有的事物自然凋零，蛻變後你將更加強大。'},r:{kw:['抗拒改變','停滯','無法放手','恐懼終結','執念'],m:'逆位的死神暗示你緊抓著早已消逝的事物不肯放手。感情上，可能是沉溺於已結束的關係中，無法走出悲傷迎接新的可能；或強行維持一段已無生命力的感情。事業上，死守著過時的方法或不再適合的崗位，卻不敢面對必要的結束。給自己放手的勇氣，每一個結束都是蛻變的邀請。'}},
+  {id:14,zh:'節制',en:'Temperance',pl:'射手座',u:{kw:['平衡','耐心','節制','融合','療癒'],m:'節制象徵天使般的調和力量，以耐心將看似對立的元素完美融合。感情上，這是一段穩健、相互磨合的關係，雙方在差異中找到平衡點，用溫柔與耐心滋養彼此；也可能代表感情正在療癒期，慢慢恢復平衡。事業上，是長期規劃、穩步推進的吉兆，適合需要精確調配資源、整合不同部門的工作；健康方面也是滋養、調養、回歸規律生活的好時機。不要走極端，療癒正在悄悄地、深刻地進行。'},r:{kw:['失衡','過度放縱','衝突','缺乏耐心','自我矛盾'],m:'逆位的節制警示失衡與過度的危機。感情上，雙方的差異大到無法調和，或一方的極端行為破壞了原本的平靜；也可能是你在感情中過於委曲求全而失去自我。事業上，過度工作或過度放縱都讓你的狀態失衡，健康也可能亮起紅燈。重新審視你生活中的各個領域，找回那個中心點。'}},
+  {id:15,zh:'惡魔',en:'The Devil',pl:'摩羯座',u:{kw:['束縛','物質主義','陰暗面','上癮','欲望'],m:'惡魔牌揭示那些我們以為無法掙脫的束縛——其實鎖鍊從來都是鬆的。感情上，可能代表一段建立在強烈肉體吸引、共依存或恐懼上的關係，雙方知道這不健康卻難以割捨；也可能暗示感情中有控制、操縱或上癮的動態。事業上，被金錢、野心或職場的毒性文化所囚禁，你清楚知道問題卻動彈不得。認清你的束縛，它比你想像的更容易打破——前提是你必須先看見它。'},r:{kw:['解脫','打破束縛','覺察','重獲自由','擺脫執念'],m:'逆位的惡魔是強大的解放信號。感情上，你正從一段有害的關係、執念或依賴中掙脫，重新找回自主與尊嚴；你終於看清了那個困住你的牢籠，並有了走出去的勇氣。事業上，從職場的束縛或不健康的工作模式中解放，重新定義什麼是真正的成功。這是覺醒的時刻，走出黑暗，走向屬於你的自由。'}},
+  {id:16,zh:'高塔',en:'The Tower',pl:'火星',u:{kw:['突破','崩塌','革命','啟示','混亂'],m:'高塔代表突如其來的衝擊——閃電擊碎了那座以虛假為基礎建立的高塔。感情上，可能是一段關係的突然終結、背叛的揭露，或爭吵後的徹底崩潰；雖然痛苦，但那些崩解的往往是本就不穩固、不真實的事物。事業上，可能遭遇突然的裁員、公司倒閉或計畫的徹底失敗，看似災難，實則是在清除阻礙真正成長的舊有結構。混亂是清醒的代價，廢墟之上才能建起真正牢固的根基。'},r:{kw:['避開危機','內在動盪','延遲的崩塌','逃避現實','壓力積累'],m:'逆位的高塔暗示危機被暫時壓制，或你正在竭力逃避一個必然的崩潰。感情上，表面平靜之下暗流洶湧，問題被忽視只會積累成更大的爆發。事業上，系統或關係中的裂縫需要立即正視。也可能代表你已經提前察覺危機並成功避開，積極面對問題才能將損失降到最低。'}},
+  {id:17,zh:'星星',en:'The Star',pl:'水瓶座',u:{kw:['希望','靈感','療癒','更新','被引導'],m:'星星在高塔的混亂之後降臨，帶來純淨的希望與療癒之光。感情上，這是一段讓你感到被滋養、被真正看見的美好關係，或是在傷痛之後重新相信愛的力量；若你渴望感情，此刻宇宙正在為你準備，保持開放與信任。事業上，靈感泉湧、創意活躍，適合從事藝術、療癒、人道主義相關工作；長期的努力正在開花，前景充滿希望。你正走在正確的道路上，相信自己，美好正在形成。'},r:{kw:['絕望','失去希望','迷失方向','自我懷疑','斷開連結'],m:'逆位的星星暗示希望之光暫時被烏雲遮蔽。感情上，你可能對愛感到幻滅、不再相信有真誠的連結存在，或在感情挫折後難以重建信心。事業上，創意枯竭、對未來失去方向感，對自己的才能充滿懷疑。黑暗不會永遠持續，試著找到哪怕一顆微小的星，讓它帶你重新找到光的方向。'}},
+  {id:18,zh:'月亮',en:'The Moon',pl:'雙魚座',u:{kw:['幻象','潛意識','夢境','恐懼','直覺'],m:'月亮代表在朦朧月光下游走的潛意識世界，真相隱藏在幻象與恐懼的迷霧之中。感情上，這段關係籠罩著不確定感——對方的真實意圖不明朗，或你自己的感受混亂而複雜；也可能有謊言、隱瞞或自我欺騙的成分。事業上，情況不夠透明，有隱藏的競爭者或不為人知的因素在影響結果，此刻不宜輕信表面資訊。傾聽你的夢境與直覺，它們比理性更能感知真相，讓深層的恐懼慢慢浮出水面。'},r:{kw:['幻象消散','重見清明','面對恐懼','揭露真相','走出迷霧'],m:'逆位的月亮代表迷霧逐漸消散，被壓抑的真相浮出水面。感情上，你終於看清了一直不願面對的現實——無論是對方的真面目還是自己的內心；困惑、欺騙或幻想的時期即將結束，清醒雖然痛苦，卻是解脫的開始。事業上，隱藏的問題被揭露，讓你能夠真正處理根源。'}},
+  {id:19,zh:'太陽',en:'The Sun',pl:'太陽',u:{kw:['喜悅','成功','活力','清明','幸福'],m:'太陽是塔羅中最吉祥的牌之一，代表無遮蔽的純粹喜悅與成功。感情上，這是最幸福美滿的象徵，代表充滿陽光的快樂戀情、婚姻的幸福，或感情中一個格外溫暖美好的時期；雙方都沐浴在愛的光芒中，真誠、透明、相互欣賞。事業上，成功、認可、升遷、創業大獲全勝——你正在巔峰時期，所有努力都清晰可見地得到了回報。盡情享受這份祝福，分享你的光亮。'},r:{kw:['延遲成功','過度樂觀','短暫喜悅','自大','活力受阻'],m:'逆位的太陽暗示光芒被某些事物暫時遮蔽。感情上，快樂被一些未解決的問題蒙上陰影，或一方過於自我中心讓另一方感到被忽視。事業上，成功雖然在望，但可能因為過度自信或忽視細節而延誤。喜悅依然存在，只是需要你更謹慎地照料它，避免驕傲讓一切功虧一簣。'}},
+  {id:20,zh:'審判',en:'Judgement',pl:'冥王星',u:{kw:['覺醒','更新','召喚','清算','轉化'],m:'審判象徵靈魂的大覺醒，天使的號角將你從沉睡中喚醒，讓你面對真正重要的事。感情上，這張牌可能代表一段舊感情的重新出現——對方回來了，或者你重新評估了這段關係的意義；也可能是你終於承認了一段感情的真相，做出重要的決定。事業上，人生的重大轉捩點，你被某個更高的使命召喚，可能是大膽的轉行、回歸熱愛的事業，或意識到自己的真正天命。勇敢回應生命的呼喚。'},r:{kw:['自我懷疑','逃避使命','無法原諒','靈性停滯','拒絕覺醒'],m:'逆位的審判暗示你在逃避某個重要的覺醒或決定。感情上，可能是不願意原諒自己或對方，讓過去的傷害成為阻止你前進的枷鎖；或是逃避一個你清楚知道必須做的決定。事業上，你聽到了內心深處的召喚，卻因為恐懼或自我懷疑而遲遲不敢回應。放下過去的執判，給自己重新開始的勇氣。'}},
+  {id:21,zh:'世界',en:'The World',pl:'土星',u:{kw:['完成','整合','成就','圓滿','旅程終點'],m:'世界是大阿爾克那的終點，象徵一段重要旅程的圓滿完成與所有元素的整合。感情上，這是最圓滿的感情牌之一，代表一段走向婚姻、長久承諾的穩定美好關係，或感情上達到了一個夢寐以求的圓滿境界；若是單身，代表你已完整了自己，準備好迎接真正的另一半。事業上，大型計畫的成功完成、目標的全面達成、甚至是國際性的成就與認可。值得慶祝，同時也準備好迎接下一個全新的循環。'},r:{kw:['未完成','延遲','走捷徑','半途而廢','缺乏閉幕'],m:'逆位的世界暗示某件重要的事尚未真正完成，留下了未竟的遺憾。感情上，感情停滯在某個階段遲遲無法更進一步，或你試圖在關係尚未成熟時強行推進到下一步。事業上，已接近完成卻走捷徑，讓最後的成果大打折扣；也可能是遲遲無法從一個舊章節中離開，開始新的旅程。放慢腳步，確保每一個環節都真正圓滿。'}},
+  // ── 小阿爾克那：權杖（火）22-35 ──
+  {id:22,zh:'權杖王牌',en:'Ace of Wands',pl:'火元素精華',u:{kw:['創造力','熱情','新計畫','靈感','行動衝動'],m:'權杖王牌是純粹火元素的爆發，象徵靈感如閃電般降臨。感情上，代表一段充滿激情與火花的全新戀情正在展開，或在現有關係中重燃熾烈的熱情；這是一段充滿活力、令人興奮的感情開始。事業上，新計畫、新事業、新的創意方向正呼喚你，靈感泉湧的此刻就是付諸行動的最佳時機。你的熱情與生命力正達到頂點，勇敢點燃屬於你的火焰。'},r:{kw:['創意受阻','熱情消退','計畫延遲','方向不明','動力不足'],m:'逆位的權杖王牌暗示熱情的火焰正在熄滅。感情上，對這段關係失去了最初的熱情與興奮感，或一段本該開始的感情遲遲未能起步。事業上，創意受阻、計畫一再延誤，靈感枯竭讓你找不到方向。重新找到那個讓你熱血沸騰的初衷，不要讓恐懼撲滅你的火焰。'}},
+  {id:23,zh:'權杖二',en:'Two of Wands',pl:'牡羊座火星',u:{kw:['計畫','展望','個人力量','掌握全局','遠大志向'],m:'手持地球俯瞰遠方的人，象徵你已建立了基礎，正在規劃更宏大的版圖。感情上，這段感情正在穩步發展，你有清晰的方向感，知道自己想要什麼樣的未來；若單身，你已準備好踏出舒適圈去尋找更廣闊的感情可能。事業上，適合制定長期策略、拓展業務版圖，或考慮與海外相關的機遇；你有掌握全局的能力，現在是大膽規劃的時機。'},r:{kw:['計畫受阻','缺乏遠見','恐懼改變','猶豫不決','原地踏步'],m:'逆位的權杖二暗示停滯在舒適圈而不敢向外擴展。感情上，對未來沒有清晰的想法，或因為恐懼未知而拒絕讓關係更進一步。事業上，規劃不足或對改變充滿恐懼，讓你錯失了本應掌握的機遇。擴展你的眼界，人生最美的風景在你踏出的那一步之後。'}},
+  {id:24,zh:'權杖三',en:'Three of Wands',pl:'牡羊座太陽',u:{kw:['擴張','遠見','等待成果','合作','海外機遇'],m:'你已踏出第一步並建立了橋頭堡，現在站在高處靜待成果從遠方歸來。感情上，這段關係正在向外拓展，可能是長距離戀情，或感情正因共同的冒險與成長而更加豐富；雙方都有清晰的未來藍圖。事業上，與海外合作、出口貿易或跨國計畫有吉祥的預兆；你種下的種子正在遠處生根，收穫的船正在歸來的路上。'},r:{kw:['延遲','挫折','狹隘視野','計畫受阻','等待落空'],m:'逆位的權杖三暗示期待中的回報遲遲未能到來。感情上，長距離的感情出現障礙，或對關係未來的期望落空，彼此的規劃不同調。事業上，拓展計畫遭遇阻礙，合作夥伴出現問題，或海外計畫受阻。調整期望與策略，尋找可能被忽視的方向繼續前進。'}},
+  {id:25,zh:'權杖四',en:'Four of Wands',pl:'牡羊座金星',u:{kw:['慶祝','和諧','穩固','家園','喜事'],m:'四根杖搭建的花環門廊象徵歡慶與和諧，是塔羅中最喜氣的牌之一。感情上，預示婚禮、訂婚、同居或任何正式承諾的到來；也可能是感情獲得家人認可的美好時刻，雙方關係進入穩定且喜樂的新階段。事業上，慶功宴、里程碑達成、新辦公室或新家的喬遷之喜；這是一個值得大聲慶祝的成就時刻。'},r:{kw:['慶祝受阻','家庭緊張','不穩定','延遲喜事','缺乏歸屬感'],m:'逆位的權杖四暗示期待中的喜事被推遲，或家庭環境存在不和諧。感情上，婚禮、訂婚等計畫遭遇障礙，或與伴侶的家人關係緊張，讓這段感情的推進不順暢。事業上，慶功時機尚未到來，或團隊內部存在裂痕影響整體氛圍。先處理根本的問題，喜悅才能長久。'}},
+  {id:26,zh:'權杖五',en:'Five of Wands',pl:'獅子座土星',u:{kw:['衝突','競爭','混亂','爭論','磨練'],m:'五個人各持一根杖混戰，象徵充滿競爭與雜音的混亂環境。感情上，雙方意見分歧，可能因為生活方式或價值觀的差異而頻繁爭執；這些衝突若能坦誠溝通，也可能成為加深理解的機會。事業上，你正處於激烈競爭的環境，面試、比稿、職場競爭或團隊內部意見不合；混戰雖然消耗，但這也是磨練能力的舞台，不要退縮。'},r:{kw:['停止爭鬥','內在衝突','協議達成','競爭結束','逃避衝突'],m:'逆位的權杖五暗示衝突正在走向尾聲，或你選擇逃避必要的正面交鋒。感情上，雙方可能都已精疲力竭而選擇暫時休戰，但根本問題未解；或你壓抑了真實的不滿，讓問題在表面平靜下積累。事業上，競爭結束或達成妥協，但需評估這個結果是否真的令你滿意。'}},
+  {id:27,zh:'權杖六',en:'Six of Wands',pl:'獅子座木星',u:{kw:['勝利','認可','成就','公開讚揚','領導凱旋'],m:'騎馬凱旋、頭戴月桂冠的英雄象徵公開的勝利與眾人的認可。感情上，這段感情光明正大地獲得了周遭的認可與祝福，或你們的戀情正式公開，步入衆目睽睽的舞台；感情因雙方共同的成就而更加鞏固。事業上，是公開獲獎、升遷、重大提案通過或業績亮眼的象徵；你的努力被所有人看見，此刻是充分享受掌聲的時刻。'},r:{kw:['失敗','未獲認可','驕傲自滿','聲譽受損','私下成就'],m:'逆位的權杖六暗示勝利的光芒被遮蔽。感情上，這段感情不被認可，或一方在感情中的付出未能得到另一方的肯定，讓你感到被忽視。事業上，努力付出卻沒有得到應有的讚揚，甚至面臨聲譽的損失；也可能是驕傲自滿讓你在即將成功時跌跤。保持謙遜，繼續踏實地積累實力。'}},
+  {id:28,zh:'權杖七',en:'Seven of Wands',pl:'獅子座火星',u:{kw:['防禦','立場','挑戰','競爭','堅守'],m:'站在高處以一敵六的戰士象徵在壓力下捍衛自己的立場。感情上，這段感情面臨外部的挑戰與考驗，可能有人試圖介入，或周遭的人並不看好這段關係；堅定地站在自己的立場，不受動搖，才能守住珍貴的感情。事業上，你面臨強烈的競爭或質疑，但你佔有優勢——堅守你的專業立場，不要讓批評輕易動搖你的信心。'},r:{kw:['放棄陣地','不知所措','退縮妥協','失去信心','疲於應戰'],m:'逆位的權杖七暗示在持續的壓力下開始動搖。感情上，因為太多外部聲音而開始懷疑這段關係，或不敢為自己的感情公開站出來。事業上，面對挑戰選擇退讓，或在競爭中選擇放棄而非堅持。找回你最初堅守的理由，有些陣地值得你不惜一切守護。'}},
+  {id:29,zh:'權杖八',en:'Eight of Wands',pl:'射手座水星',u:{kw:['速度','行動','訊息','快速進展','旅行'],m:'八根全速飛行的權杖象徵無可阻擋的快速前進。感情上，關係快速升溫，好消息或告白即將到來；若你在等待某人的回應，答案很快就會揭曉。也可能代表因旅行或異地而引發的感情發展。事業上，計畫快速推進，重要訊息即將抵達，出差或旅行帶來新機遇；截止日期近在眼前，把握這股動力迅速行動，不要讓機遇稍縱即逝。'},r:{kw:['延遲','溝通中斷','混亂','行程取消','消息誤傳'],m:'逆位的權杖八暗示快速的能量遭到阻塞。感情上，期待的訊息遲遲未來，或溝通出現嚴重的誤解；也可能是一段感情發展過快而讓你感到失控。事業上，行程延誤、訊息傳達出錯，或計畫因外部因素急煞車。放慢腳步，確認所有訊息的準確性後再繼續前進。'}},
+  {id:30,zh:'權杖九',en:'Nine of Wands',pl:'射手座月亮',u:{kw:['韌性','堅持','守衛','謹慎','最後衝刺'],m:'帶著頭傷依然警惕站立的戰士，象徵歷盡風霜後仍未放棄的韌性。感情上，你或這段關係經歷了不少挫折與考驗，留下了一些傷疤；但正因為你們走過了那些困難，這段感情更加堅韌，勝利的終點就在不遠處。事業上，雖然疲憊，你依然守在崗位上；最後一關就在眼前，保持警惕，別在終點前放棄。你比你以為的更堅強。'},r:{kw:['疲憊崩潰','固執偏執','過度防禦','拒絕幫助','放棄'],m:'逆位的權杖九暗示疲憊已達臨界點，或對過去的傷害過度防禦而拒絕讓任何人靠近。感情上，因為曾經受傷而築起高牆，讓真誠的愛無法進入；或對伴侶充滿不必要的猜疑。事業上，守著過時的做法不肯改變，固執地堅持已被證明無效的策略。允許自己尋求幫助，放下過去的傷，才能真正前進。'}},
+  {id:31,zh:'權杖十',en:'Ten of Wands',pl:'射手座土星',u:{kw:['重擔','過度負荷','責任','掙扎','完成在望'],m:'弓腰扛著十根杖艱難前行的人，象徵過重的責任與即將達成的目標之間的張力。感情上，你在這段關係中承擔了過多的責任，付出遠多於對方，讓你感到筋疲力竭；或整個家庭的重擔都落在你一個人肩上。事業上，工作量已超過你的負荷，但終點近在咫尺——卸下這些重擔之後，你將重獲輕盈的自由。學會說「不」，才能保持長期的戰鬥力。'},r:{kw:['放下重擔','委派任務','不必要的壓力','解放','學會拒絕'],m:'逆位的權杖十是強烈的信號：現在正是放下不必要重擔的時機。感情上，你在這段關係中過度犧牲自己，而對方卻未曾試圖減輕你的負擔；是時候重新評估這段關係中的付出是否平衡。事業上，要果斷委派任務，停止獨自承擔所有責任；你不必成為所有人的英雄。'}},
+  {id:32,zh:'權杖侍者',en:'Page of Wands',pl:'火象星座的土元素',u:{kw:['熱情','探索','新奇','好奇','振奮消息'],m:'充滿活力的年輕探索者手持權杖，眼神充滿對世界的無限好奇。感情上，代表一位充滿活力、熱情但可能還不夠成熟穩定的追求者；或是感情中注入了新鮮感與冒險精神，讓雙方重新燃起興奮感。事業上，一個令人興奮的新消息、新專案邀請或學習機會即將到來；此刻適合接受挑戰、嘗試你從未做過的事，以開放的心態迎接這份新鮮感。'},r:{kw:['方向不明','三分鐘熱度','衝動草率','消息延遲','不夠成熟'],m:'逆位的權杖侍者暗示熱情空洞而缺乏執行力。感情上，對方充滿口號卻行動力不足，或這段感情浮於表面、缺乏深度；也可能代表你自己對這段關係三分鐘熱度，難以持續投入。事業上，計畫開了頭卻無法持續，注意力分散讓你什麼都做卻什麼都沒完成。找到真正值得你全力投入的事，然後堅持下去。'}},
+  {id:33,zh:'權杖騎士',en:'Knight of Wands',pl:'天蠍座射手座',u:{kw:['行動','衝勁','冒險','熱情進取','大膽追求'],m:'策馬全速奔馳的騎士象徵無所畏懼的行動力與對冒險的渴望。感情上，代表一個充滿活力、大膽追求、讓你心跳加速的追求者；這段感情快速升溫、充滿激情，對方用行動而非言語表達愛意。事業上，勇敢出擊的時機到了，面對機會不要遲疑；旅行、搬遷、快速的業務拓展或創業衝刺都是吉兆。把握這股強勁的推進力，目標在前，全速前進。'},r:{kw:['魯莽','衝動失控','方向偏差','精力浪費','有始無終'],m:'逆位的權杖騎士的熱情已轉為破壞性的衝動。感情上，對方過於急進讓你感到窒息，或雙方因衝動說了傷人的話；熾烈的開始可能因為缺乏耐心而快速冷卻。事業上，魯莽的行動造成失誤，計畫因為準備不足而半途而廢。在熱情的驅使下，記得保持一絲冷靜與策略性思考。'}},
+  {id:34,zh:'權杖王后',en:'Queen of Wands',pl:'牡羊座金牛座',u:{kw:['自信','獨立','熱情','魅力','創造力'],m:'懷抱向日葵、腳踏黑貓的王后象徵充滿魅力、自信且熱情的女性力量。感情上，代表一位充滿個人魅力、獨立自主的伴侶，熱情、有主見，以自身的光芒吸引對方；或是你自己正散發著讓人無法忽視的魅力，感情上充滿吸引力。事業上，適合需要領導力、創意與公眾魅力的工作；你的熱情能感染周遭的人，此刻勇敢展現才能，你的光芒不可被掩蓋。'},r:{kw:['自我懷疑','妒忌','操控他人','失去魅力','情緒化'],m:'逆位的權杖王后失去了原本的陽光與自信。感情上，可能出現嫉妒、情緒化或操控伴侶的行為；也可能是你因為某些事情失去了自信，不再相信自己值得被愛。事業上，才能被自我懷疑所掩蓋，創造力受阻，可能因為情緒問題影響職場人際。重新連結你內心那道耀眼的火焰，停止與他人比較，活出你自己的精彩。'}},
+  {id:35,zh:'權杖國王',en:'King of Wands',pl:'巨蟹座獅子座',u:{kw:['遠見','領導力','魅力','企業家精神','成熟的熱忱'],m:'威嚴端坐的火元素之王象徵成熟、有遠見的領袖，他以強大的熱忱與意志感召他人追隨夢想。感情上，代表一位有擔當、有遠見、充滿魅力的成熟伴侶，他用行動和熱情創造美好的感情；或是你正以成熟的智慧與領導力主導一段感情的走向。事業上，是創業家、領導者、人生導師的象徵；將你的願景化為現實的時機已到，以熱情帶領他人共同實現偉大的目標。'},r:{kw:['獨裁','衝動魯莽','過於強勢','期望過高','霸道'],m:'逆位的權杖國王失去了智慧，熱情變成了控制欲。感情上，可能出現霸道、控制，或對伴侶期望過高而讓對方感到窒息；也可能是衝動的決定破壞了原本穩固的感情基礎。事業上，獨裁的領導風格讓團隊士氣低落，或因為過於急躁而做出代價高昂的錯誤決策。以謙遜調和你的熱情，偉大的領袖懂得傾聽。'}},
+  // ── 小阿爾克那：聖杯（水）36-49 ──
+  {id:36,zh:'聖杯王牌',en:'Ace of Cups',pl:'水元素精華',u:{kw:['愛','新情感','靈性連結','豐盛','直覺開啟'],m:'聖杯王牌是純粹水元素的精華，象徵愛的源頭向你打開。感情上，這是最美麗的新戀情預兆，一段充滿深刻情感連結的關係即將或正在展開；你的心正向愛完全開放，準備好以真誠迎接這份珍貴的相遇。事業上，靈感湧現、直覺準確，適合任何需要情感投入或創意的工作；也可能預示著一個讓你從心底感到熱愛的新機會降臨。讓愛如河流般自由流動。'},r:{kw:['情感受阻','拒絕愛','壓抑感受','空虛失落','心扉緊閉'],m:'逆位的聖杯王牌暗示情感的流動受到阻塞。感情上，因為過去的傷害而關閉了心扉，拒絕讓新的愛進入生命；或情感長期被壓抑，讓你感到內在的空洞與乾涸。事業上，對工作失去了熱情，感到無聊或情感上的耗盡。打開心扉，那些傷痛不應成為永遠的牆。'}},
+  {id:37,zh:'聖杯二',en:'Two of Cups',pl:'巨蟹座金星',u:{kw:['夥伴','結合','和諧','吸引力','靈魂呼應'],m:'兩人面對面舉杯，目光交會，象徵靈魂層次的深刻共鳴與真誠的吸引。感情上，這是感情牌中最直接代表兩人相互吸引的牌，預示一段建立在真實理解與深刻連結上的戀情；雙方頻率相合，在對方眼中看到了自己的靈魂。事業上，代表理想合夥關係的建立，雙方優勢互補、目標一致，這份合作將帶來豐碩的成果。'},r:{kw:['失和','失衡','頻率不合','誤解加深','連結斷裂'],m:'逆位的聖杯二暗示曾經美好的連結出現裂痕。感情上，雙方的需求與頻率嚴重失衡，溝通障礙讓誤解越來越深，曾經的默契已消失；也可能代表一段單戀或不對等的感情關係。事業上，合作夥伴出現分歧，合作關係破裂的風險升高。需要誠懇的溝通才能找到重新連結的路。'}},
+  {id:38,zh:'聖杯三',en:'Three of Cups',pl:'巨蟹座水星',u:{kw:['慶祝','友誼','社群','喜悅','好消息'],m:'三位女性高舉聖杯歡慶，象徵被愛與喜悅所圍繞的幸福時刻。感情上，可能預示婚禮、訂婚或感情進入喜慶階段的好消息；也可能代表透過朋友的介紹認識重要的人，或感情因為社交活動而有新的進展。事業上，團隊合作結出果實，同事間充滿凝聚力，值得慶賀的成果即將到來。這是一個與親近的人共享喜悅的時刻。'},r:{kw:['三角關係','過度放縱','社交衝突','歡慶過後的空虛','朋友背叛'],m:'逆位的聖杯三暗示社交關係中潛藏的問題。感情上，可能出現第三者介入、閨蜜或友人背叛感情的情況；或是一段感情的慶祝行為遮掩了深層的問題。事業上，過度的社交活動讓你分心，或團隊之間的表面和諧下存在派系鬥爭。找回真正重要的連結，避免流於表面的歡樂。'}},
+  {id:39,zh:'聖杯四',en:'Four of Cups',pl:'巨蟹座月亮',u:{kw:['冥想','內省','重新評估','錯失機會','情感疲倦'],m:'獨坐樹下沉思的人，對旁邊伸出的杯子視而不見，象徵內在的反思與對現狀的不滿。感情上，你或你的伴侶正在感情中感到倦怠，對這段關係不再像以前那樣充滿熱情；也可能是你沉浸在自己的世界裡，忽略了身邊真誠向你靠近的人。事業上，對現有工作感到無聊，有更好的機會在你眼前，但你的注意力全放在眼前的問題上而錯過了它。'},r:{kw:['重新投入','接受機會','走出孤立','行動覺醒','敞開心房'],m:'逆位的聖杯四是從內省的蛹中破繭的信號。感情上，你終於準備好走出封閉的狀態，重新對愛敞開心扉；或你意識到身邊一直有人在等待你，而你終於看見了他。事業上，你從倦怠中甦醒，重新燃起對工作的熱情，積極把握眼前的機遇。'}},
+  {id:40,zh:'聖杯五',en:'Five of Cups',pl:'天蠍座火星',u:{kw:['失落','哀傷','後悔','幻滅','悲痛'],m:'黑色斗篷的人盯著三個倒下的杯子，背後卻有兩個仍然立著。感情上，這是失去愛、分手或感情幻滅後的悲傷；你正沉浸在失去中，卻忘了看見那些仍在的美好——還有人在乎你，還有愛等著你。事業上，計畫失敗、機會錯失，讓你沉浸在懊悔與挫敗中。允許自己真實地悲傷，但記得：身後仍有兩個杯子，未來的可能性依然存在。'},r:{kw:['接受失去','走出悲傷','轉身向前','療癒中','重拾希望'],m:'逆位的聖杯五代表你正在從失落的谷底慢慢走出。感情上，你開始接受分手或失去的事實，不再執著於那三個倒下的杯子，而是轉身看見了身後依然立著的希望。事業上，從失敗中學到了寶貴的教訓，準備帶著新的智慧重新出發。放下過去的遺憾，你值得新的快樂。'}},
+  {id:41,zh:'聖杯六',en:'Six of Cups',pl:'天蠍座太陽',u:{kw:['懷舊','童年回憶','天真純粹','舊緣重聚','給予'],m:'大孩子將一杯鮮花遞給小孩子，象徵純真無私的愛與美好的過去記憶。感情上，非常可能預示舊情人的重新出現，或與青梅竹馬般的感情；這段感情帶著熟悉的溫暖與懷舊的甜蜜，讓人感到被理解與被接受。事業上，回到過去熟悉的領域能找到突破，或與舊同事、老客戶的重新連結帶來新機遇。'},r:{kw:['活在過去','美化舊情','舊日痛苦浮現','放不下','拒絕成長'],m:'逆位的聖杯六是沉溺過去的警示。感情上，你無法放下一段早已結束的關係，對舊情人過度美化，讓這份執念阻礙了你遇見新的可能；或是舊日的傷痛以意想不到的方式浮現，需要被正視和療癒。事業上，死守過時的方法，不願意接受新的做法。珍視美好的記憶，但讓自己活在當下。'}},
+  {id:42,zh:'聖杯七',en:'Seven of Cups',pl:'天蠍座金星',u:{kw:['幻象','選擇過多','夢想','迷惑','想象過剩'],m:'七個杯子中浮現出各式各樣的誘人景象，象徵面對過多可能性時的迷失。感情上，你可能同時被多個對象吸引，或對這段感情有過多不切實際的期待與幻想；也可能是你對感情的想像遠多於真實的行動，讓真實的機會在幻想中溜走。事業上，創意豐富但難以聚焦，必須分辨哪個方向才是真正值得投入的機遇，而非虛幻的泡沫。'},r:{kw:['看清幻象','回歸現實','做出決定','行動取代夢想','清醒'],m:'逆位的聖杯七是從迷霧中醒來的信號。感情上，你終於看清了對方的真實面目，或不再讓幻想主導你的感情選擇，開始以腳踏實地的方式經營關係。事業上，終於從眾多可能性中選定了一個方向，並準備好將夢想轉化為具體行動。是時候從美麗的夢境走向真實的現實了。'}},
+  {id:43,zh:'聖杯八',en:'Eight of Cups',pl:'雙魚座土星',u:{kw:['離開','尋求更深意義','放棄舒適','靈性追求','勇敢轉身'],m:'在月夜中轉身離開八個整齊杯子的人，象徵勇敢放下表面完好的事物去追求靈魂真正渴望的東西。感情上，你意識到這段關係雖然沒有明顯的錯，但已無法滿足你更深層的需求；離開需要勇氣，但靈魂在呼喚你走向更真實的連結。事業上，即使是一份穩定的工作，若它無法給你更深的意義感，離開尋找真正的使命也是智慧之舉。'},r:{kw:['恐懼離開','猶豫不決','回頭','留在不健康的關係','逃避'],m:'逆位的聖杯八暗示你清楚知道該離開，卻被恐懼或依賴困住了腳步。感情上，你在一段讓你不快樂的關係中徘徊，每次想離開又回頭，讓自己陷入反覆的痛苦循環。事業上，明知這份工作不適合你卻不敢離職，害怕離開的恐懼遠大於對更好未來的渴望。給自己一個誠實的問題：你真正渴望的是什麼？'}},
+  {id:44,zh:'聖杯九',en:'Nine of Cups',pl:'雙魚座木星',u:{kw:['心願成真','幸福滿足','享樂','豐盛','情感圓滿'],m:'胸懷得意地坐在九個杯子前的人，象徵所有心願的實現。感情上，這是塔羅中著名的「許願牌」，代表你渴望的感情狀態正在或即將實現——被愛、快樂、滿足，這段感情讓你從心底感到幸福。事業上，財務豐盛、目標達成、享受你的成果；這是一個你用努力換來的美好時刻，值得感恩地盡情享受。'},r:{kw:['貪得無厭','內在空虛','自我放縱','願望落空','表面幸福'],m:'逆位的聖杯九暗示表面的豐盛下藏著空洞。感情上，表面看似幸福的關係其實讓你感到空虛，或你的願望一再落空，讓你感到失望與不滿足。事業上，成功了卻感到莫名的空洞，或過度沉溺於享樂而疏忽了真正重要的事。向內探索：什麼才是你靈魂真正渴望的幸福？'}},
+  {id:45,zh:'聖杯十',en:'Ten of Cups',pl:'雙魚座火星',u:{kw:['情感圓滿','家庭幸福','和諧','美夢成真','長久承諾'],m:'彩虹拱橋下一家人歡慶擁抱的畫面，是情感最圓滿的象徵。感情上，這是聖杯牌組的終極祝福——長久穩定的愛情、幸福美滿的婚姻、充滿愛的家庭生活；這段感情不只建立在激情上，更建立在深刻的理解、承諾與共同的價值觀上。事業上，在一個充滿支持與溫情的環境中工作，或事業上的成就讓整個家族都感到驕傲。'},r:{kw:['家庭不和','幸福幻滅','表面和諧','情感空虛','關係破裂'],m:'逆位的聖杯十暗示那幅完美家庭的圖景出現了裂縫。感情上，表面上看似幸福美滿，但家庭內部有深層的矛盾與不和諧；或對「完美關係」的執念讓你無法真實面對現有關係中的問題。事業上，團隊表面和諧卻暗藏衝突。誠實地面對關係中的裂縫，真正的圓滿建立在真實之上。'}},
+  {id:46,zh:'聖杯侍者',en:'Page of Cups',pl:'水象星座的土元素',u:{kw:['直覺訊息','創意','感性啟示','夢想','驚喜消息'],m:'手持聖杯凝視從杯中探出頭來的魚兒，象徵直覺與創意的意外啟示。感情上，可能代表一個讓你意想不到的求愛或浪漫表白即將到來；也可能是你自己充滿感性、細膩地體驗愛的狀態。注意夢境與直覺傳遞的訊息，有美好的消息正從意想不到的地方到來。事業上，創意靈感突然湧現，適合藝術、寫作、療癒相關工作。'},r:{kw:['感情幼稚','情緒化','沉溺幻想','創意受阻','壞消息'],m:'逆位的聖杯侍者暗示情緒的不成熟或過度沉溺於幻想。感情上，一方的行為過於孩子氣，用情緒而非溝通來處理問題；或沉浸在對感情的幻想中而錯失了真實的機會。事業上，創意枯竭，或壞消息延誤了計畫的推進。學習在感性與現實之間找到平衡點。'}},
+  {id:47,zh:'聖杯騎士',en:'Knight of Cups',pl:'水瓶座雙魚座',u:{kw:['浪漫追求','魅力','理想主義','感情邀請','溫柔騎士'],m:'騎著白馬、緩步前進的騎士捧著聖杯，象徵帶著愛意與理想前來的追求者。感情上，可能代表一個充滿浪漫情懷、溫柔體貼且善於表達情感的追求者正向你走來；或是你自己正以詩意的心境主動追求心儀的對象。這是一個充滿感情色彩的邀請，值得認真回應。事業上，以溫柔與創意打動人心，一個充滿美感的機會正在靠近。'},r:{kw:['情緒反覆','幻想破滅','情感操控','不切實際','言過其實'],m:'逆位的聖杯騎士的浪漫轉為了虛偽。感情上，對方可能善用情感手段操控你，言語上充滿甜蜜卻無法兌現承諾；或是你自己沉溺在對感情的幻想中而無法面對現實。事業上，計畫聽起來很美好卻缺乏可執行性。在浪漫中保持清醒，用行動而非言語來判斷一個人的誠意。'}},
+  {id:48,zh:'聖杯王后',en:'Queen of Cups',pl:'雙子座巨蟹座',u:{kw:['同理心','直覺','情感智慧','溫柔','療癒者'],m:'凝視著封閉華麗聖杯的王后，坐在海邊沉浸在自己深邃的情感世界中，象徵最深層的情感智慧與同理力量。感情上，代表一位溫柔、直覺敏銳、充滿同理心的伴侶，能深刻地理解並感受你的內心世界；或是你正以這種細膩的情感力量去感知並呵護這段關係。事業上，適合心理諮商、醫療、藝術創作、教育等以情感連結為核心的工作，你的直覺與同理心是最強大的工作能力。'},r:{kw:['情緒淹沒理智','情感依賴','界線模糊','自我欺騙','過度付出'],m:'逆位的聖杯王后在情感的海洋中迷失了方向。感情上，可能因為過度投入而失去了自我，把全部的身份認同都建立在這段關係上；或是情緒化的反應讓伴侶感到難以應對。事業上，太容易被他人的情緒影響，缺乏必要的心理界線。為自己設立健康的情感邊界，懂得照顧自己才能真正照顧他人。'}},
+  {id:49,zh:'聖杯國王',en:'King of Cups',pl:'天秤座天蠍座',u:{kw:['情感成熟','平靜智慧','同情心','外交','情感掌控'],m:'在洶湧海浪中端坐不動的國王，象徵在情感的動盪中依然保持平靜的成熟智慧。感情上，代表一位情感成熟、懂得包容、在爭執中能保持理性且充滿同情心的伴侶；他不會用情緒攻擊你，而是以理解與智慧陪伴你走過一切。事業上，在高壓或充滿衝突的環境中能以冷靜與外交手腕化解危機；適合管理者、諮商師、外交官或任何需要情感智慧的領導角色。'},r:{kw:['情感壓抑','冷漠疏離','情緒操控','表面平靜暗湧翻騰','酗酒逃避'],m:'逆位的聖杯國王的平靜已成為冷漠的面具。感情上，對方表面上若無其事，內心卻暗潮洶湧，用冷淡或情感操控來回應親密；也可能有逃避現實的傾向，用成癮行為麻痺深層的情感。事業上，以冷酷的手段管理團隊，或用情感弱點來操縱他人。重新連結那份真誠而深刻的感受，讓它流動而非壓抑。'}},
+  // ── 小阿爾克那：寶劍（風）50-63 ──
+  {id:50,zh:'寶劍王牌',en:'Ace of Swords',pl:'風元素精華',u:{kw:['清明','真相','突破','新思維','正義之劍'],m:'寶劍王牌是純粹風元素的鋒芒，象徵一把切穿迷霧、揭示真相的利劍從天而降。感情上，帶來突破性的清明——你終於看清了這段感情的真實面目，或一段被誤解糾纏的感情終於得到了誠實的溝通與釐清。事業上，新的想法銳利而有力，適合法律事務、辯論、寫作或任何需要清晰思維的決策；真相即將浮現，以誠實與智慧行事將帶來勝利。'},r:{kw:['思維混亂','謊言當道','誤判形勢','言語傷人','錯誤決定'],m:'逆位的寶劍王牌警示思維的混亂與謊言的盛行。感情上，溝通出現嚴重的扭曲，謊言或誤解讓雙方越走越遠；言語的傷害比任何行動都更具破壞力。事業上，判斷受到干擾，決策建立在錯誤的資訊上；也可能面臨不公正的對待或法律糾紛。重新梳理思路，確保你所接收的資訊是真實的。'}},
+  {id:51,zh:'寶劍二',en:'Two of Swords',pl:'天秤座月亮',u:{kw:['僵局','迴避決定','暫時平衡','困難選擇','蒙蔽'],m:'蒙眼交叉持劍坐在水邊的人，象徵刻意遮蔽雙眼以逃避必須面對的選擇。感情上，你或你的伴侶對關係的未來方向採取迴避的態度，明知有問題卻假裝看不見；兩難的困境讓你動彈不得，這份僵局需要一個決定才能打破。事業上，兩個選項都有風險，你在猶豫不決中耗盡時間；必須揭開蒙眼布，才能做出真正的決定。'},r:{kw:['資訊超載','謊言揭露','混亂加劇','強迫選擇','真相浮現'],m:'逆位的寶劍二暗示迴避已無法再繼續。感情上，被壓抑的問題終於爆發，真相無可迴避地浮現；你必須直面那個你一直不敢想的答案。事業上，情況比你想象的更複雜，隱藏的資訊開始出現，讓你不得不重新評估整個局面。做好準備，無論真相是否讓你舒適，面對它才能前進。'}},
+  {id:52,zh:'寶劍三',en:'Three of Swords',pl:'天秤座土星',u:{kw:['心碎','分離','悲傷','背叛','情感創傷'],m:'三把劍刺穿一顆心，是塔羅中最直接的心碎象徵，代表深刻的情感傷痛。感情上，可能是分手、失去摯愛、被背叛或第三者介入帶來的刺穿心臟般的痛苦；這份傷是真實且必要被感受的，逃避只會讓它更深。事業上，可能遭遇背叛、被排擠或合作的失敗，帶來心理上的重大打擊。允許自己悲泣，療癒始於誠實地承認這份傷痛。'},r:{kw:['療癒中','釋放悲傷','原諒','走出傷痛','接受現實'],m:'逆位的寶劍三提示最深的傷痛正在緩慢地癒合。感情上，你開始接受那個曾讓你痛不欲生的事實，眼淚漸漸乾了，心裡開始有空間讓新的東西進來。事業上，曾經的打擊讓你變得更堅韌，你帶著傷疤重新站起來。原諒自己與他人不是為了對方，而是為了讓你自己自由。'}},
+  {id:53,zh:'寶劍四',en:'Four of Swords',pl:'天秤座木星',u:{kw:['休息恢復','靜思','退隱','暫停','積蓄力量'],m:'石棺上的騎士閉眼靜臥，三把劍在上方，一把劍在身側，象徵從戰場退下來的必要修整。感情上，這段關係需要一個暫停的空間——不是放棄，而是給彼此冷靜和重新評估的時間；強行推進反而會造成更多傷害。事業上，身心俱疲的你需要真正的休息來恢復戰力；也可能代表一段等待的時期，在行動之前先讓計畫沉澱。這不是逃避，而是為了下一場戰役積蓄力量。'},r:{kw:['躁動不安','拒絕休息','從靜止中甦醒','過度思考','重返戰場'],m:'逆位的寶劍四暗示你迫切需要休息卻無法讓自己停下來，或反覆思考同一個問題無法放空。感情上，無法讓這段關係進入必要的沉澱期，不斷地追問和試探反而加劇了緊張。事業上，也可能是休息期已足夠，是時候從沉寂中甦醒、重返行動的舞台。'}},
+  {id:54,zh:'寶劍五',en:'Five of Swords',pl:'水瓶座金星',u:{kw:['衝突','不光彩的勝利','背叛','自私','兩敗俱傷'],m:'抱著三把劍得意而去的人，而兩個落敗者垂頭喪氣地離去——這是一場贏得了戰鬥卻輸了一切的畫面。感情上，雙方激烈的爭吵讓兩人都傷痕累累，可能有出軌、背叛或用言語傷害對方的行為；即使「贏了」，這段感情也元氣大傷。事業上，以不光彩的手段取得的成功，背後留下了被踩過的人際關係。在競爭中保持誠信，不值得的勝利終究是失敗。'},r:{kw:['和解','放下怨恨','從衝突中學習','走出傷害','停戰'],m:'逆位的寶劍五暗示衝突的能量正在消退，出現了和解的可能。感情上，雙方的怒火漸漸平息，有機會坐下來談清楚；或你終於願意承認在這場爭執中自己也有責任。事業上，競爭漸緩，可以開始修復受損的關係。放下誰對誰錯的執念，才能真正從這場戰鬥中走出來。'}},
+  {id:55,zh:'寶劍六',en:'Six of Swords',pl:'水瓶座水星',u:{kw:['過渡','前行','離開困難','走向平靜','療癒旅程'],m:'撐著竿子渡船，載著大人孩子離開動盪水域駛向平靜彼岸，象徵艱難的過渡期。感情上，這段感情正走出一段動盪的時期，朝著更平靜、更穩定的未來前進；也可能代表一段關係就此告別，帶著沉默的傷離開，走向必要的新生。事業上，從一個困難的處境中撤退到更安全的地方，出行或移動帶來改變，雖沉重，但方向是正確的。'},r:{kw:['停滯不前','拒絕離開','困難持續','舊傷未癒','難以放手'],m:'逆位的寶劍六暗示你知道必須前進，卻遲遲無法離開那片洶湧的水域。感情上，明知這段關係已走到終點，卻無法鼓起勇氣離開；或帶著未癒的傷試圖開展新生活，舊的痛苦一直追隨著你。溫柔地問自己：是什麼讓你無法啟航？'}},
+  {id:56,zh:'寶劍七',en:'Seven of Swords',pl:'水瓶座月亮',u:{kw:['欺騙','狡猾策略','秘密行動','逃避責任','謹慎為上'],m:'鬼鬼祟祟地從軍營偷走五把劍的人，象徵欺騙、不誠實或策略性的撤退。感情上，感情中有謊言、隱瞞或欺騙的存在，對方可能並不如表面那般坦誠；也可能是你自己用謊言或迴避來處理感情中的難題。事業上，有人在背後使詭計，或你需要以低調、謹慎的方式進行某個計畫；但要審視自己的行為是否真的合乎道德。'},r:{kw:['謊言被揭穿','良知覺醒','無法逃脫責任','改變策略','坦誠以對'],m:'逆位的寶劍七暗示欺騙的面具正在被撕下。感情上，一直被隱瞞的事情即將曝光，謊言無法永遠持續；或你自己的良知讓你無法繼續維持謊言，選擇誠實地面對。事業上，不正當的手段即將被揭發，後果已開始浮現。坦白比繼續欺騙的代價更低。'}},
+  {id:57,zh:'寶劍八',en:'Eight of Swords',pl:'雙子座木星',u:{kw:['自我設限','受困','無力感','心理枷鎖','盲點'],m:'被蒙眼、鬆散地捆綁著站在劍陣中的人，象徵那些讓你動彈不得的，其實大多是心理上的限制。感情上，你可能深陷一段讓你窒息的關係卻感到無力離開，或因為過去的創傷而覺得自己不值得被愛；而那些「我做不到」的聲音，往往是自我設下的枷鎖。事業上，感到被環境或他人困住，看不到出路；但那條路其實就在你的盲點裡，只要願意摘下蒙眼布。'},r:{kw:['解脫','重見光明','突破限制','自我賦權','走出困境'],m:'逆位的寶劍八是從心理牢籠中掙脫的訊號。感情上，你終於認清了那些讓你留在不健康關係中的恐懼與信念，並有了勇氣走出去；你發現那些綁住你的繩子其實沒有你想象的那麼牢固。事業上，重新看見了突破困境的可能性，你比你所以為的更有能力改變現狀。'}},
+  {id:58,zh:'寶劍九',en:'Nine of Swords',pl:'雙子座火星',u:{kw:['深夜焦慮','噩夢','憂鬱','恐懼','精神折磨'],m:'在黑暗中驚醒坐起、雙手掩面的人，象徵深夜裡那些放大到失控的焦慮與恐懼。感情上，對感情的恐懼與憂慮在夜深人靜時排山倒海而來——害怕被拋棄、害怕不夠好、害怕失去；這些憂慮有多少是真實的威脅，有多少只是恐懼製造的幻象？事業上，壓力、焦慮與自我批判讓你夜不能寐，需要尋求心理支持。許多憂慮的根源在內心，而非外在。'},r:{kw:['走出黑暗','尋求幫助','焦慮緩解','黎明將至','重拾希望'],m:'逆位的寶劍九提示最黑暗的時刻正在過去，或你終於鼓起勇氣尋求幫助。感情上，那些把你淹沒的恐懼開始退潮，你學會了不讓焦慮主宰你的感情決定。事業上，壓力得到緩解，你找到了與心理重擔共處的方式。黎明就在掙扎後的那一刻，你已經比昨天更強大。'}},
+  {id:59,zh:'寶劍十',en:'Ten of Swords',pl:'雙子座太陽',u:{kw:['痛苦終結','被刺背叛','最低谷','新黎明','不得不放下'],m:'背部插著十把劍俯臥在地的人，是塔羅中最令人震驚的畫面——代表一個痛苦的、徹底的終結。感情上，可能是突然且意外的分手、被人背後捅刀，或感情走到了完全無法挽回的終點；這份痛苦是真實的，但遠處的地平線已透出第一縷黎明之光。事業上，計畫的徹底失敗或被人背叛，讓你到達最低點。最壞的已經發生，現在只能往上走。'},r:{kw:['從谷底爬起','緩慢復甦','不可避免的結局','接受命運','重新開始'],m:'逆位的寶劍十暗示你正從最低谷中緩慢地爬起。感情上，你接受了那個曾讓你痛不欲生的結局，並帶著滿身的傷試著重新站立；或是某個必然的結局還在緩慢到來的路上，你需要做好心理準備。痛苦是蛻變的代價，每一個結束都是另一個故事的第一頁。'}},
+  {id:60,zh:'寶劍侍者',en:'Page of Swords',pl:'風象星座的土元素',u:{kw:['智識好奇','警覺','溝通','新想法','直言快語'],m:'逆風中高舉寶劍、銳利回望的年輕人，象徵充滿好奇心與機警的新興思維。感情上，可能代表一段充滿智識交流與刺激對話的關係，雙方在思想上相互碰撞；也可能是一個年輕、機靈但還不夠穩重的追求者。事業上，一個重要的消息即將到來，或是一個需要快速思考、靈活應對的新機會；保持心智的敏銳與開放，同時學習在說話前多一點思考。'},r:{kw:['八卦流言','言語傷人','謊言傳播','思維粗糙','說話不謹慎'],m:'逆位的寶劍侍者的機靈變成了言語上的傷害。感情上，可能是感情中充斥著流言蜚語或不必要的爭論；或有人在你的感情中散播不實的訊息，破壞信任。事業上，言語不謹慎造成誤解，八卦或不成熟的溝通方式損害了你的專業形象。在說話之前，先想想這句話是否真實、必要、善意。'}},
+  {id:61,zh:'寶劍騎士',en:'Knight of Swords',pl:'摩羯座水瓶座',u:{kw:['迅速行動','果斷','衝鋒陷陣','思維敏銳','目標導向'],m:'逆著強風全速衝鋒的騎士，象徵無所畏懼的行動力與鋒利的思維。感情上，可能代表一個直接、果斷、用言語表達情感的追求者，他說愛就愛，說離開就離開，讓你無法捉摸；或是你自己在感情中的快速推進讓對方感到窒息。事業上，面對機會不猶豫，快速決策並立即執行；辯論、談判、媒體相關工作都能發揮所長，在短時間內創造巨大的改變。'},r:{kw:['魯莽衝動','言語攻擊','計畫失控','方向偏差','衝動後悔'],m:'逆位的寶劍騎士的速度變成了破壞力。感情上，衝動的言語造成了難以彌補的傷害，或快速推進的節奏讓這段關係在還沒穩固前就已破裂；口頭上的衝突演變成尖銳的言語攻擊。事業上，魯莽的決定造成嚴重失誤，準備好承擔因衝動而付出的代價。在下一次行動前，先停下來確認方向。'}},
+  {id:62,zh:'寶劍王后',en:'Queen of Swords',pl:'處女座天秤座',u:{kw:['清明獨立','直言不諱','客觀智慧','理性邊界','洞察真相'],m:'高舉寶劍、眼神穿透一切的王后，象徵以清晰思維與不帶偏見的眼光直視真相的力量。感情上，代表一位獨立、理性、不受情緒操控的伴侶，有清晰的界線，用誠實而非甜言蜜語表達愛；或是你自己在感情中需要更多的清明與理性，不要讓情緒遮蔽了判斷。事業上，適合需要批判性思維、法律、分析或溝通的工作，你的直言不諱是一種力量。'},r:{kw:['冷漠殘酷','苦澀刻薄','過度批判','用傷害報復','情感封閉'],m:'逆位的寶劍王后的清明變成了傷人的刀刃。感情上，因為過去的傷害而對感情築起高牆，以冷漠或刻薄的言語來防衛脆弱的內心；或是將對某人的怨恨化為惡毒的批評與指責。事業上，過度批判讓你與同事產生裂痕，或苦澀的情緒影響了工作的判斷。試著在清明中加入一絲溫柔，力量與溫暖並不衝突。'}},
+  {id:63,zh:'寶劍國王',en:'King of Swords',pl:'金牛座雙子座',u:{kw:['智識權威','邏輯清晰','公正判斷','倫理道德','理性領導'],m:'手持雙面寶劍端坐高位的國王，象徵以真相、邏輯與原則為基礎的最高智識權威。感情上，代表一位理性、公正、有原則的伴侶，他以誠實和尊重為感情的基礎，不輕易被情緒左右；或是你在感情中需要以更理性的眼光審視現況。事業上，在法律、學術、管理或任何需要清晰判斷的領域擁有無可置疑的能力，你的決定以道德與邏輯為支柱。'},r:{kw:['獨裁操控','扭曲資訊','殘酷無情','智識霸凌','以智謀私'],m:'逆位的寶劍國王的智慧淪為了操縱的工具。感情上，一方用智識優勢壓制另一方，扭曲事實讓對方懷疑自己的判斷（煤氣燈效應）；或是以冷酷的邏輯處理感情問題，完全忽視情感的重量。事業上，利用資訊不對稱謀取私利，或以獨裁的方式壓制不同聲音。以道德與誠信引導你的智慧，才是真正的王者之道。'}},
+  // ── 小阿爾克那：錢幣（土）64-77 ──
+  {id:64,zh:'錢幣王牌',en:'Ace of Pentacles',pl:'土元素精華',u:{kw:['物質新開始','財富機遇','豐盛','穩固基礎','具體成果'],m:'錢幣王牌是純粹土元素的精華具現，象徵豐盛的物質機遇如黃金般落入掌心。感情上，可能代表一段辦公室戀情或因工作場合認識的對象，這段感情有踏實、穩定、長遠發展的潛力；也可能是感情進入更具體承諾的新階段，如同居或規劃共同的財務。事業上，加薪、升遷、新工作機遇或投資回報的好消息即將到來，這是一個播下財富種子的絕佳時機，紮實地把握它。'},r:{kw:['機遇錯失','財務不穩','計畫落空','過度物質主義','貪念'],m:'逆位的錢幣王牌暗示物質機遇從指縫間溜走。感情上，可能因為對物質條件過度要求而錯失了真正的好緣分，或感情中的財務問題影響了關係的穩定。事業上，財務計畫出現漏洞，投資判斷失誤，或只顧眼前利益而錯失了長遠的機會。重新審視你的物質目標，確保它服務於你真正的幸福。'}},
+  {id:65,zh:'錢幣二',en:'Two of Pentacles',pl:'摩羯座木星',u:{kw:['多重平衡','彈性應對','時間管理','財務調度','靈活變通'],m:'用無限符號連結兩枚錢幣、保持平衡的雜耍者，象徵在多重責任之間靈活調度的能力。感情上，你或你的伴侶正忙於工作與生活的多重壓力，需要在感情與其他責任之間找到平衡；雙方都需要更多彈性與包容。事業上，同時處理多個項目或在多重財務責任間保持平衡，考驗的是你調配資源的智慧；保持輕鬆的心態，靈活應對才能處變不驚。'},r:{kw:['失衡','不堪負荷','財務混亂','顧此失彼','失控'],m:'逆位的錢幣二暗示雜耍的球開始掉落。感情上，生活的其他壓力讓你無法給予感情應有的時間與精力，關係因被忽視而出現裂縫。事業上，同時進行的事情太多導致全面失控，財務或時間管理陷入混亂。現在需要的不是更努力地雜耍，而是放下一些不必要的球，專注於最重要的事。'}},
+  {id:66,zh:'錢幣三',en:'Three of Pentacles',pl:'摩羯座火星',u:{kw:['合作成果','技藝磨練','被看見','計畫執行','初步成就'],m:'建築師、修士與工匠在教堂前共同討論圖紙，象徵不同角色各司其職、共創偉業。感情上，代表一段雙方共同為未來規劃、攜手合力建造共同生活的關係；你們不只是一對戀人，更是彼此最好的合作夥伴。事業上，你的專業技能正在被同事或上司看見與肯定，是與他人協作、向有經驗者學習的絕佳時機；初期的努力已開始開花結果。'},r:{kw:['合作失調','技藝不足','各自為政','被忽視','溝通不良'],m:'逆位的錢幣三暗示合作關係出現裂縫。感情上，雙方在共同建設未來上出現嚴重分歧，一方出力多一方出力少的不平衡讓怨氣積累。事業上，團隊溝通不良、各自為政，或你的能力尚未達到計畫所需的水準。謙遜地尋求指導，改善協作的方式，偉大的成就需要眾人合力。'}},
+  {id:67,zh:'錢幣四',en:'Four of Pentacles',pl:'摩羯座太陽',u:{kw:['財務穩定','謹慎保守','安全感','守護資源','儲蓄'],m:'頭頂一幣、懷抱一幣、腳踩兩幣的人，象徵對所擁有事物的謹慎守護。感情上，這段關係穩定但可能略顯保守，一方可能因為害怕受傷而築起防禦的高牆，不輕易敞開心扉；適度的謹慎是智慧，但過度封閉可能讓感情窒息。事業上，適合守成、儲蓄、謹慎的財務規劃；這不是揮霍的時機，而是鞏固基礎、累積安全感的時期。'},r:{kw:['過度控制','吝嗇','財務不安全','放開執念','慷慨的時機'],m:'逆位的錢幣四的守護變成了貪婪或恐懼的枷鎖。感情上，過度的佔有欲或情感上的吝嗇讓伴侶感到窒息；也可能是你因為強烈的財務焦慮讓感情蒙上陰影。事業上，過度的保守讓你錯失了應該把握的擴張機遇；或反過來，財務管理失控，安全感基礎動搖。在節儉與慷慨之間找到真正的平衡。'}},
+  {id:68,zh:'錢幣五',en:'Five of Pentacles',pl:'金牛座水星',u:{kw:['物質困難','匱乏感','孤立無援','身心貧乏','在黑暗中前行'],m:'在風雪中艱難前行的兩個落魄者，窗內透出溫暖的燈光卻視而不見，象徵物質與精神的雙重匱乏。感情上，這段感情因為外在的財務壓力或物質困境而承受著沉重的考驗；貧困帶來的焦慮侵蝕著雙方的關係，感到孤立無援。事業上，正經歷財務困境、失業或資源極度匱乏的時期。記得抬起頭——援助往往就在你未曾注意的地方，不要因驕傲而拒絕接受幫助。'},r:{kw:['走出困境','財務復甦','接受幫助','重建安全感','黑暗過後'],m:'逆位的錢幣五是走出黑暗時期的信號。感情上，雙方共同熬過了最艱難的時期，患難見真情，這段感情因此更加堅韌；或你終於願意尋求他人的支持，不再獨自硬撐。事業上，財務狀況開始出現轉機，最困難的時期正在過去。允許自己接受幫助，重新建立穩固的生活基礎。'}},
+  {id:69,zh:'錢幣六',en:'Six of Pentacles',pl:'金牛座月亮',u:{kw:['給予與接受','財富流動','慷慨','平衡施捨','公平分配'],m:'手持天平、施捨金幣給跪地者的商人，象徵財富的流動與給予和接受之間的平衡。感情上，這段關係中存在付出與接受的動態——哪一方在付出更多？健康的感情需要雙方都願意給予；此刻你可能在扮演支持者的角色，或正在接受他人的幫助。事業上，財務援助到來、加薪、慷慨的機遇，或你有能力幫助他人的時刻。給予不求回報，接受不失尊嚴。'},r:{kw:['財務操控','不平等關係','虛偽的慷慨','自私','債務問題'],m:'逆位的錢幣六暗示給予與接受之間存在不健康的權力動態。感情上，一方用金錢或資源控制另一方，讓「給予」成為操縱的工具；或是雙方的付出嚴重失衡，讓弱勢的一方失去尊嚴。事業上，可能涉及財務欺詐、虛偽的慈善行為，或你被人佔便宜。真正的慷慨不附帶條件，也不以犧牲自己為代價。'}},
+  {id:70,zh:'錢幣七',en:'Seven of Pentacles',pl:'金牛座土星',u:{kw:['耐心等待','長期投資','評估成果','反思調整','收穫將近'],m:'農夫靠著鋤頭凝視著枝上結出的七個錢幣果實，象徵在漫長耕耘後評估成果的時刻。感情上，這段感情需要時間慢慢成熟，不能急於求成；你正在評估這段關係是否值得繼續投入，沉下心來等待才能看到真正的結果。事業上，長期投資的成果正在顯現，但尚未到最終收穫的時機；這是評估進度、調整策略的好時機，成功需要耐心。'},r:{kw:['缺乏耐心','投資失敗','付出無回報','方向錯誤','浪費努力'],m:'逆位的錢幣七暗示你的努力沒有得到應有的回報，或付出的方向從一開始就錯了。感情上，不斷地投入時間與精力卻感到這段關係毫無進展，讓你開始懷疑是否值得繼續等待。事業上，某個長期投資顯示出虧損的跡象，需要誠實地評估是否繼續或撤出。有些事情值得等待，有些則需要及時止損。'}},
+  {id:71,zh:'錢幣八',en:'Eight of Pentacles',pl:'處女座太陽',u:{kw:['勤勉專注','精益求精','技藝磨練','工作倫理','累積實力'],m:'工匠專注地在長凳上一一雕刻錢幣，旁邊掛著已完成的成果，象徵對技藝的全心投入。感情上，代表你正以踏實且用心的方式經營這段關係，把愛化為每一個具體的小行動與細心的照料；或是在感情中不斷地自我成長，成為更好的伴侶。事業上，是學習新技能、考取證照、磨練專業能力的最佳時機；勤勉的工作態度將帶來卓越的成果，細節決定了你與平庸的差距。'},r:{kw:['完美主義停滯','投機取巧','缺乏動力','無意義的重複','技能停滯'],m:'逆位的錢幣八暗示努力的方向或動力出現了問題。感情上，可能在關係中過度付出某一方面卻忽視了另一方面，或重複地犯同樣的錯誤而沒有真正成長。事業上，可能陷入完美主義的泥沼，或反過來用走捷徑代替真正的努力；也可能對目前的工作感到無聊、失去成長的動力。找到讓你真正投入的事情，匠心精神才能發光。'}},
+  {id:72,zh:'錢幣九',en:'Nine of Pentacles',pl:'處女座金星',u:{kw:['自足豐盛','獨立成就','物質享受','自我實現','優雅自在'],m:'在繁花盛開的花園中獨立佇立、肩上停著獵鷹的優雅女性，象徵以自身努力換來的完全豐盛與獨立。感情上，你不需要依靠伴侶來定義自己的幸福與價值，你是一個完整的個體；這種獨立的魅力反而讓你更加吸引人，感情建立在選擇而非需要之上。事業上，財務豐盛、工作成果豐碩，你憑藉自己的努力建立了令人羨慕的生活；盡情享受這份你用汗水換來的美好。'},r:{kw:['財務挫折','過度依賴','物質主義','表面豐盛','失去獨立'],m:'逆位的錢幣九暗示豐盛的表面下暗藏問題。感情上，你過度依賴伴侶來提供安全感，或為了物質條件而妥協了感情的真實質量。事業上，財務受到挫折，積累的成果遭受損失；或是過於沉溺在享受中而疏忽了繼續努力的必要。重新連結內在的力量，真正的豐盛始於自己的自足。'}},
+  {id:73,zh:'錢幣十',en:'Ten of Pentacles',pl:'處女座水星',u:{kw:['家族財富','長遠穩定','物質圓滿','傳承','安全根基'],m:'三代同堂圍繞在豐盛錢幣拱門下的畫面，象徵物質與家族的最高成就。感情上，這是最具長遠承諾意義的感情牌——婚姻、家庭、傳承，代表一段不只是當下的愛，更是共同建立長遠根基的關係；雙方的家族也對這段感情給予支持與認可。事業上，事業有成、財富積累，不只是個人的成功，更是可以傳承給下一代的穩固基業。'},r:{kw:['家族衝突','財務崩塌','遺產糾紛','不穩固的根基','家庭矛盾'],m:'逆位的錢幣十暗示看似穩固的根基出現了裂縫。感情上，家族的壓力或長輩的干涉影響了這段感情的走向，或雙方對「家」的定義與規劃存在嚴重分歧。事業上，財務基礎受到威脅，家族事業出現內部矛盾或遺產糾紛。重新檢視那些你以為理所當然的穩定，及時修復才能確保長遠的根基。'}},
+  {id:74,zh:'錢幣侍者',en:'Page of Pentacles',pl:'土象星座的土元素',u:{kw:['踏實學習','新機遇','腳踏實地','認真勤奮','財務啟蒙'],m:'雙手高舉錢幣凝視、在青翠原野上站立的年輕人，象徵對現實世界充滿好奇與認真的學習者。感情上，代表一段踏實、認真、願意慢慢建立的穩定感情；對方或許不是最浪漫的人，但他用行動與具體的付出表達愛意。事業上，一個值得認真把握的新學習機遇或財務機會正在展開，以踏實與耐心的態度去面對它，這是累積未來實力的重要時刻。'},r:{kw:['缺乏進展','停留在夢想','學習困難','不切實際','眼高手低'],m:'逆位的錢幣侍者的美好計畫只停留在紙上。感情上，對感情有美好的憧憬卻沒有具體的行動，或對伴侶的要求過高而脫離現實。事業上，計畫完美卻遲遲不付諸行動，或學習過程遭遇困難讓你放棄；眼高手低讓你錯失了本應累積的實際經驗。把夢想從腦海移到雙腳，踏出那一步才是開始。'}},
+  {id:75,zh:'錢幣騎士',en:'Knight of Pentacles',pl:'獅子座處女座',u:{kw:['可靠踏實','耐心前進','負責任','穩健可信','承諾兌現'],m:'騎著深色馬靜止凝視前方的騎士，象徵以耐心與責任心穩健前進的力量。感情上，代表一位可靠、負責、言出必行的伴侶，他可能不是最浪漫的，但他給你最扎實的安全感；這段感情發展或許慢一些，但每一步都是真誠的承諾。事業上，以穩健、踏實的方式推進計畫，不求速成只求可靠；勤勉盡責的工作態度讓你成為值得依賴的人，終將抵達目標。'},r:{kw:['停滯不前','固執死板','工作狂','過度謹慎','缺乏靈活'],m:'逆位的錢幣騎士的穩健變成了令人窒息的停滯。感情上，感情因為過於保守而毫無進展，或對方因過度專注於工作與物質而忽視了感情的滋養；也可能是你自己對改變過於排斥，拒絕為感情做任何調整。事業上，謹慎過度讓你錯失了應該把握的機遇，或固執地堅持已被證明無效的方法。學會在踏實中加入一點靈活性。'}},
+  {id:76,zh:'錢幣王后',en:'Queen of Pentacles',pl:'射手座摩羯座',u:{kw:['豐盛滋養','實際的愛','物質智慧','安全感','大地之母'],m:'懷抱錢幣、周圍花朵盛開的王后，以具體的方式表達愛與滋養，是土元素最溫暖的象徵。感情上，代表一位務實、溫暖、以行動表達愛的伴侶，讓家充滿了舒適與豐盛；或是你正以這種實際的方式照顧這段感情，用具體的付出讓伴侶感到被珍視與安全。事業上，在財務管理、投資、商業或任何以實際成果為重的領域中表現優異，你有將資源轉化為豐盛的天賦。'},r:{kw:['過度依賴物質','失去根基','自我忽視','不安全感','控制型照顧'],m:'逆位的錢幣王后失去了原本的豐盛根基。感情上，可能因為財務壓力或物質匱乏讓這段關係的基礎動搖；或是在給予與照顧他人的同時，完全忽視了自己的需求，耗盡了自己的能量。事業上，財務安全感受到威脅，或對物質條件的過度依賴讓你陷入不必要的焦慮。在滋養他人之前，先確保自己是豐盛的。'}},
+  {id:77,zh:'錢幣國王',en:'King of Pentacles',pl:'牡羊座金牛座',u:{kw:['財富成就','物質智慧','踏實領導','成熟可靠','長遠眼光'],m:'被葡萄藤和花朵環繞、穿著豐盛袍服端坐王座的國王，象徵用踏實的智慧積累了物質世界最高成就的成熟領袖。感情上，代表一位物質條件優渥、可靠成熟、能給予伴侶充分安全感的理想伴侶；他不只是給予財富，更是一個可以完全依靠的穩定存在。事業上，是商業成功、財務豐盛、投資眼光準確的象徵；你將願景化為現實的能力已達到成熟的頂峰。'},r:{kw:['固執頑固','物質主義','貪腐','財務冒進','用財富控制'],m:'逆位的錢幣國王失去了智慧，財富成了腐蝕他的毒藥。感情上，一方用財富或物質條件控制另一方，讓感情中存在嚴重的權力失衡；或是對物質條件的執著讓你無法感受到真正的愛與滿足。事業上，財務判斷出現嚴重失誤，貪婪讓你做出冒進的決定；也可能面臨財務腐敗或違法行為的風險。讓成功建立在誠信的基礎上，財富才能持久。'}}
+];
+
+// 圖像元素與星象學習資料
+const LORE = [
+  {elem:'風',astro:'天王星 · 突破慣例、追求自由與革新的能量',myth:'狄奧尼索斯 Dionysos，酒神。代表打破常規、追求狂喜的自由靈魂，不受世俗框架束縛的神聖瘋狂，以純真之眼看待一切可能。',img:[['白玫瑰','純真無邪，未受世俗汙染的靈魂'],['懸崖邊','無知之勇——不計後果的跳躍代表對宇宙的全然信任'],['白色太陽','純粹意識的光輝，宇宙的祝福'],['小狗','本能直覺，也象徵世俗的呼喚與牽絆']]},
+  {elem:'風',astro:'水星 · 溝通、智識與技能的守護星',myth:'赫密斯 Hermes，神使與商業之神。掌管溝通、技藝與邊界的穿越，以機智與口才連結天地，將潛能轉化為現實。',img:[['頭頂∞符號','無限的潛能與超越時空的意志力'],['桌上四樣工具','權杖/聖杯/寶劍/五角幣，代表掌握四大元素'],['紅白衣裳','紅色熱情行動力，白色純潔的意志'],['玫瑰與百合','慾望（玫瑰）與純潔（百合）之間的平衡']]},
+  {elem:'水',astro:'月亮 · 潛意識、直覺與神秘週期的象徵',myth:'波瑟芬妮 Persephone，冥后。象徵在陰暗的潛意識深處藏有智慧，在光明與黑暗之間循環穿越，以直覺洞見隱藏的真相。',img:[['B與J兩柱','Boaz（黑/陰性）與Jachin（白/陽性），二元對立的入口之門'],['石榴帷幕','隱藏的神秘知識，只有靈性準備好的人才能穿越'],['月亮冠冕','三相月亮：新月/滿月/缺月象徵女性循環智慧'],['書卷TORA','宇宙的神聖法則與隱藏的靈性真理']]},
+  {elem:'土',astro:'金星 · 愛、美、豐盛與感官愉悅的守護星',myth:'狄蜜特 Demeter，穀物與豐收女神。代表母性的滋養、無條件的愛與大地的慷慨，孕育生命、守護豐盛。',img:[['麥田','豐盛的物質收穫即將到來，大地的滋養'],['金星符號♀','桌前心形石刻有金星符號，愛與美的祝福'],['十二星冠','掌管十二星座的大地之母，宇宙孕育之力'],['瀑布','情感能量的自由流動與靈性的滋養']]},
+  {elem:'火',astro:'牡羊座 · 開創、領導力與先驅行動的星座',myth:'宙斯 Zeus，眾神之王。代表秩序、律法與最高權威，以強大的意志統治天地，建立結構與規則。',img:[['四個羊頭','椅背的牡羊頭象徵開創力與不屈的意志'],['寶球與權杖','寶球代表掌控世界，權杖代表精神力量'],['崎嶇山脈','已征服的艱難，也是仍待克服的挑戰'],['紅袍鎧甲','熱情（紅袍）與保護力（甲），勇敢的守護者']]},
+  {elem:'土',astro:'金牛座 · 穩固、傳統與物質世界的守護星座',myth:'凱龍 Chiron，智慧的半人馬導師。受了無法痊癒之傷卻依然教導英雄，象徵傳承智慧、精神指引與療癒他人的使命。',img:[['三重教皇冠','連結天界、人界、地界三個領域的橋樑'],['交叉金銀鑰匙','解開神聖知識之鎖，金色（意識）銀色（潛意識）'],['兩名信徒','知識的傳承，不同靈性道路的守護'],['三橫十字杖','三位一體的神聖力量與傳統智慧']]},
+  {elem:'風',astro:'雙子座 · 二元性、選擇與溝通的星座',myth:'帕里斯的審判 Judgement of Paris，涉及赫拉 Hera、阿芙蘿黛蒂 Aphrodite 與雅典娜 Athene。象徵面對人生最重要的選擇，每個決定都引發深遠的連鎖後果。',img:[['天使拉斐爾','風元素的守護天使，帶來神聖的祝福與療癒'],['亞當與夏娃','陰陽兩極的結合，面對生命最深刻的抉擇'],['蛇與蘋果樹','誘惑、知識與選擇，善惡之間的界線'],['火山','熾烈的熱情，轉化與改變的潛在能量']]},
+  {elem:'水',astro:'巨蟹座 · 情感、直覺與家庭守護的星座',myth:'阿瑞斯 Ares，戰神。象徵強大的意志力與征服欲，駕馭衝突雙方的能量向前，以紀律和決心達成勝利。',img:[['黑白獅身人面','對立力量的駕馭：以意志平衡理性（白）與感性（黑）'],['八角星冠','靈性進化層次的勝利象徵'],['月亮肩墊','以直覺而非蠻力引導前進方向'],['無韁繩','純粹以意志力與精神控制，而非外在束縛']]},
+  {elem:'火',astro:'獅子座 · 勇氣、創造力與帝王之氣的星座',myth:'海克力斯 Heracles，十二試煉的英雄。象徵以溫柔與堅毅馴服內心的野性，真正的力量來自愛與耐心而非蠻力。',img:[['頭頂∞符號','與魔術師呼應，代表超越的精神力量，無限的勇氣'],['女子溫柔馴獅','以愛與耐心馴服野性，真正的強大源自內心'],['白衣花冠','純潔的自然之力，溫柔勝過剛強'],['獅子張口','被溫柔控制的原始本能，而非恐懼壓制']]},
+  {elem:'土',astro:'處女座 · 分析、服務精神與追求完美的星座',myth:'克洛諾斯 Cronos，黃金時代的守護者。在遠離塵囂的孤獨中守護時間與記憶，以智慧之燈照亮尋道者前行的路。',img:[['六芒星燈籠','所羅門之星，智慧的光照亮前方的道路'],['灰袍長者','謙遜樸素，遠離塵囂以求內在的純粹'],['雪白山頂','靈性修行達到的高峰，遠離世俗的智慧'],['手中長杖','靈性旅程的支撐，引導自我與他人']]},
+  {elem:'火',astro:'木星 · 擴張、幸運與哲學智慧的行星',myth:'摩伊賴 Moirai，命運三女神：克羅托（紡線）、拉克西斯（量線）、阿特洛波斯（剪線）。象徵宇宙的循環法則，任何人都無法逃脫命運的轉輪。',img:[['TARO/ROTA字母','輪緣字母可拼出命運、法律等多重意義，宇宙法則'],['四角守護生物','馬太（人）馬可（獅）路加（牛）約翰（鷹），四元素的守衛'],['阿努比斯上升','機遇與意識的升起，好運正在到來'],['蛇提豐下降','舊能量的消退，轉化為新的可能性']]},
+  {elem:'風',astro:'天秤座 · 平衡、公正與人際關係的星座',myth:'雅典娜 Athene，智慧與正義女神。以理性、智識和公正裁量一切，代表法律精神與道德秩序的最高體現。',img:[['天平','客觀衡量所有面向，追求真正的公正'],['雙面劍','真相有兩面，理性分析的銳利力量'],['紅袍紫幔','世俗力量（紅）與靈性智慧（紫）並存'],['方形王冠','清晰有序的思維，理性主導判斷']]},
+  {elem:'水',astro:'海王星 · 靈性、犧牲與幻象的行星',myth:'普羅米修斯 Prometheus，盜火之神。為人類盜取神火而受永恆之苦，象徵自願犧牲、超然靜觀，在痛苦中換取更高的洞見。',img:[['T形十字架','Tau字母，象徵自願承擔的神聖犧牲'],['頭頂光暈','在靜止與等待中獲得的開悟之光'],['安詳的表情','這是自願選擇的暫停，而非被迫的停滯'],['4字形的腿','自由意志下「完成」的姿態，靜止即是行動']]},
+  {elem:'水',astro:'天蠍座 · 轉化、秘密與深度重生的星座',myth:'黑帝斯 Hades，冥王。統治死後世界，象徵無可避免的蛻變，舊有的終結只是靈魂重生的前奏。',img:[['白玫瑰黑旗','純潔（白玫瑰）在死亡（黑）之中依然存在，靈魂永恆'],['骷髏騎士','死亡面前人人平等，轉化是每個人必走的路'],['地平線升起的太陽','太陽在地平線升起，象徵結束之後必有重生'],['各階層倒下之人','國王、孩童、主教，轉化無關乎地位高低']]},
+  {elem:'火',astro:'射手座 · 哲學、自由與擴展視野的星座',myth:'伊麗絲 Iris，彩虹女神。在天與地之間架橋傳遞訊息，象徵調和對立、以耐心將不同的力量融合為更高的和諧。',img:[['兩杯水互倒','靈魂的煉金術，在對立中調和融合產生奇蹟'],['胸前三角徽章','火元素的三角形，靈性火焰的守護'],['一腳水一腳陸','靈性世界（水）與現實大地（土）的完美平衡'],['遠方光冠之路','遠方可見的目標，靈性旅程的終點正在等待']]},
+  {elem:'土',astro:'摩羯座 · 野心、現實主義與物質世界的星座',myth:'潘 Pan，森林之神。半人半羊，代表物質本能、感官欲望與陰暗衝動，那些自我套上的束縛其實隨時可以解開。',img:[['鬆散的鎖鍊','束縛是自願的，隨時可以脫身，是心理的枷鎖'],['倒五芒星','物質主義凌駕靈性的象徵，顛倒的價值觀'],['蝙蝠翅膀','陰暗面的誘惑力量，黑暗中的統治'],['男女長出尾角','受物欲與恐懼影響，逐漸失去人性的本質']]},
+  {elem:'火',astro:'火星 · 行動、衝突與原始生命能量的行星',myth:'波賽頓 Poseidon，海神。以三叉戟引發地震，象徵無預警的毀滅力量打碎驕傲建立的虛假高塔，帶來衝擊與解放。',img:[['閃電擊中塔頂','神聖的干預，打破虛假驕傲建立的頂端'],['飛走的金冠','虛假的地位與自大的崩塌，無法依賴外在頭銜'],['兩人從塔上墜落','舊有的信念體系與生命結構的崩解'],['22個火焰小點','十個Yod（神之手），轉化能量的降臨']]},
+  {elem:'風',astro:'水瓶座 · 人道主義、革新思維與希望的星座',myth:'潘朵拉 Pandora，盒子中最後留下的希望。她打開了充滿苦難的盒子，卻也讓希望留在世間，象徵黑暗過後仍有光明指引。',img:[['一大七小星','八角星光，宇宙永恆的希望，引導迷途者回家'],['裸體的女子','純真坦誠，毫無遮掩的真我，靈魂的本來面目'],['兩壺水','左壺倒向大地（意識的滋養），右壺倒入水中（潛意識的循環）'],['白鳥伊比斯','智慧的使者，靈性靈感的象徵']]},
+  {elem:'水',astro:'雙魚座 · 直覺、幻象與深層靈性的星座',myth:'赫卡特 Hecate，月之三相女神。掌管十字路口、幽靈與魔法，在迷霧深處以直覺引路，揭示潛藏的恐懼與幻象。',img:[['月亮的臉','意識的多面性，表象之下隱藏著另一個真實'],['龍蝦爬出水面','潛意識的內容浮現，深埋的恐懼來到意識層面'],['狗與狼','文明馴化（狗）與原始野性（狼）的雙重本能'],['兩座高塔','進入未知領域的門，真實與幻象之間的模糊界線']]},
+  {elem:'火',astro:'太陽 · 意識、活力與生命本質核心的天體',myth:'阿波羅 Apollo，太陽神。帶來光明、藝術與預言的力量，象徵意識的純粹喜悅、自我的光輝與無畏前行的活力。',img:[['巨大的太陽','純粹意識之光，驅散所有陰影與迷霧'],['白馬上的孩子','純真無邪的喜悅，自由奔放的生命活力'],['四朵向日葵','四元素的滋養，永遠忠誠地追隨光明'],['紅旗飄揚','生命的熱情與對勝利的宣告']]},
+  {elem:'火',astro:'冥王星 · 深度蛻變、力量重建與死亡重生的行星',myth:'引渡亡靈的赫密斯 Hermes Psychopomp，亡靈的引路者。以神聖的號角喚醒沉睡的靈魂，引導他們完成最終審視，走向覺醒與更新。',img:[['天使加百列吹號','神聖的覺醒召喚，宇宙向靈魂發出的邀請'],['從棺木升起的人','靈魂的覺醒，舊有自我蛻變成全新的自己'],['十字白旗','純潔光明的方向指引，神聖使命的標誌'],['山脈背景','靈性探索的巔峰，見證了每個靈魂的蛻變']]},
+  {elem:'土',astro:'土星 · 結構、時間法則與完成週期的行星',myth:'赫馬佛洛迪托斯 Hermaphroditus，雌雄同體的神。整合了所有對立的力量，象徵陰陽完美融合、旅程圓滿、宇宙的整體性。',img:[['月桂花環','勝利完成的象徵，圓形代表週期的圓滿結束'],['中央舞動的人像','宇宙中心之舞，所有元素的整合者'],['四角守護生物','四元素（火土風水）的完整整合，宇宙的和諧'],['兩根魔杖','從愚者手中的行杖到世界的魔杖，力量的最終昇華']]},
+  // ── 小阿爾克那 LORE：權杖（火）22-35 ──
+  {elem:'火',astro:'純粹火元素 · 創造、熱情與靈感的原初衝動',img:[['發光的權杖','從天而降的靈感，宇宙賜予的創造能量'],['嫩芽','新計畫的萌發，生命力的象徵'],['雲手','神聖意志的指引，宇宙送來的行動召喚'],['山景','前方等待開拓的廣闊領域']]},
+  {elem:'火',astro:'牡羊座火星 · 開創力、征服欲與掌控全局的意志',img:[['世界球','在手中掌握全局，宏觀的計畫視野'],['遠方城堡','已建立的根基與待征服的新領土'],['山脈地平線','視野中等待擴張的版圖'],['兩根權杖','已完成的第一步與通往未來的橋梁']]},
+  {elem:'火',astro:'牡羊座太陽 · 行動的成果、擴張的生命力',img:[['三根杖','穩固的三角支撐，計畫漸趨成熟'],['遠方船隻','機遇正在從遠方歸來，等待豐收'],['橙色天空','充滿希望的前景，熱情的展望'],['山崖俯瞰','居高臨下的視野，全局在握']]},
+  {elem:'火',astro:'牡羊座金星 · 喜悅的建設、美麗的根基',img:[['花環拱門','慶典的入口，勝利的象徵'],['歡慶的人群','社群的喜悅，共同慶祝的溫暖'],['城堡背景','穩固的根基，家園的安全感'],['鮮花裝飾','美麗與豐盛，生命的蓬勃']]},
+  {elem:'火',astro:'獅子座土星 · 自我彰顯受阻、混亂的競爭能量',img:[['五人混戰','無秩序的競爭，各執己見的爭論'],['交錯的杖','衝突中的能量，尚未找到出口'],['沒有勝者','此刻的爭鬥象徵磨練而非真正的對決'],['開放的空間','衝突尚未有界限，戰場仍在延伸']]},
+  {elem:'火',astro:'獅子座木星 · 公眾認可、榮耀與勝利的擴張',img:[['月桂花冠','公開的勝利與榮耀的象徵'],['白馬','尊貴的地位，凱旋的姿態'],['歡迎人群','他人的認可與讚美，公眾的支持'],['高舉的杖','展示成就，不遮掩自己的光芒']]},
+  {elem:'火',astro:'獅子座火星 · 捍衛立場、居高臨下的防禦',img:[['高地陣地','居高臨下的優勢地位'],['六根攻擊','多方壓力，考驗立場的穩固'],['堅定的眼神','不退縮的勇氣，為信念而戰'],['山坡地形','你的優勢在於位置，善用它']]},
+  {elem:'火',astro:'射手座水星 · 快速的訊息傳遞、思想飛馳',img:[['八根飛杖','高速移動的能量，事情快速推進'],['整齊的方向','所有力量朝同一方向，目標明確'],['晴朗天空','暢通無阻的前路，障礙已清除'],['無人的畫面','純粹的能量流動，不受個人意志干擾']]},
+  {elem:'火',astro:'射手座月亮 · 直覺守衛、在考驗中韌性的累積',img:[['繃帶頭部','經歷過戰鬥的印記，傷而不倒'],['九根杖牆','過去的戰役，每根杖都是一段歷史'],['警惕的眼神','從過去的傷痛學到了謹慎'],['晨曦光線','最後一夜，黎明就在眼前']]},
+  {elem:'火',astro:'射手座土星 · 過重的責任、達到極限的火元素',img:[['弓腰的身影','過重負擔壓彎了背脊，但仍未放棄'],['十根杖','責任的重量累積到極限'],['遠方城鎮','終點就在不遠處，再堅持一下'],['沉重的步伐','每一步都是意志力的展現']]},
+  {elem:'火',astro:'火象星座土元素 · 火之初學者，充滿未經磨練的熱忱',img:[['年輕的姿態','充滿好奇心的初學者能量'],['手持權杖凝望','對未來充滿熱忱與想象'],['遠方山脈','尚未探索的廣大世界'],['輕裝上路','沒有包袱，隨時準備出發']]},
+  {elem:'火',astro:'天蠍座射手座 · 無畏衝鋒、火元素的全速行動',img:[['奔騰的馬','不受控制的速度與行動力'],['飛舞的火焰','熾烈的熱情，燃燒一切阻礙'],['不回頭的騎士','全然專注於前方目標'],['風中的旗幟','衝勁與豪情，勇往直前']]},
+  {elem:'火',astro:'牡羊座金牛座 · 自信女王，火與土結合的創造力',img:[['黑貓','神秘的直覺力與個人魅力'],['向日葵','充滿活力地追尋光與豐盛'],['獅子王座','統治與自信的象徵，女王的風範'],['棕色的衣裳','接地氣的智慧，熱情中帶著穩定']]},
+  {elem:'火',astro:'巨蟹座獅子座 · 成熟的領袖，火焰與情感智慧結合',img:[['蜥蜴吐信','敏銳的感知，洞察微妙變化'],['橙紅長袍','熾烈的熱情與威嚴的領導力'],['獅子王座','火元素的最高統治，霸氣的掌控力'],['開闊視野','遠見卓識，看見別人看不見的可能']]},
+  // ── 小阿爾克那 LORE：聖杯（水）36-49 ──
+  {elem:'水',astro:'純粹水元素 · 愛、情感與靈性連結的原初流動',img:[['聖杯溢出','情感豐盛溢出，無法阻止的愛的流動'],['白鴿降臨','靈性的祝福，神聖之愛的象徵'],['蓮花漂浮','情感的純潔，在水面上盛開的靈性'],['五條溪流','五感的滋養，愛流向生命的各個角落']]},
+  {elem:'水',astro:'巨蟹座金星 · 情感的結合、愛與和諧的流動',img:[['交疊的酒杯','兩個靈魂的相互映照與共鳴'],['獅頭蛇','赫耳墨斯之杖，象徵神聖的結合與和諧'],['紅色翅膀','熾烈情感中的飛翔，愛的超越'],['互相凝視','深刻的理解與接受，看見對方的靈魂']]},
+  {elem:'水',astro:'巨蟹座水星 · 情感的喜悅分享、社群的快樂流動',img:[['三女共舞','友誼的喜悅，共同慶祝的美好'],['豐盛的果實','大地的豐收，慶典的充盈'],['彼此舉杯','真心的分享，互相給予祝福'],['花冠頭飾','節慶的歡樂，美麗的當下']]},
+  {elem:'水',astro:'巨蟹座月亮 · 情感內省、選擇沉思的水元素',img:[['獨坐樹下','靜思冥想，向內探索'],['三個空杯','已有的豐盛被忽視，執著於不足'],['天使之手','宇宙正在給予，但你的眼睛閉著'],['平靜河流','情感在流動，但你選擇靜止不動']]},
+  {elem:'水',astro:'天蠍座火星 · 情感的衝擊與轉化中的失落',img:[['三個倒下的杯','失去的三份，傷痛是真實的'],['兩個立著的杯','仍然完好的，尚未失去的一切'],['黑色斗篷','悲傷的包裹，情感的保護'],['橋與城鎮','通往未來的道路依然存在']]},
+  {elem:'水',astro:'天蠍座太陽 · 懷舊的光芒、童年記憶的溫暖水流',img:[['孩童互贈花朵','純真的給予與接受，無條件的愛'],['六個杯子','六種不同的愛的記憶與情感層次'],['白色房子','家的象徵，安全與熟悉的庇護'],['成人守衛背影','過去與現在的對比，記憶的守護者']]},
+  {elem:'水',astro:'天蠍座金星 · 幻想的誘惑、情感的迷霧',img:[['七杯幻象','七種不同的幻想與可能性'],['城堡','物質成就的幻象'],['龍','隱藏的危險，誘人的挑戰'],['蛇和珠寶','慾望的誘惑，表象的富麗']]},
+  {elem:'水',astro:'雙魚座土星 · 放下的勇氣、靈性的深層追尋',img:[['離開的背影','勇敢離開舒適區的行動'],['八個完好的杯','已有的一切被刻意離開'],['滿月缺月','雙月象徵意識的轉化與靈性的召喚'],['山路向上','靈性的攀登，尋找更深的意義']]},
+  {elem:'水',astro:'雙魚座木星 · 情感的圓滿、心願的豐盛實現',img:[['九杯排列','豐盛的象徵，願望的具象化'],['滿足的笑容','由內而外的幸福，真實的喜悅'],['交叉雙臂','自我滿足的姿態，不需要外界認可'],['藍色帷幕','展示自己的豐盛，毫不遮掩']]},
+  {elem:'水',astro:'雙魚座火星 · 情感的完成、家庭彩虹的祝福',img:[['彩虹','神聖的應許，美夢成真的象徵'],['一家人','家庭的圓滿，愛的完整表達'],['歡慶的姿勢','手臂張開，擁抱美好的當下'],['遠方房屋','家的所在，歸屬感的根基']]},
+  {elem:'水',astro:'水象星座土元素 · 水之初學者，直覺與靈性的初探',img:[['魚兒從杯中探頭','直覺送來的神秘訊息，靈性的呼喚'],['凝視的眼神','對奇蹟保持開放的心，驚奇的接受'],['藍色衣裳','水元素的溫柔，情感的表達'],['海邊背景','靈感的來源，潛意識的大海']]},
+  {elem:'水',astro:'水瓶座雙魚座 · 追尋浪漫理想的情感騎士',img:[['緩步的白馬','不急不徐的追求，優雅的前進'],['聖杯高舉','心懷理想，帶著愛前行'],['河流穿越','穿越情感的深度，靈性的旅程'],['翅膀頭盔','夢想的象徵，浪漫的想象力']]},
+  {elem:'水',astro:'雙子座巨蟹座 · 情感智慧的王后，同理心的深度',img:[['華麗的聖杯','深不可測的情感世界，豐富的內心'],['沉思的凝視','向內探索，深刻理解情感的運作'],['水的符號','水元素的王后，情感流動的掌控者'],['月亮符號','直覺的象徵，潛意識的連結']]},
+  {elem:'水',astro:'天秤座天蠍座 · 情感成熟的君王，動盪中的穩定',img:[['波濤中的王座','在情感的海浪中保持不動搖'],['魚的圖案','深海的智慧，情感的深度理解'],['權杖與聖杯','情感的力量與理性的平衡'],['藍色王袍','深邃的水元素，成熟的情感智慧']]},
+  // ── 小阿爾克那 LORE：寶劍（風）50-63 ──
+  {elem:'風',astro:'純粹風元素 · 真相、清明與思想力量的原初鋒芒',img:[['雙刃劍','真相是雙刃的，清明帶來力量也帶來痛苦'],['王冠','思想的勝利，清明的意識'],['月桂與棕葉','勝利的清明，智慧的桂冠'],['多雲天空','思想的領域，雖有烏雲但劍已穿破']]},
+  {elem:'風',astro:'天秤座月亮 · 情感與理智的僵持、迴避的平衡',img:[['蒙眼布','不願看見的真相，逃避的選擇'],['交叉雙劍','防禦的姿態，暫時的平衡'],['被縛雙手','自我設限的束縛，可以解開的鎖'],['平靜海面','表面的平靜掩蓋著內在的問題']]},
+  {elem:'風',astro:'天秤座土星 · 傷心的清明、痛苦的公正揭示',img:[['三劍穿心','痛苦的直接象徵，心碎無可迴避'],['暴風雨的天空','情緒的激烈，內心的風暴'],['沒有人物','純粹的情感狀態，超越個人的普遍痛苦'],['灰色雲朵','悲傷籠罩，但烏雲終會散去']]},
+  {elem:'風',astro:'天秤座木星 · 戰後的休息、智識的沉澱修復',img:[['石棺上的騎士','暫時的靜止，儲備能量的休眠'],['三劍牆上','過去的戰役，傷痕已成歷史'],['祈禱的姿勢','靜默的反思，與自我內心對話'],['彩色窗戶','光透過玻璃照進來，希望依然存在']]},
+  {elem:'風',astro:'水瓶座金星 · 衝突後的苦澀、利益算計的殘局',img:[['勝利者的輕蔑','不道德的勝利，傲慢的姿態'],['落敗者的離去','代價沉重的失敗，孤單的離開'],['灰色的天空','勝利後的空洞，沒有真正的贏家'],['掌中三劍','以不正當手段獲得的戰利品']]},
+  {elem:'風',astro:'水瓶座水星 · 平靜的過渡、離開困境的旅程',img:[['撐桿渡水','穩定地引領過渡，方向已確定'],['六把劍','帶著過去的傷痕，但已在向前移動'],['靜水','平靜的前路，波浪漸漸平息'],['遠方陸地','目的地正在接近，旅程不會永無止盡']]},
+  {elem:'風',astro:'水瓶座月亮 · 策略性的迴避、智識的欺騙',img:[['踮腳竊劍','輕盈低調的行動，不願正面衝突'],['留下兩把劍','刻意留下的，不帶走全部'],['遠方帳篷','逃離的目的地，臨時的庇護'],['歡笑的神情','輕鬆的欺騙，看似無害的小計謀']]},
+  {elem:'風',astro:'雙子座木星 · 信念的牢籠、思維限制的困境',img:[['蒙眼束手','感知被封閉，自我設限的狀態'],['四周的劍','看似的圍困，實則並未真正封死'],['泥濘的地面','停滯的感覺，腳被黏住無法前進'],['城堡背景','自我監禁，答案其實就在附近']]},
+  {elem:'風',astro:'雙子座火星 · 焦慮的深夜、思想無法停止的風暴',img:[['九把劍','過度思考的重壓，憂慮的重量'],['深夜哭泣','孤獨面對恐懼的脆弱時刻'],['格子被子','心理的保護層，躲藏卻無法真正安慰'],['牆上的劍','整齊排列的憂慮，每一把都是一個擔心']]},
+  {elem:'風',astro:'雙子座太陽 · 痛苦的終結、最低谷後的黎明',img:[['十劍穿背','痛苦的極致，已經不可能更壞了'],['水平地面','倒下的姿態，也是最後的靜止'],['地平線的光','黎明的到來，結束之後必有開始'],['深紅黑夜','黑暗最深的時刻，也是最接近光明的時刻']]},
+  {elem:'風',astro:'風象星座土元素 · 風之初學者，機敏好奇的思維',img:[['抬頭望天','警覺的觀察，準備迎接挑戰'],['高地站立','居高臨下的視野，機敏的觀察者'],['風中揚起的頭髮','風元素的臨在，思維的活躍'],['遠方城市','廣大的世界等待探索，訊息正在流動']]},
+  {elem:'風',astro:'摩羯座水瓶座 · 衝鋒陷陣的思想騎士，全速前進',img:[['奔馳的馬','思維的速度，雷厲風行的行動'],['傾斜的姿勢','全力衝鋒，無所畏懼'],['風中的雲','思維的疾速移動，靜止是不可能的'],['揮舞的劍','言語如劍，銳利而直接']]},
+  {elem:'風',astro:'處女座天秤座 · 清明王后，以智識穿透情感迷霧',img:[['高舉的劍','清晰的判斷，不妥協的真相'],['空著的左手','放下了情感的包袱，以理性面對'],['灰色天空','客觀的環境，不帶情緒的審視'],['蝴蝶裝飾','轉化與蛻變，智慧的演化']]},
+  {elem:'風',astro:'金牛座雙子座 · 智識國王，最高的理性與公正',img:[['王座正坐','公正與理性的最高象徵'],['雙刃劍','原則的劍，公平地朝向任何方向'],['蝴蝶扶手','思想的靈活，在嚴謹中保持開放'],['遠山清空','清晰的視野，排除干擾的判斷']]},
+  // ── 小阿爾克那 LORE：錢幣（土）64-77 ──
+  {elem:'土',astro:'純粹土元素 · 物質豐盛與實際成就的原初種子',img:[['金色五角星','豐盛的象徵，物質世界的精華結晶'],['花園拱門','豐盛進入現實的入口'],['神聖之手','宇宙送來的物質機遇，現在接住它'],['肥沃大地','等待播種的沃土，充滿潛力']]},
+  {elem:'土',astro:'摩羯座木星 · 現實的靈活應對、在多重責任中平衡',img:[['雜耍的錢幣','在多個任務間保持平衡的技藝'],['無窮符號','永不停歇的循環，彈性的能量管理'],['波濤洶湧','環境的變化，但杰的平衡未被打破'],['小丑帽','以輕鬆幽默面對複雜的現實']]},
+  {elem:'土',astro:'摩羯座火星 · 合作建設、技藝磨練的實踐',img:[['教堂柱廊','偉大工程需要眾人之力'],['工匠雕刻','精益求精的工匠精神'],['三人協作','不同角色合力完成計畫'],['建築圖紙','清晰的計畫，有序的執行']]},
+  {elem:'土',astro:'摩羯座太陽 · 物質的掌控、建立安全感的執著',img:[['緊抱錢幣','安全感的象徵，對物質的珍視'],['端坐城市','在繁華中守住自己的一份'],['腳踩兩幣','雙腳踏實，物質基礎的穩固'],['頭頂一幣','對財富的全面掌控']]},
+  {elem:'土',astro:'金牛座水星 · 物質匱乏的考驗、精神支持的缺失',img:[['風雪中行走','在艱難中掙扎前行的勇氣'],['彩色窗戶的光','援助就在眼前，只需抬頭張望'],['破舊的衣物','物質的匱乏，但人仍在行走'],['相互依靠','即使在困境中，有人陪伴就不孤單']]},
+  {elem:'土',astro:'金牛座月亮 · 財富的分配、給予與接受的平衡',img:[['天平稱量','公平的衡量，給予的分寸'],['施與受的雙方','財富的流動，不同角色的共存'],['城市背景','社會中財富再分配的現實'],['金色錢幣','流通中的財富，不停滯的豐盛']]},
+  {elem:'土',astro:'金牛座土星 · 長期投資的耐心、評估與等待的智慧',img:[['農夫倚杖','辛勤耕耘後的沉思與評估'],['七個果實','勞動的成果，等待最後的成熟'],['遠方背景','時間的視角，長遠的眼光'],['沉思的姿勢','評估投入與回報，策略性地思考']]},
+  {elem:'土',astro:'處女座太陽 · 精益求精的工匠精神、技藝的磨練',img:[['專注的工匠','心無旁騖的投入，匠人的精神'],['完成的錢幣','已完成的成果，技藝的見證'],['有序的工作台','組織與專注，每個細節都重要'],['城市背景','技藝服務於更大的世界']]},
+  {elem:'土',astro:'處女座金星 · 自足豐盛、獨立美麗的物質成就',img:[['獵鷹','自由與高度，自足的象徵'],['葡萄藤','親手栽培的豐盛，收穫的喜悅'],['城堡遠景','自我建立的王國，獨立的成就'],['精緻的花園','細心滋養的美麗，物質與精神的結合']]},
+  {elem:'土',astro:'處女座水星 · 家族傳承的豐盛、物質完成的最高境界',img:[['三代同堂','時間的傳承，家族的連結'],['白狗','忠誠的守護，家族的守衛'],['豐盛的錢幣','物質成就的最高表現'],['城堡根基','深厚的根基，代代相傳的穩固']]},
+  {elem:'土',astro:'土象星座土元素 · 土之初學者，踏實學習的探索者',img:[['凝視錢幣','對物質世界的好奇與認真研究'],['花園景色','腳踏實地的環境，實際的學習場所'],['綠色大地','成長的沃土，潛力正待開發'],['遠方山景','前方有待征服的高峰，踏實地開始']]},
+  {elem:'土',astro:'獅子座處女座 · 踏實可靠的工作騎士，穩定前進',img:[['穩步的黑馬','不急不徐，穩健的前進節奏'],['高舉的錢幣','認真審視手中的任務'],['耕種的土地','辛勤勞動過的大地，腳踏實地'],['遠方平原','廣闊的工作視野，一步一腳印']]},
+  {elem:'土',astro:'射手座摩羯座 · 豐盛的守護女王，實際的滋養智慧',img:[['懷抱錢幣','以物質的方式表達愛與滋養'],['花朵盛開','生機勃勃的豐盛，大地的慷慨'],['兔子','繁衍與豐盛，生命力的象徵'],['山丘遠景','穩固的根基，長久的豐盛']]},
+  {elem:'土',astro:'牡羊座金牛座 · 物質世界的國王，成熟的財富智慧',img:[['葡萄藤王座','豐盛圍繞，物質成就的象徵'],['黑牛圖案','踏實可靠的力量，金牛座的精神'],['眺望的眼神','從豐盛中看見更廣闊的可能性'],['土地與城堡','根基與成就，從土地到王國的積累']]}
+];
+
+// 數字象徵系統
+const NUM_SYM = {
+  1:'一是起——新的開始，帶著純粹的原初能量，一切可能性均未展開。',
+  2:'二是承——承接與等待，需要耐心，暗示有另一人或力量需要納入考量。',
+  3:'三是合作——多方協力，溝通與創造的能量，三角形的穩定或張力。',
+  4:'四是停看聽——暫停、鞏固、評估現況，在行動前重新確認方向。',
+  5:'五是轉——轉捩點，多半伴隨衝突或考驗，但正是蛻變的契機。',
+  6:'六是小成——通過考驗後的小小勝利，暫時的平衡與和諧。',
+  7:'七是變——深層的轉化與內省，需要重新審視，不安定但蘊含洞見。',
+  8:'八是七的更進一步——在七的變化上加倍行動，更大的力量或更多的行動。',
+  9:'九是休息——接近完成的疲憊與整合，在最後衝刺前的沉澱時刻。',
+  10:'十是結果——一個循環的完成，既是終點也是下一個一的起點。'
+};
+
+// 感情連結牌組（大阿爾克那）
+const COMBOS = [
+  {pair:['愚者','力量'],note:'純真的愚者遇上溫柔的力量，象徵自然天成的吸引，靈魂相知的連結。'},
+  {pair:['魔術師','女祭司'],note:'魔術師的行動力與女祭司的神秘直覺，陰陽互補，智識與靈性的深層結合。'},
+  {pair:['魔術師','女皇'],note:'魔術師的創造力與女皇的豐盛能量相互激發，充滿熱情與創造力的感情。'},
+  {pair:['皇帝','女皇'],note:'陰陽互補的經典組合，穩固的感情基礎，互相滋養與支撐的伴侶關係。'},
+  {pair:['皇帝','節制'],note:'強大的力量與平衡的智慧結合，能夠長久維持的穩定感情。'},
+  {pair:['教皇','女祭司'],note:'精神指引者與靈性守護者，在信仰或靈性層面有深刻的共鳴。'},
+  {pair:['教皇','女皇'],note:'傳統與豐盛的結合，暗示有家庭導向的感情發展，穩定而有根基。'},
+  {pair:['戀人','星星'],note:'戀人的抉擇遇上星星的希望，在愛中找到指引，充滿美好願景的感情。'},
+  {pair:['戀人','世界'],note:'最完整的感情連結，代表真正的結合與圓滿，靈魂層次的伴侶。'},
+  {pair:['力量','戰車'],note:'內在力量與外在意志的結合，兩人都充滿鬥志，能共同面對挑戰。'},
+  {pair:['命運之輪','世界'],note:'命運注定的相遇，這段感情帶有強烈的宿命感，是靈魂計畫的一部分。'},
+  {pair:['月亮','太陽'],note:'月亮的直覺與太陽的光明，陰陽交會，在感情中互相照亮對方的黑暗與光明。'},
+  {pair:['星星','太陽'],note:'希望與喜悅的雙重光芒，充滿正能量的感情，讓彼此都閃閃發光。'},
+  {pair:['審判','世界'],note:'覺醒的靈魂走向圓滿，感情帶來深刻的靈性成長與人生轉化。'},
+  {pair:['惡魔','戀人'],note:'熾烈的吸引力與欲望，感情中有強烈的物質或肉體連結，需注意是否健康。'},
+  {pair:['高塔','死神'],note:'兩張強烈轉化牌同時出現，感情正經歷劇烈震盪，是終結也是重生的前奏。'},
+  {pair:['隱士','女祭司'],note:'兩個深度靈魂的相遇，彼此都需要空間，但在靈性層面有深刻的理解與共鳴。'},
+  {pair:['倒吊人','死神'],note:'自願的犧牲與必然的轉化，感情正在經歷深層蛻變，需要放下才能重生。'}
+];
+// 數字連結規則：牌號相減等於10或去掉一個1相等（如1與10、2與11、3與12等），在感情中也有特殊呼應。
+// 小阿爾克那人物牌連結：國王+皇后（成熟穩定）、騎士+侍者（充滿衝勁的年輕感情）。
+
+const SPREADS = {
+  one:{name:'單張牌陣',nameEn:'Single Card',pos:['核心訊息'],posEn:['Core Message'],
+    posDesc:['此刻宇宙給你最重要的一個訊息或指引'],posDescEn:['The single most important message or guidance for you right now'],
+    hint:'適合「簡單、明確、只想要一個方向」的問題，例如「今天我該注意什麼？」「對這件事，宇宙想提醒我什麼？」—— 一個問題、一個核心指引。',
+    hintEn:'Best for a simple, focused question wanting one clear pointer — e.g. "What should I focus on today?" or "What does the universe want me to know about this?" One question, one core message.',
+    eg:['今天的我最需要注意什麼？','關於最近讓我煩心的事，宇宙想提醒我什麼？'],
+    egEn:['What do I most need to pay attention to today?',"What does the universe want me to know about what's been on my mind lately?"]},
+  three:{name:'三張牌陣',nameEn:'Three-Card Spread',pos:['過去','現在','未來'],posEn:['Past','Present','Future'],
+    posDesc:['影響現在的過去事件或能量模式','你此刻所處的狀態與核心情境','正在形成中的未來趨勢或可能結果'],
+    posDescEn:['Past events or energy patterns shaping the present','Your current state and the core of the situation','The emerging trend or likely outcome ahead'],
+    hint:'適合想看一件事「來龍去脈與走向」的問題，帶點時間感最好，例如「這段關係接下來會怎麼發展？」「我做這個決定，過去/現在/未來會如何？」',
+    hintEn:'Best for how something unfolds over time — phrase it with a timeline, e.g. "How will this relationship develop next?" or "Past, present and future of this decision?"',
+    eg:['我的感情接下來會如何發展？','我目前的工作狀況是怎麼走到今天的？接下來會怎樣？'],
+    egEn:['How will my love life develop from here?','How did my work situation get to where it is, and where is it heading?']},
+  triangle:{name:'聖三角牌陣',nameEn:'Holy Triangle Spread',pos:['我以為的狀況','真實的狀況','建言'],posEn:['What I Assume','The Truth','Advice'],
+    posDesc:['你主觀認知中的情況——你以為事情是這樣','事件實際的樣貌——牌要讓你看見的真相','超越盲點之後，宇宙給你的具體指引'],
+    posDescEn:['Your subjective view — what you assume is going on','The real shape of things — the truth the cards reveal','Concrete guidance once you see past the blind spot'],
+    hint:'建議問法：「針對目前卡關的狀態，請讓我看到事件的真相」或「在現在的事件中，有我沒注意到的盲點嗎？」',
+    hintEn:'Suggested wording: "Show me the truth of where I feel stuck," or "Is there a blind spot I\'m missing in this situation?"',
+    eg:['關於最近讓我卡住的事，請讓我看見事件的真相','我對目前這段關係的想法，有什麼盲點嗎？'],
+    egEn:['Show me the truth about the situation where I feel stuck','Is there a blind spot in how I see this relationship?']},
+  core:{name:'四張牌 · 直指核心',nameEn:'Four-Card · Core Insight',pos:['問題核心','障礙','對策','優勢／資源'],posEn:['The Core','The Obstacle','Your Move','Your Strengths'],
+    posDesc:['這件事真正的關鍵點——表象底下真正在運作的核心','目前擋住你、讓你卡關的阻力或盲點','你可以採取的作法與方向——具體能做的事','你手邊已有的資源、優勢與長處，是你前進的底氣'],
+    posDescEn:['The real crux of the matter — what is actually at work beneath the surface','The resistance or blind spot currently blocking you','The concrete move you can make — what you can actually do','The resources, strengths and advantages you already have to draw on'],
+    hint:'適合「卡關、不知道問題核心在哪」的狀況，一次看清核心、障礙、對策與你的優勢。建議問法：「◯◯一直沒有起色／一直卡關，到底發生什麼事？我又能做些什麼？」（◯◯可換成「現階段事業」「感情方面」「銷售力道」等）',
+    hintEn:'Best when you feel stuck and can\'t pin down the real issue — it shows the core, the obstacle, your move and your strengths at once. Suggested wording: "___ keeps stalling / feels stuck — what is really going on, and what can I do?" (replace ___ with e.g. "my career right now", "my relationship", "my sales").',
+    eg:['我的事業一直卡關，到底發生什麼事？我又能做些什麼？','這段感情一直沒有起色，核心問題是什麼？'],
+    egEn:['My career keeps stalling — what is really going on and what can I do?','This relationship isn\'t moving forward — what\'s the core issue?']},
+  five:{name:'五張牌陣（無視論）',nameEn:'Five-Card Wuxi Spread',pos:['牌一','牌二','牌三','牌四','牌五'],posEn:['Card 1','Card 2','Card 3','Card 4','Card 5'],
+    hint:'適合「深入了解單一主題」的整體能量與走向（綜觀全局、不分位置），例如「接下來這段感情整體會如何？」「我目前的事業運勢整體如何？」—— 鎖定一個主題、看得最深最全面。',
+    hintEn:'Best for the overall energy and direction of one focused topic (read as a whole, not by position), e.g. "How will this relationship go overall?" or "What\'s the overall outlook for my career now?" — pick one theme and go deep.',
+    eg:['我接下來半年的事業運勢整體如何？','這段感情的整體能量與走向如何？'],
+    egEn:['What is the overall outlook for my career in the next six months?','What is the overall energy and direction of this relationship?']},
+  choice:{name:'二擇一牌陣',nameEn:'Either-Or Spread',pos:['選項1（左）· 優勢','選項1（左）· 挑戰','選項2（右）· 優勢','選項2（右）· 挑戰','整體建議'],
+    posEn:['Option 1 (left) · Strengths','Option 1 (left) · Challenges','Option 2 (right) · Strengths','Option 2 (right) · Challenges','Overall Advice'],
+    posDesc:['選項1（左）這條路帶來的好處與正面能量','選項1（左）可能面對的困難與代價','選項2（右）這條路帶來的好處與正面能量','選項2（右）可能面對的困難與代價','超越兩個選項的整體智慧與更高視角'],
+    posDescEn:['Benefits and positive energy of Option 1 (left)','Difficulties and costs of Option 1 (left)','Benefits and positive energy of Option 2 (right)','Difficulties and costs of Option 2 (right)','Higher wisdom that transcends both options'],
+    eg:['眼前這兩條路，哪一條對我比較好？'],
+    egEn:['Of these two paths before me, which one is better for me?']},
+  love:{name:'五張牌 · 感情萬用',nameEn:'Five-Card · Relationship',pos:['我的狀態','我對對方的態度','對方的狀態','對方對我的態度','可能的結果'],posEn:['My State','My Feelings Toward Them','Their State','Their Feelings Toward Me','Possible Outcome'],
+    posDesc:['你目前在這段關係裡的整體狀態與能量','你內心對對方真正的感情與態度','對方目前的整體狀態與處境','對方內心對你真正的感情與態度','順著目前能量發展下去最可能的走向——僅供參考，對方一改變心意就可能不同'],
+    posDescEn:['Your overall state and energy in this relationship right now','Your true feelings and attitude toward them, deep down','Their overall state and circumstances right now','Their true feelings and attitude toward you, deep down','The most likely direction if things continue as they are — a guide only; it can shift the moment either person changes their mind'],
+    hint:'感情萬用牌陣，一次看見雙方的現況、對彼此的感情態度，以及可能的走向。適合問你和某個特定對象之間的關係。建議問法：「我和◯◯目前的感情狀況如何？可能會怎麼發展？」（結果只給大方向，因為對方一旦改變心意就可能不同）',
+    hintEn:'An all-purpose relationship spread — see both people\'s current state, how each feels about the other, and the likely direction. Best for asking about you and one specific person. Suggested wording: "How are things between me and ___ right now, and where might they go?" (the outcome is a direction, not a verdict — it can change if either heart changes.)',
+    eg:['我和◯◯目前的感情狀況如何？可能會怎麼發展？','對方現在對我是什麼樣的感情態度？'],
+    egEn:['How are things between me and ___ right now, and where might they go?','What are their feelings toward me at the moment?']},
+  celtic:{name:'賽爾特十字',nameEn:'Celtic Cross',pos:['現況','影響因素','理想','基礎','過去','未來','自我','環境','希望或恐懼','結果'],posEn:['Present','Influence','Ideal','Foundation','Past','Future','Self','Environment','Hopes / Fears','Outcome'],
+    posDesc:['問卜者目前所看到、所處的狀況','加在現況上的阻力或助力（正面的牌為助力，負面的牌為阻力）','你覺得最理想的狀況，或對這件事的想法','目前已累積的成果，或可以利用的資源','過去發生、影響到現在的事','接下來會發生的事、近期的走向','綜合前六張後，你自身的狀態與心態','外在環境因素，或他人的觀點','你希望發生、或害怕發生的事（正面的牌為希望，負面的牌為恐懼）','事情最後的結果'],
+    posDescEn:['The situation as you currently see and stand in it','The force added to the present — help or obstacle (a positive card helps, a negative card blocks)','What you see as ideal, or your conscious thoughts about the matter','The results already built up, or the resources available to draw on','Past events that led to and shape the present','What is coming next — the near-term direction','Your own state and mindset, summing up cards 1–6','External environment, and how others see it','What you hope will happen, or fear will happen (positive card = hope, negative card = fear)','The final outcome of the matter'],
+    hint:'塔羅最經典的綜合大牌陣（10 張），從現況、過去未來、內在外在到最終結果全面剖析一件事，適合重要、複雜、想看得最深最完整的問題。建議問法：「這個合作案／這件事最後會如何發展？」（牌數多、資訊豐富，適合認真想深入了解的主題）',
+    hintEn:'The classic comprehensive spread (10 cards) — analyzes a matter fully, from the present, past and future to inner and outer influences and the final outcome. Best for important, complex questions you want to see in full depth. Suggested wording: "How will this deal / this matter ultimately turn out?" (many cards and lots of detail — best for a topic you genuinely want to go deep on.)',
+    eg:['這個合作案最後會不會談成功？','這件事從過去到未來、最後的結果會如何發展？'],
+    egEn:['Will this deal ultimately come together?','From past to future, how will this whole matter unfold and end up?']}
+};
+function spreadNameOf(type){ const s=SPREADS[type]; if(!s)return ''; return LANG==='en'?(s.nameEn||s.name):s.name; }
+function spreadPos(type){ const s=SPREADS[type]; if(!s)return []; return LANG==='en'?(s.posEn||s.pos):s.pos; }
+function spreadPosDesc(type){ const s=SPREADS[type]; if(!s)return null; return LANG==='en'?(s.posDescEn||s.posDesc):s.posDesc; }
+function spreadHint(type){ const s=SPREADS[type]; if(!s)return ''; return LANG==='en'?(s.hintEn||s.hint||''):(s.hint||''); }
+function spreadEg(type){ const s=SPREADS[type]; if(!s)return []; return LANG==='en'?(s.egEn||s.eg||[]):(s.eg||[]); }
+
+const PROJ_COLORS = ['#e74c3c','#e67e22','#d4af37','#27ae60','#2980b9','#8e44ad','#c0392b','#16a085'];
+
+// ══════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════
+// 安全讀取 localStorage JSON：資料損壞（寫入中斷等）時自動隔離備份並回傳預設值，
+// 避免 JSON.parse 在初始化時拋錯讓整個網站「所有按鈕沒反應」
+function safeParse(key, fallback){
+  const raw = localStorage.getItem(key);
+  if(raw==null) return JSON.parse(fallback);
+  try{ return JSON.parse(raw); }
+  catch(e){
+    try{ localStorage.setItem(key+'_corrupt_bak', raw); localStorage.removeItem(key); }catch(_){}
+    try{ toast('⚠️ '+key+' '+L('資料損壞，已重設（原始內容備份於 '+key+'_corrupt_bak）','data was corrupted and has been reset')); }catch(_){}
+    return JSON.parse(fallback);
+  }
+}
+// 記錄正規化：跨裝置同步/舊版本的記錄可能缺欄位（無 cards、q 為 null 等），
+// 一筆壞資料就會讓歷史/專案頁拋例外「按了沒反應」——載入與合併時一律補上安全預設值
+function sanitizeRec(r){
+  if(!r || typeof r!=='object' || r.id==null) return null;
+  r.q = (r.q==null) ? '' : String(r.q);
+  if(!Array.isArray(r.cards)) r.cards = [];
+  if(!Array.isArray(r.chat)) r.chat = [];
+  if(!Array.isArray(r.pos)) r.pos = [];
+  return r;
+}
+function sanitizeRecs(arr){ return (Array.isArray(arr)?arr:[]).map(sanitizeRec).filter(Boolean); }
+// 全域錯誤提示：以後任何未捕捉錯誤都會跳 toast，不再「靜悄悄沒反應」（5 秒節流防洗版）
+let _lastErrToast=0;
+window.addEventListener('error',e=>{
+  const now=Date.now(); if(now-_lastErrToast<5000) return; _lastErrToast=now;
+  try{ toast('⚠️ '+((e&&e.message)||'error').slice(0,90)); }catch(_){}
+});
+
+const S = {
+  type:null, pos:[], q:'',
+  deck:[], picked:[],
+  timer:null,
+  activeProjectId: null,       // project id currently selected
+  lastInterpText: '',          // store interpretation after it renders
+  projects: loadProjects(),
+  readings: sanitizeRecs(safeParse('tr_readings','[]'))
+};
+
+// ══════════════════════════════════════════
+//  STARS
+// ══════════════════════════════════════════
+(function(){
+  const el=document.getElementById('stars');
+  for(let i=0;i<160;i++){
+    const s=document.createElement('div'); s.className='s';
+    const sz=Math.random()*2.2+.4;
+    s.style.cssText=`width:${sz}px;height:${sz}px;left:${Math.random()*100}%;top:${Math.random()*100}%;--d:${(Math.random()*3+1.5).toFixed(1)}s;--dl:-${(Math.random()*4).toFixed(1)}s`;
+    el.appendChild(s);
+  }
+})();
+
+// ══════════════════════════════════════════
+//  NAVIGATION (stack-based)
+// ══════════════════════════════════════════
+const navStack = [];
+function go(id) {
+  const cur = document.querySelector('.screen.on');
+  if (cur && cur.id !== id) navStack.push(cur.id);
+  _showScreen(id);
+}
+function goBack() {
+  const prev = navStack.pop();
+  _showScreen(prev || 's-welcome');
+}
+function _showScreen(id) {
+  document.querySelectorAll('.screen').forEach(el=>{el.classList.remove('on');el.style.display='none';});
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.style.display='flex'; el.classList.add('on');
+  try{ if(document.activeElement && document.activeElement.blur) document.activeElement.blur(); }catch(e){}
+  window.scrollTo(0,0);
+  document.getElementById('nav-back').style.display = id==='s-welcome'?'none':'block';
+  if (id === 's-projects') renderProjectList();
+  if (id === 's-project-new') renderColorSwatches();
+}
+
+// ══════════════════════════════════════════
+//  PROJECTS — load/save
+// ══════════════════════════════════════════
+function loadProjects() {
+  return safeParse('tr_projects','[]');
+}
+function saveProjects() {
+  localStorage.setItem('tr_projects', JSON.stringify(S.projects));
+}
+function getActiveProject() {
+  return S.projects.find(p => p.id === S.activeProjectId) || null;
+}
+
+// ══════════════════════════════════════════
+//  PROJECT LIST SCREEN
+// ══════════════════════════════════════════
+function renderProjectList() {
+  const el = document.getElementById('proj-list');
+  if (!S.projects.length) {
+    el.innerHTML=`<p style="text-align:center;color:var(--muted);padding:20px">${L('還沒有專案，建立第一個吧','No projects yet — create your first one')}</p>`;
+    return;
+  }
+  el.innerHTML = S.projects.map(p => {
+    const cnt = p.readings.length;
+    const last = cnt ? p.readings[cnt-1].date : L('尚無記錄','no records');
+    return `<div class="proj-card" onclick="viewProject(${p.id})">
+      <div class="proj-dot" style="background:${p.color}"></div>
+      <div class="proj-info">
+        <div class="proj-name">${p.name}</div>
+        <div class="proj-meta">${p.desc||L('無描述','no description')} · ${L('最近：','latest: ')}${last}</div>
+      </div>
+      <div class="proj-count">${L(cnt+' 次',cnt+'×')}</div>
+      <div class="proj-arrow">›</div>
+    </div>`;
+  }).join('');
+}
+
+// ══════════════════════════════════════════
+//  COLOR PICKER
+// ══════════════════════════════════════════
+let selectedColor = PROJ_COLORS[4];
+function renderColorSwatches() {
+  const el = document.getElementById('color-swatches');
+  el.innerHTML = PROJ_COLORS.map(c =>
+    `<div class="swatch${c===selectedColor?' sel':''}" style="background:${c}" onclick="selectColor('${c}')"></div>`
+  ).join('');
+}
+function selectColor(c) {
+  selectedColor = c;
+  renderColorSwatches();
+}
+
+// ══════════════════════════════════════════
+//  CREATE PROJECT
+// ══════════════════════════════════════════
+function createProject() {
+  const name = document.getElementById('pn-name').value.trim();
+  if (!name) { toast(L('請輸入專案名稱','Please enter a project name')); return; }
+  const proj = {
+    id: Date.now(),
+    name,
+    desc: document.getElementById('pn-desc').value.trim(),
+    color: selectedColor,
+    createdAt: new Date().toLocaleDateString(LANG==='en'?'en-US':'zh-TW'),
+    readings: []
+  };
+  S.projects.unshift(proj);
+  saveProjects();
+  S.activeProjectId = proj.id;
+  navStack.length = 0;
+  navStack.push('s-welcome');
+  go('s-spread');
+  updateProjectBanners();
+  toast(LANG==='en'?`✦ Project "${name}" created`:`✦ 專案「${name}」建立成功`);
+}
+
+// ══════════════════════════════════════════
+//  VIEW PROJECT
+// ══════════════════════════════════════════
+function viewProject(id) {
+  const proj = S.projects.find(p => p.id === id);
+  if (!proj) return;
+
+  // header
+  document.getElementById('pv-header').innerHTML = `
+    <div class="proj-header-dot" style="background:${proj.color}"></div>
+    <div class="proj-header-text">
+      <h2>${escHtml(proj.name)} <button onclick="renameProject(${proj.id})" title="${L('編輯專案名稱','Rename project')}"
+        style="background:none;border:1px solid rgba(212,175,55,.35);color:rgba(212,175,55,.8);border-radius:6px;cursor:pointer;font-size:.72rem;padding:2px 9px;vertical-align:middle;margin-left:6px">✎ ${L('編輯','Edit')}</button></h2>
+      <p>${proj.desc||''}</p>
+      <p style="margin-top:4px;font-size:.72rem;color:rgba(154,141,181,.5)">
+        ${LANG==='en'?`Created ${proj.createdAt} · ${proj.readings.length} reading${proj.readings.length===1?'':'s'}`:`建立於 ${proj.createdAt} · 共 ${proj.readings.length} 次占卜`}
+      </p>
+    </div>`;
+
+  document.getElementById('pv-start-btn').onclick = () => {
+    S.activeProjectId = id;
+    navStack.length = 0; navStack.push('s-welcome');
+    go('s-spread'); updateProjectBanners();
+  };
+  document.getElementById('pv-delete-btn').onclick = () => deleteProject(id);
+
+  // timeline
+  const tl = document.getElementById('pv-timeline');
+  const empty = document.getElementById('pv-empty');
+  if (!proj.readings.length) {
+    tl.innerHTML='';
+    empty.innerHTML=`<p style="color:var(--muted)">${L('還沒有占卜記錄','No readings yet')}</p>`;
+  } else {
+    empty.innerHTML='';
+    tl.innerHTML = [...proj.readings].reverse().map((r, idx) => {
+      const num = proj.readings.length - idx;
+      const cardStr = (r.cards||[]).map((c,i)=>`${(r.pos||[])[i]||''}：${cardName(c.cid)}${c.rev?'↓':''}`).join('｜');
+      return `<div class="tl-item">
+        <div class="tl-dot"></div>
+        <div class="tl-box" onclick="toggleTlItem(this)">
+          <div class="tl-date">${LANG==='en'?`#${num}`:`第 ${num} 次`} · ${r.date} · ${r.spread}</div>
+          <div class="tl-q">「${escHtml(r.q)}」</div>
+          <div class="tl-cards">${cardStr}</div>
+          <div class="tl-expand">
+            <div class="tl-interp">${r.interp||L('（無儲存解讀）','(no saved reading)')}</div>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  go('s-project-view');
+}
+function toggleTlItem(box) {
+  box.querySelector('.tl-expand').classList.toggle('open');
+}
+function renameProject(id) {
+  const proj = S.projects.find(p=>p.id===id);
+  if (!proj) return;
+  const name = prompt(L('修改專案名稱：','Rename project:'), proj.name);
+  if (name === null) return; // 取消
+  const trimmed = name.trim();
+  if (!trimmed) { toast(L('專案名稱不能是空的','Project name cannot be empty')); return; }
+  proj.name = trimmed.slice(0, 40);
+  saveProjects();
+  updateProjectBanners();
+  viewProject(id); // 重繪標題與內容
+  toast(L('✦ 專案名稱已更新','✦ Project renamed'));
+}
+function deleteProject(id) {
+  const proj = S.projects.find(p=>p.id===id);
+  if (!proj) return;
+  if (!confirm(LANG==='en'?`Delete project "${proj.name}"? This cannot be undone.`:`確定要刪除專案「${proj.name}」？此操作無法還原。`)) return;
+  S.projects = S.projects.filter(p=>p.id!==id);
+  saveProjects();
+  if (S.activeProjectId === id) S.activeProjectId = null;
+  toast(L('專案已刪除','Project deleted'));
+  goBack();
+}
+
+// ══════════════════════════════════════════
+//  PROJECT BANNERS (show active project)
+// ══════════════════════════════════════════
+function updateProjectBanners() {
+  const proj = getActiveProject();
+  const txt = proj
+    ? (LANG==='en'?`✦ Project: ${proj.name} (reading #${proj.readings.length+1})`:`✦ 專案：${proj.name}（第 ${proj.readings.length+1} 次占卜）`)
+    : '';
+  ['spread-banner','reading-proj-banner'].forEach(id=>{
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = txt;
+    el.classList.toggle('on', !!proj);
+  });
+}
+
+// ══════════════════════════════════════════
+//  START (no project)
+// ══════════════════════════════════════════
+function startNoProject() {
+  S.activeProjectId = null;
+  navStack.length = 0;
+  go('s-spread');
+  updateProjectBanners();
+}
+
+// ══════════════════════════════════════════
+//  SPREAD / QUESTION
+// ══════════════════════════════════════════
+function pickSpread(type) {
+  S.type=type;
+  const isCustom=type==='custom';
+  document.getElementById('q-title').textContent=isCustom?t('q.title.custom'):t('q.title');
+  document.getElementById('custom-area').style.display=isCustom?'block':'none';
+  document.getElementById('choice-area').style.display=type==='choice'?'block':'none';
+  if(isCustom)renderCustomPos();
+  const hint=spreadHint(type);
+  const hintEl=document.getElementById('q-hint');
+  hintEl.style.display=hint?'block':'none';
+  if(hint)hintEl.textContent='✦ '+hint;
+  const egs=spreadEg(type);
+  const egEl=document.getElementById('q-eg');
+  egEl.style.display=egs.length?'block':'none';
+  egEl.innerHTML='';
+  if(egs.length){
+    const lab=document.createElement('div');
+    lab.className='hint';lab.style.margin='0 0 2px';
+    lab.textContent=L('✨ 沒靈感？點一個範例問題直接用：','✨ Not sure what to ask? Tap an example:');
+    egEl.appendChild(lab);
+    egs.forEach(q=>{
+      const b=document.createElement('button');
+      b.type='button';b.className='eg-chip';b.textContent=q;
+      b.onclick=()=>{const inp=document.getElementById('q-input');inp.value=q;inp.focus();};
+      egEl.appendChild(b);
+    });
+  }
+  go('s-question');
+}
+function renderCustomPos(){
+  const n=Math.min(12,Math.max(1,parseInt(document.getElementById('custom-n').value)||3));
+  const c=document.getElementById('custom-pos-list');c.innerHTML='';
+  for(let i=0;i<n;i++)c.innerHTML+=`<label class="lbl">${L('位置','Position')} ${i+1} ${L('名稱','name')}</label><input class="inp cp-inp" placeholder="${L('例：當前情況','e.g. Current situation')}" value="${L('位置','Position')} ${i+1}">`;
+}
+
+// ══════════════════════════════════════════
+//  MEDITATION
+// ══════════════════════════════════════════
+function skipMeditation(){
+  if(S.timer)clearInterval(S.timer);
+  document.getElementById('timer-num').textContent='✦';
+  document.getElementById('breath-word').textContent=t('med.ready');
+  const btn=document.getElementById('btn-shuffle');
+  btn.disabled=false;btn.classList.add('btn-glow');
+}
+function beginMeditation(){
+  const q=document.getElementById('q-input').value.trim().replace(/[<>]/g,'');
+  if(!q){toast(t('toast.needq'));return;}
+  if(S.type==='custom'){
+    S.pos=Array.from(document.querySelectorAll('.cp-inp')).map(el=>el.value||t('pos.default'));
+  } else if(S.type==='choice'){
+    const a=(document.getElementById('choice-a').value||'').trim()||L('選項1','Option 1');
+    const b=(document.getElementById('choice-b').value||'').trim()||L('選項2','Option 2');
+    S.optA=a; S.optB=b;
+    S.pos=[
+      L(`${a}（左）· 優勢`,`${a} (left) · Strengths`),
+      L(`${a}（左）· 挑戰`,`${a} (left) · Challenges`),
+      L(`${b}（右）· 優勢`,`${b} (right) · Strengths`),
+      L(`${b}（右）· 挑戰`,`${b} (right) · Challenges`),
+      L('整體建議','Overall Advice')
+    ];
+  } else {
+    S.pos=spreadPos(S.type);
+  }
+  S.q=q;
+  document.getElementById('med-q-disp').textContent=`「${q}」`;
+  go('s-meditation');
+  // 冥想開始自動播放靜心音樂（除非用戶之前關掉過）
+  if(localStorage.getItem('tr_music')!=='0' && !musicOn) startMusic();
+  const timerEl=document.getElementById('timer-num');
+  const wordEl=document.getElementById('breath-word');
+  const btn=document.getElementById('btn-shuffle');
+  btn.disabled=true;btn.classList.remove('btn-glow');
+  let sec=15,bi=0;
+  const bw=[t('med.breath.in'),t('med.breath.hold'),t('med.breath.out'),t('med.breath.hold')];
+  timerEl.textContent=sec;
+  const biv=setInterval(()=>{wordEl.textContent=bw[bi%4];bi++;},2000);
+  if(S.timer)clearInterval(S.timer);
+  S.timer=setInterval(()=>{
+    sec--;timerEl.textContent=sec;
+    if(sec<=0){clearInterval(S.timer);clearInterval(biv);timerEl.textContent='✦';wordEl.textContent=t('med.ready');btn.disabled=false;btn.classList.add('btn-glow');}
+  },1000);
+}
+
+// ══════════════════════════════════════════
+//  SHUFFLE — crypto random
+// ══════════════════════════════════════════
+// ── 洗牌音效：Web Audio 即時合成紙牌刷聲，零下載 ──
+// 擬真關鍵：每一下「啪嗒」各自有不同的濾波頻率／音量／時間抖動（避免機械感），
+// 整體再過一層低通軟化高頻，底下墊一層低頻沙沙聲當牌疊的「厚度」。
+function playShuffleSfx(dur){
+  try{
+    if(!AC) AC=new (window.AudioContext||window.webkitAudioContext)();
+    AC.resume();
+    const t0=AC.currentTime+.02;
+    const master=AC.createGain(); master.gain.value=.35;
+    const soft=AC.createBiquadFilter(); soft.type='lowpass'; soft.frequency.value=3600; soft.Q.value=.4;
+    master.connect(soft); soft.connect(AC.destination);
+    // 共用一小段白噪音，每下用不同 playbackRate 取樣
+    const nLen=Math.floor(.06*AC.sampleRate);
+    const nBuf=AC.createBuffer(1,nLen,AC.sampleRate);
+    const nd=nBuf.getChannelData(0);
+    for(let i=0;i<nLen;i++) nd[i]=Math.random()*2-1;
+    const flicks=Math.max(5,Math.round(dur*22));
+    for(let f=0;f<flicks;f++){
+      const prog=f/flicks;
+      const at=t0+dur*(Math.pow(prog,.9)+(Math.random()-.5)*.5/flicks); // 微加速＋抖動，像真的 riffle
+      const src=AC.createBufferSource(); src.buffer=nBuf;
+      src.playbackRate.value=.7+Math.random()*.6;
+      const bp=AC.createBiquadFilter(); bp.type='bandpass';
+      bp.frequency.value=900+Math.random()*1700; bp.Q.value=1.1;
+      const g=AC.createGain();
+      const amp=(.3+Math.random()*.4)*(.45+.55*Math.sin(Math.PI*prog)); // 中段最響、頭尾漸收
+      g.gain.setValueAtTime(0,at);
+      g.gain.linearRampToValueAtTime(amp,at+.005); // 有一點 attack，不是瞬間爆音
+      g.gain.exponentialRampToValueAtTime(.001,at+.035+Math.random()*.03);
+      src.connect(bp); bp.connect(g); g.connect(master);
+      src.start(at); src.stop(at+.09);
+    }
+    // 低頻沙沙聲鋪底（一階低通後的噪音），讓聲音有「一疊紙牌」的重量
+    const bLen=Math.floor((dur+.05)*AC.sampleRate);
+    const bBuf=AC.createBuffer(1,bLen,AC.sampleRate);
+    const bd=bBuf.getChannelData(0);
+    let lpv=0;
+    for(let i=0;i<bLen;i++){const w=Math.random()*2-1; lpv+=.08*(w-lpv); bd[i]=lpv*2.5;}
+    const bed=AC.createBufferSource(); bed.buffer=bBuf;
+    const bf=AC.createBiquadFilter(); bf.type='lowpass'; bf.frequency.value=650;
+    const bg=AC.createGain();
+    bg.gain.setValueAtTime(0,t0);
+    bg.gain.linearRampToValueAtTime(.09,t0+dur*.3);
+    bg.gain.linearRampToValueAtTime(0,t0+dur);
+    bed.connect(bf); bf.connect(bg); bg.connect(master);
+    bed.start(t0); bed.stop(t0+dur+.05);
+    setTimeout(()=>{try{master.disconnect();soft.disconnect();}catch(e){}},(dur+.3)*1000);
+  }catch(e){}
+}
+function beginShuffle(){
+  go('s-shuffle');
+  const arr = fisherYates([...Array(78).keys()]);
+  S.deck = arr.map(cid => ({ cid, rev: cryptoRand() < 0.35 }));
+  const wrap=document.getElementById('shuffle-wrap');wrap.innerHTML='';
+  const cards=[];
+  for(let i=0;i<22;i++){const d=document.createElement('div');d.className='shuf-c';d.style.zIndex=i;wrap.appendChild(d);cards.push(d);}
+  document.getElementById('btn-pick').style.display='none';
+  let phase=0;
+  const anim=()=>{
+    if(phase<3){
+      playShuffleSfx(.55);
+      cards.forEach(c=>{const x=(cryptoRand()-.5)*360,y=(cryptoRand()-.5)*180,r=(cryptoRand()-.5)*55;c.style.transform=`translate(calc(-50% + ${x}px),calc(-50% + ${y}px)) rotate(${r}deg)`;c.style.transition=`all ${.3+cryptoRand()*.3}s ease`;});
+      phase++;setTimeout(anim,650);
+    } else {
+      playShuffleSfx(.3); // 收攏成一疊時較短的一聲
+      cards.forEach((c,i)=>{const off=(i-10.5)*2.2;c.style.transform=`translate(calc(-50% + ${off}px),-50%) rotate(${(cryptoRand()-.5)*2}deg)`;c.style.transition='all .6s ease';});
+      setTimeout(()=>{document.getElementById('btn-pick').style.display='inline-block';document.getElementById('btn-quick').style.display='inline-block';},900);
+    }
+  };
+  setTimeout(anim,300);
+}
+
+// ══════════════════════════════════════════
+//  PICK CARDS
+// ══════════════════════════════════════════
+function beginPick(){
+  S.picked=[];
+  const need=S.pos.length;
+  document.getElementById('pick-title').textContent=L(`選擇 ${need} 張牌卡`,`Choose ${need} card${need>1?'s':''}`);
+  document.getElementById('pick-left').textContent=need;
+  const grid=document.getElementById('cards-grid');grid.innerHTML='';
+  S.deck.forEach((_,i)=>{
+    const d=document.createElement('div');d.className='cb';d.dataset.i=i;
+    d.onclick=()=>doPick(i,d);grid.appendChild(d);
+  });
+  go('s-pick');
+}
+function doPick(idx,el){
+  const need=S.pos.length;
+  if(el.classList.contains('picked')||S.picked.length>=need)return;
+  el.classList.add('picked');S.picked.push(idx);
+  document.getElementById('pick-left').textContent=need-S.picked.length;
+  if(S.picked.length>=need)setTimeout(showReading,600);
+}
+// 一鍵快速抽牌：用加密隨機從整副牌中隨機抽出所需張數，直接進入解讀（免逐張點選）。
+function quickDraw(){
+  const need=S.pos.length;
+  if(!S.deck||!S.deck.length){
+    const arr=fisherYates([...Array(78).keys()]);
+    S.deck=arr.map(cid=>({cid,rev:cryptoRand()<0.35}));
+  }
+  const pool=[...Array(S.deck.length).keys()];
+  const idx=[];
+  for(let i=0;i<need;i++){ const j=Math.floor(cryptoRand()*pool.length); idx.push(pool.splice(j,1)[0]); }
+  S.picked=idx;
+  showReading();
+}
+
+// ══════════════════════════════════════════
+//  CARD FACE HTML
+// ══════════════════════════════════════════
+function cardFaceHTML(card,rev){
+  const imgUrl=IMG_BASE+CARD_IMG_FILES[card.id]+'&width=300';
+  const colors=CARD_COLORS[card.id];
+  const g=`linear-gradient(135deg,${colors[0]},${colors[1]})`;
+  return `<div class="cf${rev?' cf-rev':''}">
+    <img src="${imgUrl}" alt="${card.zh}" loading="lazy"
+      onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+    <div class="cf-fallback" style="display:none;background:${g}">
+      <div class="cf-fallback-sym">${CARD_SYMS[card.id]}</div>
+      <div style="color:#fff;font-weight:700;font-size:.9rem">${card.zh}</div>
+    </div>
+    <div class="cf-label">
+      <div class="cf-zh">${card.zh}</div>
+      <div class="cf-en">${card.en}</div>
+    </div>
+  </div>`;
+}
+
+// ══════════════════════════════════════════
+//  READING
+// ══════════════════════════════════════════
+function unlockCtaHtml(){
+  if(!GUMROAD_URL) return '';
+  return `
+      <div style="margin-top:22px;padding:16px;background:rgba(212,175,55,.07);border:1px solid rgba(212,175,55,.25);border-radius:12px;text-align:center">
+        <div style="font-family:'Cinzel',serif;font-size:.78rem;color:var(--gold);letter-spacing:.1em;margin-bottom:8px">${L('✦ 解鎖 AI 深度解牌','✦ Unlock AI Deep Reading')}</div>
+        <p class="hint" style="margin:0 0 10px;font-size:.82rem">${L(`獲得針對「${S.q}」的個人化深度解析、感情連結牌組判讀，以及多輪追問對話。`,`Get a personalized deep reading of "${S.q}", relationship card-combo insights, and multi-turn follow-up chat.`)}</p>
+        <div style="display:flex;justify-content:center;gap:18px;font-size:.76rem;color:var(--muted);margin-bottom:14px;flex-wrap:wrap">
+          <span>${L('① 點下方「前往解鎖方案」','① Tap "See unlock options"')}</span>
+          <span style="color:rgba(212,175,55,.35)">→</span>
+          <span>${L('② 在跳出的視窗選方案購買','② Pick a plan in the popup')}</span>
+          <span style="color:rgba(212,175,55,.35)">→</span>
+          <span>${L('③ 用購買 email 驗證即可','③ Verify with your purchase email')}</span>
+        </div>
+        <div style="display:flex;justify-content:center;gap:10px;flex-wrap:wrap">
+          <button class="btn btn-sm" onclick="openSettings()">${L('✦ 前往解鎖方案','✦ See unlock options')}</button>
+          <button class="btn btn-sm btn-ghost" onclick="openSettings()">${L('已購買？驗證 Email','Purchased? Verify')}</button>
+        </div>
+      </div>`;
+}
+function showReading(resumeId, restore){ // restore={interp,chat}：從記錄還原顯示、不重跑 AI（繼續追問用）
+  S.lastInterpText = restore ? (restore.interp||'') : '';
+  S.chatHistory = restore ? (restore.chat||[]).map(m=>({...m})) : [];
+  S.currentReadingId = resumeId || null; // resumeId：從記錄補解析時保留原記錄 id
+  document.getElementById('chat-area').style.display='none';
+  document.getElementById('chat-msgs').innerHTML='';
+  go('s-reading');
+  updateProjectBanners();
+  document.getElementById('r-q-disp').textContent=`「${S.q}」`;
+  const spreadEl=document.getElementById('reading-spread');
+  spreadEl.innerHTML='';
+  // Apply layout class
+  spreadEl.className='reading-spread';
+  if(S.type==='three') spreadEl.classList.add('layout-three');
+  else if(S.type==='five') spreadEl.classList.add('layout-five');
+  else if(S.type==='celtic') spreadEl.classList.add('layout-celtic');
+  else if(S.type==='choice'){
+    spreadEl.classList.add('layout-choice');
+    // insert column headers before cards
+    spreadEl.innerHTML=`
+      <div style="font-family:'Cinzel',serif;font-size:.72rem;color:rgba(212,175,55,.55);letter-spacing:.12em;padding-bottom:4px;border-bottom:1px solid rgba(212,175,55,.18)">選項 A</div>
+      <div style="font-family:'Cinzel',serif;font-size:.72rem;color:rgba(212,175,55,.55);letter-spacing:.12em;padding-bottom:4px;border-bottom:1px solid rgba(212,175,55,.18)">選項 B</div>`;
+  }
+  // Compute 無視論 重點/輔助 for five-card spread
+  let wuxiBadges = null;
+  if(S.type==='five'){
+    const revCount = S.picked.filter(di=>S.deck[di].rev).length;
+    const uprCount = 5 - revCount;
+    // minority = 重點牌; if tied fall back to major arcana number split
+    const keyIsRev = revCount < uprCount;
+    const keyIsUpr = uprCount < revCount;
+    wuxiBadges = S.picked.map(di=>{
+      const {rev} = S.deck[di];
+      if(keyIsRev) return rev ? 'key' : 'sup';
+      if(keyIsUpr) return rev ? 'sup' : 'key';
+      return 'sup'; // tie: no clear minority, show all as supporting (fallback)
+    });
+  }
+  // 二擇一：牌序為[A優,A挑,B優,B挑,建議]，但版面是兩欄（左=選項A、右=選項B）逐列填入，
+  // 需以[A優,B優,A挑,B挑,建議]的顯示順序排列，兩欄才會對上欄位標題
+  const dispOrder = (S.type==='choice' && S.picked.length>=5) ? [0,2,1,3,4] : S.picked.map((_,x)=>x);
+  dispOrder.forEach((i,disp)=>{
+    const di=S.picked[i];
+    const {cid,rev}=S.deck[di]; const card=C[cid];
+    const item=document.createElement('div');item.className='r-item';
+    const badgeHTML = wuxiBadges
+      ? `<div><span class="wuxi-badge ${wuxiBadges[i]}">${wuxiBadges[i]==='key'?'重點':'輔助'}</span></div>`
+      : '';
+    item.innerHTML=`
+      ${badgeHTML}
+      <div class="r-pos">${S.pos[i]}</div>
+      <div class="flip-box">
+        <div class="flip-inner" id="fi-${i}">
+          <div class="flip-f"></div>
+          <div class="flip-b${rev?' rev-border':''}">${cardFaceHTML(card,rev)}</div>
+        </div>
+      </div>
+      <div style="font-size:.72rem;margin-top:2px;color:${rev?'var(--red)':'var(--muted)'}">${rev?'逆位':'正位'}</div>`;
+    spreadEl.appendChild(item);
+    setTimeout(()=>{const fe=document.getElementById(`fi-${i}`); if(fe) fe.classList.add('done');},350+disp*420);
+  });
+
+  document.getElementById('card-details').innerHTML=buildDetails();
+  if(restore){
+    // 直接顯示已存的解讀與追問對話（格式化方式與 AI 成功路徑一致）
+    const formatted=(restore.interp||'').replace(/\*\*(.+?)\*\*/g,'$1').replace(/\*(.+?)\*/g,'$1').replace(/[*#`_~]/g,'').replace(/\n{2,}/g,'</p><p class="interp-p">').replace(/\n/g,'<br>');
+    document.getElementById('interp-main').innerHTML=`<p class="interp-p">${formatted}</p>`;
+    renderChat();
+    document.getElementById('chat-area').style.display='block';
+    updateChatRemaining();
+  } else {
+    runAIReading();
+  }
+}
+
+// AI 解讀（可重用：首次解讀 + 重試）。失敗/暫停時自動保留抽牌並提供重試。
+function runAIReading(){
+  const key=getApiKey();
+  const verified=isVerified();
+  const fbRender = ()=>{ const fb=buildInterpBuiltin(); S.lastInterpText=fb.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim(); return fb; };
+  // 付費 AI 暫停且無自備 key → 暫停通知 + 內建 + 保留抽牌 + 重試
+  if(AI_PAUSED && verified && !key){
+    const fb=fbRender();
+    document.getElementById('interp-main').innerHTML=`${pauseNoticeHtml()}${fb}${retryBarHtml()}`;
+    autoSaveDraw();
+    return;
+  }
+  // 既沒驗證也沒自備 key → 內建 + 解鎖 CTA（自動保留這次抽牌，付費解鎖後可到記錄補 AI 解析）
+  if(!(key||verified)){
+    const fb=fbRender();
+    document.getElementById('interp-main').innerHTML=`${fb}${unlockCtaHtml()}`;
+    autoSaveDraw();
+    return;
+  }
+  // 暫停期間若有自備 key，改用自己的 key（不走付費代理）
+  const proxyEmail=(verified && !AI_PAUSED)?getVerifiedEmail():null;
+  document.getElementById('interp-main').innerHTML=`
+    <div class="ai-loading">
+      <div class="ai-dots"><div class="ai-dot"></div><div class="ai-dot"></div><div class="ai-dot"></div></div>
+      <div style="font-size:.85rem;color:var(--muted);letter-spacing:.1em">${getActiveProject()?L('AI 正在結合過去脈絡解讀牌陣...','AI is reading your spread with past context...'):L('AI 正在解讀牌陣...','AI is reading your spread...')}</div>
+    </div>`;
+  callGemini(key,proxyEmail).then(text=>{
+    S.lastInterpText=text; S.chatHistory=[];
+    const formatted=text.replace(/\*\*(.+?)\*\*/g,'$1').replace(/\*(.+?)\*/g,'$1').replace(/[*#`_~]/g,'').replace(/\n{2,}/g,'</p><p class="interp-p">').replace(/\n/g,'<br>');
+    document.getElementById('interp-main').innerHTML=`<p class="interp-p">${formatted}</p>`;
+    document.getElementById('chat-area').style.display='block';
+    updateChatRemaining(); // 顯示本次可追問次數
+    // 修正：AI 成功後一律自動保存——新占卜連同專案一起存（用戶反映專案占卜沒有紀錄：
+    // 過去 AI 成功的新占卜完全不自動保存，沒按「儲存記錄」就離開等於白占）；
+    // 已保存過的（草稿/補解析）只更新內容、不重複加入專案
+    saveReading(true, !!S.currentReadingId);
+  }).catch(err=>{
+    console.error(err);
+    const fb=fbRender();
+    document.getElementById('interp-main').innerHTML=`${fb}${unlockCtaHtml()}${retryBarHtml()}
+      <div style="font-size:.72rem;color:var(--red);margin-top:10px;opacity:.7">${L('（AI 暫時無法連線：','(AI temporarily unavailable: ')}${err.message}）
+        <a href="javascript:void(0)" onclick="reportProblem('ai-fail')" style="color:rgba(212,175,55,.7);margin-left:6px">${L('回報問題','Report')}</a></div>`;
+    autoSaveDraw();
+  });
+}
+// 保留抽牌的提示 + 立即重試按鈕
+function retryBarHtml(){
+  return `<div style="margin-top:14px;padding:12px 14px;background:rgba(212,175,55,.07);border:1px solid rgba(212,175,55,.25);border-radius:10px;text-align:center">
+    <div style="font-size:.8rem;color:var(--silver);margin-bottom:9px;line-height:1.6">${L('✦ 已自動保留這次抽牌結果，不用重抽。AI 恢復後也可到「占卜記錄」用 AI 重新解析。','✦ Your draw is saved automatically — no need to redraw. When AI is back, re-analyze it from "History".')}</div>
+    <button class="btn btn-sm" onclick="runAIReading()">${L('🔄 重試 AI 解析','🔄 Retry AI reading')}</button>
+  </div>`;
+}
+// AI 無法解析時自動保存目前抽牌（去重；若是從專案開始的占卜，也一併記入該專案）
+function autoSaveDraw(){
+  if(S.currentReadingId) return;
+  saveReading(true, false);
+}
+// 從「占卜記錄」用 AI 重新解析某一筆（重建牌局後呼叫 AI，成功後更新該筆解讀）
+// 舊紀錄沒存 type 時，從牌陣名稱 / 張數反推，讓舊記錄也能重新 AI 解析
+function inferReadingType(rec){
+  if(rec.type) return rec.type;
+  const sp=rec.spread||'', n=(rec.cards||[]).length;
+  if(/聖三角|Holy Triangle/i.test(sp)) return 'triangle';
+  if(/二擇一|Either/i.test(sp)) return 'choice';
+  if(/無視論|Wuxi/i.test(sp)) return 'five';
+  if(/三張|Three/i.test(sp)) return 'three';
+  if(/單張|Single/i.test(sp)) return 'one';
+  if(/自訂|Custom/i.test(sp)) return 'custom';
+  if(n===1) return 'one'; if(n===3) return 'three'; if(n===5) return 'five';
+  return 'custom';
+}
+function analyzeWithAI(id){
+  const arr=safeParse('tr_full','[]');
+  const rec=arr.find(r=>r.id===id);
+  if(!rec||!rec.cards||!rec.cards.length){ toast(L('這筆記錄無法重新解析（缺少牌局資料）','This record can\'t be re-analyzed (missing draw data)')); return; }
+  const key=getApiKey(), verified=isVerified();
+  if(AI_PAUSED && verified && !key){ toast(L('AI 解牌暫停服務中，請稍後再試 🙏','AI readings are paused right now, please try again later 🙏')); return; }
+  // 還沒解鎖 → 引導去驗證/設定 key；記住這筆，解鎖後自動接著解析
+  if(!(key||verified)){ pendingAnalyzeId=id; toast(L('請先解鎖 AI 解牌（或設定自己的 API Key），解鎖後會自動幫你解析這筆','Unlock AI readings (or set your own API key) — we\'ll analyze this one right after')); openSettings(); return; }
+  loadRecIntoState(rec);
+  showReading(id); // 重繪牌面 + 跑 AI + 開放追問
+}
+// 把一筆完整記錄載回 S（重建牌局狀態，供「重新解析」與「繼續追問」共用）
+function loadRecIntoState(rec){
+  const type=inferReadingType(rec);
+  S.type=type;
+  S.deck=rec.cards.map(c=>({cid:c.cid,rev:c.rev}));
+  S.picked=rec.cards.map((_,i)=>i);
+  S.pos=(rec.pos&&rec.pos.length)?rec.pos:spreadPos(type);
+  S.q=rec.q;
+  // 二擇一：從位置標籤推回選項名稱，供敘事/結論顯示
+  if(type==='choice' && rec.pos && rec.pos.length>=4){
+    S.optA=(rec.pos[0]||'').replace(/[（(].*$/,'').trim()||L('選項1','Option 1');
+    S.optB=(rec.pos[2]||'').replace(/[（(].*$/,'').trim()||L('選項2','Option 2');
+  }
+}
+// 繼續追問：載回舊占卜（含已存解讀與對話），不重跑 AI，接續尚未用完的追問次數
+function resumeChat(id){
+  const arr=safeParse('tr_full','[]');
+  const rec=sanitizeRec(arr.find(r=>r.id===id));
+  if(!rec||!rec.interp||!rec.cards.length){ toast(L('這筆記錄沒有已完成的解讀可以續問','This record has no saved reading to continue')); return; }
+  if(!(getApiKey()||isVerified())){ toast(L('請先解鎖 AI 解牌（或設定 API Key）才能繼續追問','Unlock AI readings (or set an API key) to continue asking')); openSettings(); return; }
+  loadRecIntoState(rec);
+  showReading(id, {interp:rec.interp, chat:rec.chat||[]});
+}
+
+// ══════════════════════════════════════════
+//  GEMINI API — project-aware
+// ══════════════════════════════════════════
+// ── 英文資料容器（由翻譯填入；缺漏時自動回退中文） ──
+let EN_CARD={}, LORE_EN={}, TOPIC_EXTRA_EN={};
+EN_CARD={
+0:{pl:"Uranus",u:{kw:["new beginnings", "adventure", "innocence", "freedom", "infinite potential"],m:"The Fool marks the courage to set out on a brand-new journey. You stand at a fresh starting point, meeting the unknown with an open heart and trusting the guidance of the universe.",love:"A fresh, exciting encounter awaits, or a chance to love openly and without preconditions in an existing relationship.",career:"A bold leap into a new direction beckons — a startup, a career change, or a risky but promising opportunity outside your comfort zone."},r:{kw:["recklessness", "carelessness", "disregarding consequences", "naivety", "avoiding responsibility"],m:"The reversed Fool warns that courage and recklessness are only a hair apart. Weigh the risks carefully before acting, as impulsiveness may create needless trouble.",love:"Immaturity, avoidance of commitment, or impulsive behavior that hurts the relationship.",career:"Beware of hasty decisions and rushing into action without a plan."}},
+1:{pl:"Mercury",u:{kw:["willpower", "skill", "creation", "action", "resources"],m:"The Magician means you possess every ability needed to manifest your desires — the peak of initiative and creative power. Now is the moment to act rather than wait.",love:"You or your partner are magnetic and proactive; if single, the time to make the first move has arrived.",career:"Your talents have a stage to shine — negotiations, presentations, and pitches will land with persuasive force."},r:{kw:["deception", "manipulation", "untapped skill", "lack of planning", "bluffing"],m:"The reversed Magician warns of deceit and manipulation. Re-examine your motives and ensure your actions come from sincerity rather than opportunism.",love:"Beware a smooth-talker whose words and deeds don't match — or your own dishonesty in the relationship.",career:"Watch for those who bluff without substance, or who gain through tricks rather than real ability."}},
+2:{pl:"The Moon",u:{kw:["intuition", "mystery", "subconscious", "inner wisdom", "silence"],m:"The High Priestess invites you to turn inward and listen to the deep, clear voice of the subconscious. The answer lies not outside but within — stay quiet and let insight surface.",love:"A profound, unspoken connection, or a relationship still quietly brewing; trust what your intuition is telling you.",career:"Don't force progress now — observe, gather information, and prepare internally as hidden facts come to light."},r:{kw:["suppressed intuition", "hidden secrets", "withdrawal", "superficiality", "being deceived"],m:"The reversed High Priestess suggests intuition is being stifled or something important is being deliberately concealed. Face your true feelings honestly and dig deeper for the truth.",love:"Secrets, lies, or a third party may be hidden — or you're unwilling to face your own real feelings.",career:"Information is opaque or you're being kept in the dark; investigate more deeply."}},
+3:{pl:"Venus",u:{kw:["abundance", "creativity", "motherhood", "sensuality", "nurturing"],m:"The Empress embodies the unconditional abundance of Mother Earth — love, beauty, and harvest. Now is the time to plant and nurture, for a rich reward is coming.",love:"A highly auspicious card of warm, stable love, possible marriage, or pregnancy and new life, given with wholehearted love.",career:"Creative, aesthetic, educational, or caregiving work will flourish, alongside financial abundance and growth."},r:{kw:["creative block", "dependency", "self-neglect", "sense of lack", "controlling"],m:"The reversed Empress suggests abundant energy is blocked. Reconnect with the earth's energy and nourish yourself first, and abundance will flow to you again.",love:"Over-dependence or controlling tendencies, or low self-worth that makes it hard to accept love.",career:"A shortage of resources, or being too conservative to expand; creative inspiration may run dry."}},
+4:{pl:"Aries",u:{kw:["authority", "structure", "order", "leadership", "stability"],m:"The Emperor is the power to establish order and a firm foundation — reason, discipline, and protection. Set clear boundaries and structure, and a stable base will bring lasting achievement.",love:"A mature, steady, responsible partner who expresses love through action and offers security and reliable commitment.",career:"A peak of leadership — ideal for building systems, leading teams, negotiating, or dealing with institutions; your decisiveness is recognized."},r:{kw:["controlling", "tyranny", "lack of discipline", "irresponsibility", "rigidity"],m:"The reversed Emperor warns of the shadow of over-control or authoritarianism. Reclaim responsible strength and find balance between control and trust.",love:"One partner dominates or emotionally bullies the other, a severe power imbalance, or an unreliable partner.",career:"A tyrannical boss, rigid systems, or your own collapsing discipline and procrastination."}},
+5:{pl:"Taurus",u:{kw:["tradition", "spiritual guidance", "faith", "passing on wisdom", "institutions"],m:"The Hierophant represents traditional wisdom and spiritual guidance, bridging the human and the sacred. Trust proven wisdom, and the support of the community will carry you.",love:"A traditional, stable, family-approved relationship, possibly engagement or marriage, grounded in shared values or beliefs.",career:"A foothold in traditional industries, education, religion, law, or large institutions; following norms and mentors brings steady advancement."},r:{kw:["breaking tradition", "rebellion", "questioning authority", "unconventional", "not fitting in"],m:"The reversed Hierophant reflects rebellion against the constraints of tradition. Stay open and find the path that truly suits you, though breaking the mold carries risk.",love:"A relationship not accepted by family, an unconventional arrangement, or overly rigid views stifling the relationship.",career:"You're challenging established systems or seeking an innovative path, with risk but also the chance of breakthrough."}},
+6:{pl:"Gemini",u:{kw:["love", "choice", "union", "harmony", "values"],m:"The Lovers symbolize a soul-deep union and a significant life choice. Choose the path that aligns with your inner values, for only that brings true fulfillment.",love:"The most direct love card in the deck — a beautiful relationship built on genuine attraction, shared values, and true mutual choice.",career:"A heart-led decision lies ahead, perhaps between two very different paths; follow what aligns with your values."},r:{kw:["imbalance", "wrong choice", "inner conflict", "infidelity", "love triangle"],m:"The reversed Lovers suggest a rift in the relationship or a wrong choice. Reaffirm what truly matters to you and face your heart honestly.",love:"Infidelity, a love triangle, incompatible values, or one partner unable to fully commit.",career:"Wavering between two options, or regretting a choice that betrayed your true wishes."}},
+7:{pl:"Cancer",u:{kw:["victory", "willpower", "control", "forward movement", "determination"],m:"The Chariot is the power to master all through sheer will and advance toward victory. Control your emotions and direction, and triumph is within reach.",love:"Actively pursuing, daring to confess, and driving the relationship forward; strong will can overcome obstacles and hold the bond together.",career:"Standing out in competition — exams, contests, and business negotiations won through determination and strategy; travel or relocation is also indicated."},r:{kw:["loss of control", "aggression", "unclear direction", "impulsiveness", "obstruction"],m:"The reversed Chariot suggests loss of control or directionless chaos. Slow down, reassess your strategy, and set out again.",love:"One partner forces things forward or manipulates the relationship, or emotional outbursts cause hurtful words.",career:"Plans meet strong resistance, or haste backfires."}},
+8:{pl:"Leo",u:{kw:["inner strength", "courage", "patience", "self-mastery", "gentle conquest"],m:"Strength is the true power of taming one's inner wildness through gentleness and patience. You have the resilience and emotional command to face pressure with grace and earn respect.",love:"A relationship where love and acceptance resolve conflict; the maturity to embrace each other's flaws and deepen the bond gently.",career:"Enough resilience and emotional control to handle stress, staying poised even in hardship and ultimately winning respect through merit."},r:{kw:["weakness", "self-doubt", "emotional volatility", "low self-esteem", "timidity"],m:"The reversed Strength suggests a draining of inner power or a collapse of confidence. Reconnect with the courage deep within — you are stronger than you know.",love:"Emotional outbursts and irreversible words, self-doubt that hides your true self, or enduring an unhealthy relationship without the courage to leave.",career:"Shrinking under pressure and letting fear stop you from showing your true ability."}},
+9:{pl:"Virgo",u:{kw:["introspection", "solitude", "wisdom", "spiritual seeking", "self-guidance"],m:"The Hermit invites you to step back from the noise and turn inward for true answers. Solitude is not punishment but a sacred path to wisdom.",love:"A period needing solitude and reflection — rediscovering yourself before a new relationship, or a reserved, slow-to-warm partner who needs time to trust.",career:"Favorable for deep research, independent work, spiritual pursuits, or consulting; a time to gather strength rather than act loudly."},r:{kw:["isolation", "withdrawal", "refusing help", "losing direction", "stubbornness"],m:"The reversed Hermit warns of excessive isolation or stubbornness. Let others draw close — wisdom lies not only in solitude but in connection with others.",love:"One partner shutting down and refusing to communicate, or isolating yourself and using coldness to protect a wounded heart.",career:"Working in a vacuum and missing valuable outside advice, or becoming detached from the team."}},
+10:{pl:"Jupiter",u:{kw:["destiny", "turning point", "cycles", "good luck", "pivotal moment"],m:"The Wheel of Fortune symbolizes life's cycles and the turning of fate — everything is in flux. Accept the flow of destiny and go with it, for the universe is arranging the best timing for you.",love:"A sense of fated encounter, or a stalled relationship about to take a major turn; old connections may reunite by destiny's design.",career:"A strong signal of rising fortune — seize the fleeting opportunity, as past efforts begin to pay off."},r:{kw:["misfortune", "resisting change", "cruel fate", "bad timing", "ongoing hardship"],m:"The reversed Wheel of Fortune suggests declining fortune or poor timing. Release your grip on control — the low period will pass, so wait for the moment to return.",love:"Connections seem to slip past you, or old problems recur, leaving you feeling trapped in a cycle.",career:"Plans repeatedly thwarted, with unfavorable external conditions making breakthroughs hard."}},
+11:{pl:"Libra",u:{kw:["justice", "truth", "cause and effect", "balance", "responsibility"],m:"Justice represents the law of cause and effect, fairness, and reason. Acting honestly brings deserved recognition, and a fair verdict is on its way.",love:"A relationship built on mutual respect and equality where both share responsibility; a fair outcome where effort is rewarded and harm is reckoned.",career:"Positive results in legal, contractual, or arbitration matters; honesty earns the recognition you deserve."},r:{kw:["injustice", "avoiding responsibility", "bias", "dishonesty", "unfavorable litigation"],m:"The reversed Justice suggests unfair treatment or an imbalance of cause and effect. Face the problem bravely and don't let an unjust situation worsen.",love:"One partner giving far more than the other and feeling wronged, or unaddressed deception and betrayal.",career:"Unfair treatment, an unfavorable legal result, or someone evading their responsibility."}},
+12:{pl:"Neptune",u:{kw:["pause", "waiting", "sacrifice", "new perspective", "spiritual awakening"],m:"The Hanged Man shows the deep wisdom found in stillness — sometimes stopping is the best action. Release your fixed thinking and view your dilemma from an entirely new angle; the answer lies in the shift of perspective.",love:"A stage requiring patience and observation rather than forcing things, or a meaningful sacrifice you're making for the relationship.",career:"The timing isn't ripe — a period for accumulating, preparing, and shifting perspective rather than sprinting."},r:{kw:["procrastination", "resisting sacrifice", "stubbornness", "stagnation", "over-sacrifice"],m:"The reversed Hanged Man suggests pointless stagnation or excessive sacrifice. Stop the needless waiting — let go of what should be released and act where action is needed, so life can flow again.",love:"Over-sacrificing yourself in an unworthy relationship, or using delay to avoid a necessary decision.",career:"Dragging your feet and refusing to pay the price for change, letting opportunities quietly slip away."}},
+13:{pl:"Scorpio",u:{kw:["transformation", "endings", "rebirth", "release", "metamorphosis"],m:"Death marks the end of one chapter and the birth of something entirely new — the most potent symbol of transformation in the deck. What feels like a painful loss is clearing the way for a stronger, more authentic future; let the old fall away and you emerge renewed.",love:"A relationship or old pattern may end so that a deeper, more fitting connection can be born from the ruins.",career:"An old job, role, or way of working is dissolving, painful but necessary to clear obstacles for a better path ahead."},r:{kw:["resisting change", "stagnation", "holding on", "fear of endings", "attachment"],m:"Reversed Death shows you clinging to what has already passed and refusing to let go. By gripping the past you block the transformation that wants to happen — find the courage to release, for every ending is an invitation to renew.",love:"You may be stuck grieving a finished relationship or forcing life back into one that has lost its vitality.",career:"You cling to outdated methods or an ill-fitting role, afraid to face the ending that change requires."}},
+14:{pl:"Sagittarius",u:{kw:["balance", "patience", "temperance", "blending", "healing"],m:"Temperance is the angelic art of harmony, patiently blending opposites into something whole. It favors steady, long-term progress and gentle healing — avoid extremes and trust that recovery and balance are quietly taking root.",love:"A steady, patient relationship where two people bridge their differences with tenderness, or a bond that is gently healing.",career:"A favorable omen for long-range planning and steady progress, ideal for work that requires balancing resources and integrating teams."},r:{kw:["imbalance", "excess", "conflict", "impatience", "inner conflict"],m:"Reversed Temperance warns of imbalance and overindulgence. Differences may have grown irreconcilable, or overwork and excess have thrown you off center — review the areas of your life and find your way back to equilibrium.",love:"Differences have become too great to reconcile, or you've over-accommodated and lost yourself in the relationship.",career:"Overwork or burnout has unbalanced you, and your wellbeing may be paying the price."}},
+15:{pl:"Capricorn",u:{kw:["bondage", "materialism", "shadow", "addiction", "desire"],m:"The Devil reveals the chains we believe we cannot break — yet the shackles were always loose. It points to attachments built on lust, codependency, fear, or toxic ambition; recognize the bondage, for seeing it clearly is the first step to freedom.",love:"A relationship rooted in intense physical attraction, codependency, control, or fear that feels hard to walk away from.",career:"Feeling trapped by money, ambition, or a toxic workplace culture — you see the problem yet feel unable to move."},r:{kw:["liberation", "breaking free", "awareness", "regaining freedom", "release"],m:"Reversed Devil is a powerful signal of liberation. You are breaking free of a harmful attachment or dependency and reclaiming your autonomy and dignity — this is an awakening, a walk out of darkness toward your own freedom.",love:"You are escaping a toxic relationship or obsession and reclaiming your self-respect and independence.",career:"You break free from workplace bondage or unhealthy work patterns and redefine what real success means to you."}},
+16:{pl:"Mars",u:{kw:["upheaval", "collapse", "revelation", "sudden change", "chaos"],m:"The Tower is the lightning bolt that shatters structures built on false foundations. Though the sudden shock is painful, what collapses was never stable or true — and only on the cleared ground can something genuinely solid be rebuilt.",love:"A sudden breakup, a revealed betrayal, or an explosive conflict that topples what was never truly stable.",career:"A sudden layoff, collapse, or failed plan that, though it feels like disaster, clears away structures blocking real growth."},r:{kw:["averted crisis", "inner turmoil", "delayed collapse", "avoidance", "mounting pressure"],m:"Reversed Tower suggests a crisis is being suppressed or a necessary collapse avoided. Ignored problems only accumulate into a bigger eruption — though it can also mean you sensed the danger early and steered clear by facing it head-on.",love:"Tension simmers beneath a calm surface, and ignored problems are quietly building toward a larger blow-up.",career:"Cracks in a system or relationship need immediate attention, or you've narrowly avoided a crisis by confronting it early."}},
+17:{pl:"Aquarius",u:{kw:["hope", "inspiration", "healing", "renewal", "guidance"],m:"The Star rises after the Tower's chaos, bringing pure hope and healing light. You are being nourished, seen, and guided — trust that you are on the right path and that something beautiful is quietly taking shape.",love:"A nourishing relationship where you feel truly seen, or renewed faith in love after past wounds.",career:"Inspiration flows and long efforts begin to bloom, favoring creative, healing, or humanitarian work with a hopeful outlook."},r:{kw:["despair", "loss of hope", "feeling lost", "self-doubt", "disconnection"],m:"Reversed Star shows the light of hope temporarily hidden behind clouds. You may feel disillusioned with love or directionless and full of self-doubt — but the dark won't last, so find even one small star to guide you back toward the light.",love:"You may feel disillusioned with love or struggle to rebuild faith in genuine connection after a setback.",career:"Creative dryness and lost direction leave you doubting your own talents and unsure of the way forward."}},
+18:{pl:"Pisces",u:{kw:["illusion", "subconscious", "dreams", "fear", "intuition"],m:"The Moon wanders the dim subconscious where truth hides in fog, illusion, and fear. Situations are uncertain and not what they seem — set aside surface appearances and trust your dreams and intuition to sense the deeper truth.",love:"The relationship is clouded by uncertainty, unclear intentions, or possible deception and self-deception.",career:"The situation lacks transparency, with hidden rivals or unseen factors at play — don't trust surface information now."},r:{kw:["illusion lifting", "clarity returns", "facing fear", "truth revealed", "emerging from fog"],m:"Reversed Moon means the fog is lifting and suppressed truths are surfacing. You finally see the reality you avoided — though clarity can be painful, it marks the beginning of release as confusion and deception come to an end.",love:"You finally see the truth you'd avoided, ending a period of confusion or deception in the relationship.",career:"Hidden problems come to light, allowing you to address the real root of the issue at last."}},
+19:{pl:"Sun",u:{kw:["joy", "success", "vitality", "clarity", "happiness"],m:"The Sun is one of the deck's most fortunate cards, radiating pure unclouded joy and success. You are at a peak where effort is visibly rewarded — bask in the blessing, stay open and transparent, and share your light.",love:"A sunny, joyful romance, marital happiness, or a warm and radiant chapter of mutual appreciation and openness.",career:"Success, recognition, promotion, or triumph — you're at a high point where all your effort is clearly paying off."},r:{kw:["delayed success", "over-optimism", "fleeting joy", "arrogance", "blocked vitality"],m:"Reversed Sun suggests the light is temporarily dimmed. Joy is shadowed by unresolved issues or one person's self-absorption, and success may be delayed by overconfidence or overlooked details — the happiness remains but needs careful tending.",love:"Joy is overshadowed by unresolved problems, or one partner's self-centeredness leaves the other feeling overlooked.",career:"Success is in sight but may be delayed by overconfidence or neglected details, so guard against pride undoing your gains."}},
+20:{pl:"Pluto",u:{kw:["awakening", "renewal", "calling", "reckoning", "transformation"],m:"Judgement is the soul's great awakening — the angel's trumpet rouses you to face what truly matters. A major turning point calls you toward a higher purpose; answer the call of your life with courage.",love:"An old relationship may resurface, or you reassess its meaning and finally acknowledge a truth and make a decisive choice.",career:"A major life turning point where a higher calling beckons — a bold career change or a return to your true vocation."},r:{kw:["self-doubt", "avoiding the call", "unforgiveness", "spiritual stagnation", "refusing to awaken"],m:"Reversed Judgement shows you avoiding an important awakening or decision. Unwillingness to forgive yourself or another keeps past hurts as shackles, and fear or self-doubt holds you back from a call you clearly hear — release old judgments and give yourself courage to begin again.",love:"You may be refusing to forgive yourself or your partner, letting old hurts become a barrier to moving forward.",career:"You hear an inner calling but fear and self-doubt keep you from answering it."}},
+21:{pl:"Saturn",u:{kw:["completion", "integration", "achievement", "fulfillment", "journey's end"],m:"The World completes the Major Arcana, marking the fulfilling end of an important journey and the integration of all its parts. Celebrate a goal fully achieved — and ready yourself to embrace the next new cycle.",love:"One of the most fulfilling love cards, pointing to marriage, lasting commitment, or feeling whole and ready for a true partner.",career:"Successful completion of a major project, full attainment of goals, even international achievement and recognition."},r:{kw:["incompletion", "delay", "shortcuts", "unfinished", "lack of closure"],m:"Reversed World suggests something important remains unfinished, leaving lingering loose ends. Progress stalls or shortcuts undercut the final result — slow down and make sure every piece is genuinely brought to completion.",love:"The relationship stalls at a certain stage, or you push for the next step before things are truly ready.",career:"You're near completion but cut corners, undermining the result, or struggle to close one chapter and begin the next."}},
+22:{pl:"Fire / Ace",u:{kw:["creativity", "passion", "new venture", "inspiration", "drive to act"],m:"The Ace of Wands is a pure burst of fire, inspiration arriving like a lightning strike. New passion, projects, and creative directions are calling you — your vitality is at its peak, so act now and boldly light your flame.",love:"A passionate new romance ignites, or renewed fiery passion sparks within an existing relationship.",career:"A new project, venture, or creative direction calls you, and this surge of inspiration is the moment to act."},r:{kw:["blocked creativity", "fading passion", "delays", "unclear direction", "low drive"],m:"Reversed Ace of Wands shows the flame of passion guttering out. Initial excitement fades, plans are delayed, and creative blocks leave you without direction — reconnect with the original spark that fired you up and don't let fear extinguish it.",love:"The initial spark and excitement fade, or a relationship that should begin never quite gets off the ground.",career:"Creative blocks, repeated delays, and dried-up inspiration leave you unable to find your direction."}},
+23:{pl:"Aries / Mars",u:{kw:["planning", "vision", "personal power", "taking command", "ambition"],m:"Holding the globe and gazing into the distance, the Two of Wands shows you have built a foundation and are planning a grander vision. With clear direction and command of the bigger picture, now is the time to plan boldly and expand your horizons.",love:"The relationship develops steadily with a clear sense of direction, or you're ready to step out and seek wider possibilities.",career:"A good time for long-term strategy, expanding your reach, or pursuing opportunities abroad — you hold the bigger picture."},r:{kw:["blocked plans", "lack of vision", "fear of change", "indecision", "standing still"],m:"Reversed Two of Wands suggests staying stuck in your comfort zone, afraid to expand outward. Without clear vision or out of fear of the unknown you miss opportunities you should have seized — widen your view, for life's best vistas lie just past the step you take.",love:"You have no clear vision for the future, or fear of the unknown keeps you from letting the relationship grow.",career:"Insufficient planning or fear of change causes you to miss opportunities you could have commanded."}},
+24:{pl:"Aries / Sun",u:{kw:["expansion", "foresight", "awaiting results", "collaboration", "overseas opportunity"],m:"Having taken the first step and established a foothold, you stand on high ground awaiting your returns from afar. It's a favorable omen for expansion, partnership, and overseas ventures — the seeds you planted are rooting in the distance and your harvest is on its way back.",love:"The relationship expands outward, perhaps long-distance, growing richer through shared adventure and a clear shared future.",career:"Favorable signs for overseas collaboration, export, or cross-border projects as the fruits of your efforts head home."},r:{kw:["delay", "setback", "narrow vision", "blocked plans", "unmet expectations"],m:"Reversed Three of Wands suggests the rewards you anticipated are slow to arrive. Expansion plans hit obstacles, partners cause problems, or overseas ventures stall — adjust your expectations and strategy and look for overlooked paths forward.",love:"A long-distance relationship hits obstacles, or hopes for the future fall flat as the two of you plan out of sync.",career:"Expansion plans meet obstacles, a partner causes trouble, or an overseas venture is blocked."}},
+25:{pl:"Aries / Venus",u:{kw:["celebration", "harmony", "stability", "home", "joyful events"],m:"The garland archway of four wands symbolizes celebration and harmony, one of the most joyful cards in the deck. It heralds milestones, homecomings, and happy occasions — a moment of achievement well worth celebrating out loud.",love:"A herald of weddings, engagements, moving in together, or family blessing as the relationship enters a stable, joyful new stage.",career:"A celebration of milestones, a new office, or a housewarming — an accomplishment worth celebrating loudly."},r:{kw:["postponed celebration", "family tension", "instability", "delayed joy", "lack of belonging"],m:"Reversed Four of Wands suggests a hoped-for happy event is delayed, or disharmony lingers in the home environment. Weddings or plans hit obstacles and family tensions complicate things — resolve the underlying problems first so the joy can last.",love:"Wedding or engagement plans hit obstacles, or tension with a partner's family stalls the relationship's progress.",career:"The time to celebrate hasn't yet arrived, or internal team rifts undermine the overall atmosphere."}},
+26:{pl:"Leo / Saturn",u:{kw:["conflict", "competition", "chaos", "disagreement", "testing"],m:"Five figures clash with their wands, a scene of noisy competition and disorder. You're in a contentious environment where friction, though draining, sharpens your skills, so don't back down.",love:"Differing values and lifestyles spark frequent quarrels, but honest communication can turn these clashes into deeper understanding.",career:"You face fierce competition through interviews, pitches, or team disagreements, but this rivalry is a stage to hone your abilities."},r:{kw:["end of conflict", "inner conflict", "compromise reached", "competition over", "avoidance"],m:"The conflict is winding down, or you're avoiding a confrontation that needs to happen. Tensions ease on the surface, but check whether the underlying issues are truly resolved.",love:"Both sides may call an exhausted truce, yet the root problem stays unaddressed and resentment quietly builds.",career:"Competition ends or a compromise is struck, but weigh whether the outcome genuinely satisfies you."}},
+27:{pl:"Leo / Jupiter",u:{kw:["victory", "recognition", "achievement", "public praise", "triumph"],m:"A laurel-crowned hero rides home in triumph to public acclaim. Your efforts are seen by all, and now is the moment to enjoy the applause of recognition and success.",love:"The relationship wins the blessing and approval of those around you, or your love goes public and is strengthened by shared achievement.",career:"A symbol of awards, promotions, approved proposals, or standout results; your hard work is publicly celebrated."},r:{kw:["failure", "lack of recognition", "arrogance", "damaged reputation", "private success"],m:"The glow of victory is dimmed. Effort goes unrewarded, or pride causes a stumble just short of success; stay humble and keep building your strength steadily.",love:"The relationship goes unacknowledged, or one partner's devotion is unappreciated, leaving you feeling overlooked.",career:"Your work earns no praise and may even risk reputational harm, or complacency trips you up near the finish."}},
+28:{pl:"Leo / Mars",u:{kw:["defense", "standing ground", "challenge", "competition", "perseverance"],m:"A warrior on high ground holds off six attackers, defending his position under pressure. You have the advantage, so stand firm in your convictions and don't let criticism shake you.",love:"The relationship faces outside challenges or interference; stand your ground firmly to protect what is precious.",career:"You meet strong competition or doubt, but you hold the high ground, so defend your professional stance with confidence."},r:{kw:["giving up ground", "overwhelmed", "retreating", "loss of confidence", "worn down"],m:"Under relentless pressure you begin to waver and consider backing down. Remember the reasons you first chose to stand firm, for some ground is worth defending at all costs.",love:"Too many outside voices make you doubt the relationship, or you're afraid to stand up for it openly.",career:"You retreat in the face of challenges or surrender in competition rather than holding your position."}},
+29:{pl:"Sagittarius / Mercury",u:{kw:["speed", "action", "news", "swift progress", "travel"],m:"Eight wands fly at full speed, signaling unstoppable forward momentum. Plans accelerate and important news is arriving, so seize this momentum and act quickly before the chance passes.",love:"The relationship heats up fast and good news or a confession is near; long-awaited answers will soon be revealed, sometimes through travel or distance.",career:"Projects advance rapidly and key messages arrive; travel or business trips bring new opportunities as deadlines loom."},r:{kw:["delay", "miscommunication", "chaos", "cancellation", "misunderstanding"],m:"Fast-moving energy hits a blockage. Awaited news fails to come, communications go wrong, or plans stall due to outside factors; slow down and verify everything before proceeding.",love:"An expected message is delayed, serious misunderstandings arise, or a romance moving too fast feels out of control.",career:"Schedules slip, messages get garbled, or plans hit a sudden brake; confirm accuracy before moving on."}},
+30:{pl:"Sagittarius / Moon",u:{kw:["resilience", "persistence", "defense", "caution", "last stand"],m:"A wounded but vigilant warrior stands his ground after many trials, embodying battle-tested resilience. Tired as you are, the final hurdle is in sight, so stay alert and don't give up before the end. You're stronger than you think.",love:"You and the relationship have weathered setbacks and scars, but those struggles have made the bond tougher, with victory near.",career:"Though weary, you remain at your post; the last test is before you, so stay watchful and don't quit at the finish line."},r:{kw:["burnout", "stubbornness", "over-defensiveness", "refusing help", "giving up"],m:"Exhaustion has reached its limit, or you're so defensive about past wounds that you push everyone away. Allow yourself to ask for help and release old hurts to truly move forward.",love:"Past wounds have built walls that keep genuine love out, or you fill the relationship with needless suspicion.",career:"You cling stubbornly to outdated methods and refuse to change strategies already proven ineffective."}},
+31:{pl:"Sagittarius / Saturn",u:{kw:["burden", "overload", "responsibility", "struggle", "near completion"],m:"A figure stoops under ten heavy wands, caught between crushing responsibility and a goal nearly reached. The workload exceeds your capacity, but the finish is close; learn to say no to keep your stamina for the long run.",love:"You carry far too much in the relationship, giving more than your partner and feeling utterly drained.",career:"Your workload has surpassed what you can bear, yet the end is in sight; once these burdens are set down, freedom returns."},r:{kw:["releasing burdens", "delegating", "unnecessary pressure", "liberation", "learning to refuse"],m:"A strong signal that it's time to put down unnecessary burdens. Reassess whether the load is balanced, delegate decisively, and stop carrying everything alone.",love:"You sacrifice too much while your partner never tries to ease your load; reassess whether the giving in this relationship is fair.",career:"Delegate tasks decisively and stop shouldering every responsibility; you don't have to be everyone's hero."}},
+32:{pl:"Fire signs / Earth element",u:{kw:["enthusiasm", "exploration", "novelty", "curiosity", "exciting news"],m:"A spirited young explorer holds a wand, eyes full of boundless curiosity. Exciting news, a new project, or a learning opportunity is coming; embrace the freshness with an open mind and try something new.",love:"A lively, passionate but perhaps immature suitor appears, or fresh adventure rekindles excitement between partners.",career:"Thrilling news, a new project invitation, or a chance to learn is on its way; this is the time to take on challenges."},r:{kw:["lack of direction", "fleeting enthusiasm", "impulsive", "delayed news", "immaturity"],m:"Enthusiasm rings hollow and lacks follow-through. Plans start but can't be sustained as scattered focus leaves everything unfinished; find what truly deserves your full commitment and stick with it.",love:"A partner is all talk and no action, or the relationship stays superficial; you yourself may lose interest quickly.",career:"Projects begin but fizzle out, and divided attention means much activity yet nothing completed."}},
+33:{pl:"Scorpio / Sagittarius",u:{kw:["action", "drive", "adventure", "bold pursuit", "passion"],m:"A knight charges at full gallop, embodying fearless action and a hunger for adventure. The time to act boldly has come; don't hesitate before opportunity. Travel, relocation, or rapid expansion is favored.",love:"A bold, energetic suitor makes your heart race; the romance heats up fast and full of passion, expressed through action rather than words.",career:"Go on the offensive without hesitation; travel, relocation, swift business growth, or a startup sprint are all good omens."},r:{kw:["recklessness", "uncontrolled impulse", "off course", "wasted energy", "unfinished"],m:"Passion has soured into destructive impulse. Reckless action causes mistakes and plans collapse from poor preparation; keep a measure of calm and strategic thinking amid the drive.",love:"A partner's pushiness feels suffocating, or impulsive hurtful words fly; a fiery start cools fast for lack of patience.",career:"Rash action leads to errors and projects are abandoned halfway due to inadequate preparation."}},
+34:{pl:"Aries / Taurus",u:{kw:["confidence", "independence", "passion", "charisma", "creativity"],m:"The Queen, holding a sunflower with a black cat at her feet, embodies charismatic, confident, passionate feminine power. Channel her in work needing leadership, creativity, and public charm; let your light shine and don't let it be dimmed.",love:"A magnetic, independent partner who draws others in with their own radiance, or you yourself are radiating irresistible appeal.",career:"Ideal for roles requiring leadership, creativity, and public charisma; your passion inspires those around you, so show your talents boldly."},r:{kw:["self-doubt", "jealousy", "manipulation", "lost charm", "moodiness"],m:"The Queen has lost her sunshine and confidence. Jealousy, moodiness, or controlling behavior may appear, or self-doubt dims your talent; reconnect with your inner fire and stop comparing yourself to others.",love:"Jealousy, emotional volatility, or controlling behavior surfaces, or lost confidence makes you doubt you deserve love.",career:"Self-doubt eclipses your talent and blocks creativity, while emotional issues strain workplace relationships."}},
+35:{pl:"Cancer / Leo",u:{kw:["vision", "leadership", "charisma", "entrepreneurship", "mature passion"],m:"The majestic King of Fire is a mature, visionary leader who inspires others to follow a dream through sheer will and passion. The time to turn your vision into reality has come; lead others toward great goals with your enthusiasm.",love:"A responsible, visionary, charismatic mature partner who builds a beautiful relationship through action, or you are guiding the relationship with mature wisdom.",career:"A symbol of the entrepreneur, leader, and mentor; the moment to realize your vision and lead others toward great achievements."},r:{kw:["tyranny", "impulsiveness", "domineering", "unrealistic expectations", "overbearing"],m:"The King has lost his wisdom and his passion has become a need for control. A domineering, autocratic style erodes morale, or haste leads to costly mistakes; temper your fire with humility, for great leaders know how to listen.",love:"Overbearing control or impossibly high expectations suffocate your partner, or impulsive decisions damage a once-stable bond.",career:"An autocratic leadership style lowers team morale, or impatience drives costly wrong decisions."}},
+36:{pl:"Water element essence",u:{kw:["love", "new emotion", "spiritual connection", "abundance", "intuition"],m:"The Ace of Cups is the pure essence of water, the source of love opening to you. Inspiration flows and intuition is sharp; let love flow freely like a river and welcome a precious new connection with an open heart.",love:"The most beautiful omen of new love; a deeply connected relationship is beginning as your heart opens fully to receive it.",career:"Inspiration surges and intuition guides you well, favoring creative or emotionally engaging work, perhaps a heartfelt new opportunity."},r:{kw:["blocked emotion", "refusing love", "repressed feelings", "emptiness", "closed heart"],m:"The flow of emotion is blocked. Past wounds have closed your heart to new love, or long-suppressed feelings leave you hollow and dry; open your heart, for old pain need not be a permanent wall.",love:"Past hurt has shut your heart, refusing new love in, leaving an inner emptiness.",career:"You've lost passion for your work, feeling bored or emotionally drained."}},
+37:{pl:"Cancer / Venus",u:{kw:["partnership", "union", "harmony", "attraction", "soul connection"],m:"Two people raise their cups and meet each other's eyes, signaling deep soul-level resonance and genuine attraction. This is the truest card of mutual attraction, promising a bond built on real understanding.",love:"The clearest card of two people drawn to each other, foretelling a romance founded on true understanding; you recognize your own soul in the other.",career:"An ideal partnership forms where complementary strengths and shared goals bring abundant results."},r:{kw:["discord", "imbalance", "mismatch", "deepening misunderstanding", "broken connection"],m:"A once-beautiful connection shows cracks. Needs and frequencies fall badly out of sync and communication breakdowns deepen misunderstanding; honest dialogue is needed to reconnect.",love:"The bond becomes lopsided, the former harmony gone, possibly an unrequited or unequal relationship.",career:"Partners diverge and the risk of the collaboration breaking down rises."}},
+38:{pl:"Cancer / Mercury",u:{kw:["celebration", "friendship", "community", "joy", "good news"],m:"Three women raise their cups in celebration, a happy moment surrounded by love and joy. This is a time to share happiness with those close to you, with celebratory news and rewarding results on the way.",love:"May foretell a wedding, engagement, or joyful milestone, or meeting someone important through friends or social occasions.",career:"Teamwork bears fruit amid strong camaraderie, with results worth celebrating arriving soon."},r:{kw:["love triangle", "overindulgence", "social conflict", "post-celebration emptiness", "betrayal by friends"],m:"Hidden problems lurk within social relationships. A third party, betrayal by friends, or factional strife beneath surface harmony emerges; reconnect with what truly matters and avoid shallow revelry.",love:"A third party may intervene, or a close friend betrays the relationship; celebration may mask deeper issues.",career:"Excessive socializing distracts you, or hidden cliques fester beneath the team's surface harmony."}},
+39:{pl:"Cancer / Moon",u:{kw:["contemplation", "apathy", "reevaluation", "missed opportunity", "emotional fatigue"],m:"A figure sits beneath a tree lost in thought, ignoring a cup offered to him — a sign of inner reflection and discontent with what you already have. You may be overlooking the love and opportunities right in front of you because you're too absorbed in your own dissatisfaction.",love:"You or your partner feel weary and disengaged in the relationship, possibly missing someone sincere who is reaching out to you.",career:"You feel bored with your current work and may be overlooking a better opportunity right in front of you because your focus is stuck on present problems."},r:{kw:["renewed engagement", "accepting opportunity", "emerging from isolation", "awakening", "opening up"],m:"You're breaking out of the cocoon of withdrawal and reflection. You feel ready to open your heart again and to seize the opportunities that have been waiting for you.",love:"You're finally ready to open up to love again, and may realize someone has been waiting for you all along.",career:"You awaken from burnout, rekindle your passion for work, and actively grasp the opportunities before you."}},
+40:{pl:"Scorpio / Mars",u:{kw:["loss", "grief", "regret", "disillusionment", "mourning"],m:"A cloaked figure stares at three spilled cups while two remain standing behind him — the grief of loss, heartbreak, or disillusionment. While mourning what's gone, you forget the love and good things that still remain.",love:"You're grieving a breakup or lost love, dwelling on what fell rather than seeing the people who still care and the love that still awaits.",career:"A failed plan or missed opportunity leaves you mired in regret, though hope and possibility still stand behind you."},r:{kw:["acceptance", "moving on", "turning forward", "healing", "renewed hope"],m:"You're slowly climbing out of the depths of loss, accepting what happened and turning to see the hope still standing behind you. You've gained valuable lessons and are ready to begin again.",love:"You're beginning to accept the breakup or loss, letting go of grief and turning toward new possibilities.",career:"You've learned hard lessons from failure and are ready to set out again with new wisdom."}},
+41:{pl:"Scorpio / Sun",u:{kw:["nostalgia", "childhood memories", "innocence", "reunion", "giving"],m:"An older child hands a cup of flowers to a younger one — pure, selfless love and the sweetness of cherished memories. This card often signals a reunion with someone from your past or a comfortingly familiar bond.",love:"A former lover may reappear, or a tender, familiar love brings the warmth of being deeply understood and accepted.",career:"Returning to a familiar field, or reconnecting with old colleagues and clients, brings a breakthrough or fresh opportunity."},r:{kw:["living in the past", "idealizing the past", "old wounds surfacing", "unable to let go", "resisting growth"],m:"You're clinging to a relationship that's long over, idealizing the past in a way that blocks new possibilities — or old wounds resurface in need of healing. Treasure your good memories, but live in the present.",love:"You can't let go of an ended relationship, over-romanticizing an ex in a way that keeps you from meeting someone new.",career:"You stubbornly cling to outdated methods, unwilling to embrace new approaches."}},
+42:{pl:"Scorpio / Venus",u:{kw:["illusion", "too many choices", "fantasy", "confusion", "wishful thinking"],m:"Seven cups float with tempting visions, symbolizing the disorientation of too many possibilities. You must discern which paths are real opportunities and which are mere fantasy before they slip away.",love:"You may be torn between several attractions or lost in unrealistic fantasies, letting real chances slip by while you daydream.",career:"Your ideas are abundant but unfocused — you must distinguish a genuinely worthwhile direction from illusory bubbles."},r:{kw:["seeing clearly", "returning to reality", "making a decision", "action over dreams", "clarity"],m:"You're waking from the fog, seeing things as they truly are and no longer letting fantasy drive your choices. You've chosen one direction and are ready to turn dreams into concrete action.",love:"You finally see a person or situation clearly and stop letting illusions guide your romantic choices, grounding the relationship in reality.",career:"You've committed to one direction among many and are ready to turn your dreams into practical steps."}},
+43:{pl:"Pisces / Saturn",u:{kw:["walking away", "seeking deeper meaning", "leaving comfort", "spiritual searching", "brave departure"],m:"A figure turns away from eight neatly arranged cups under the moon, bravely leaving behind what looks fine on the surface to seek what the soul truly longs for. Departure takes courage, but it leads toward a more authentic connection or purpose.",love:"You realize that although nothing is obviously wrong, this relationship no longer meets your deeper needs, and your soul calls you toward something more genuine.",career:"Even a stable job may not be enough if it lacks deeper meaning — walking away to find your true calling is the wise choice."},r:{kw:["fear of leaving", "indecision", "turning back", "staying in an unhealthy relationship", "avoidance"],m:"You know you should leave but fear or dependency holds you back, trapping you in a painful cycle of almost-going and turning back. Ask yourself honestly what you truly long for.",love:"You linger in an unhappy relationship, repeatedly trying to leave and turning back, caught in a cycle of pain.",career:"You know the job isn't right for you but are too afraid to quit, with fear of leaving outweighing your hope for something better."}},
+44:{pl:"Pisces / Jupiter",u:{kw:["wishes fulfilled", "contentment", "pleasure", "abundance", "emotional satisfaction"],m:"A satisfied figure sits before nine cups — the fulfillment of every wish. This is the tarot's famed 'wish card', signaling deep happiness, abundance, and emotional contentment.",love:"The relationship you long for is being fulfilled — you feel loved, happy, and content from the heart.",career:"Financial abundance and achieved goals let you enjoy the fruits of your effort; a well-earned moment to savor with gratitude."},r:{kw:["greed", "inner emptiness", "overindulgence", "unfulfilled wishes", "hollow happiness"],m:"Beneath the surface of plenty hides emptiness. Outward success leaves you hollow, or your wishes keep falling through, prompting you to ask what your soul truly wants.",love:"A relationship that looks happy actually leaves you feeling empty, or your hopes for love keep going unmet.",career:"You've succeeded yet feel strangely hollow, or you indulge in pleasure while neglecting what truly matters."}},
+45:{pl:"Pisces / Mars",u:{kw:["emotional fulfillment", "family happiness", "harmony", "dreams realized", "lasting commitment"],m:"A family rejoices beneath a rainbow — the ultimate emotional fulfillment. This is the Cups suit's crowning blessing: lasting love, a happy marriage, and a home built on understanding, commitment, and shared values.",love:"This is the ultimate blessing — enduring, stable love and a happy family built not only on passion but on deep understanding and commitment.",career:"You work in a supportive, warm environment, or your achievements make your whole family proud."},r:{kw:["family discord", "shattered happiness", "surface harmony", "emotional emptiness", "fractured bonds"],m:"Cracks appear in the picture of the perfect family. Things look happy on the surface but deep conflicts simmer beneath, or an obsession with the 'perfect relationship' keeps you from facing real problems.",love:"What looks like a happy home conceals deep discord, or your fixation on perfection prevents you from honestly addressing real issues.",career:"A team appears harmonious but harbors hidden conflict beneath the surface."}},
+46:{pl:"Page of Cups (Earth of Water)",u:{kw:["intuitive message", "creativity", "emotional inspiration", "dreams", "surprising news"],m:"A figure holds a cup gazing at a fish peeking out of it — the unexpected gift of intuition and creativity. Good news or a romantic surprise may be arriving from an unexpected place; pay attention to dreams and intuitive messages.",love:"An unexpected confession or romantic gesture may be coming, or you yourself are experiencing love with tender sensitivity.",career:"Creative inspiration surges suddenly, favoring art, writing, or healing-related work."},r:{kw:["emotional immaturity", "moodiness", "escapism through fantasy", "creative block", "bad news"],m:"This card signals emotional immaturity or escaping into fantasy. Someone acts childishly, handling problems with moods rather than communication, or daydreaming causes real chances to be missed.",love:"One person behaves childishly, reacting with emotion instead of communication, or fantasy causes a real opportunity to slip away.",career:"Creativity dries up, or bad news delays your plans; seek balance between feeling and reality."}},
+47:{pl:"Knight of Cups",u:{kw:["romantic pursuit", "charm", "idealism", "invitation of love", "gentle suitor"],m:"A knight on a white horse advances slowly, holding out a cup — a suitor arriving with love and ideals. A romantic, tender, emotionally expressive admirer may be approaching, or you yourself are pursuing someone with poetic devotion.",love:"A charming, gentle, emotionally expressive suitor may be approaching with a heartfelt romantic invitation worth taking seriously.",career:"You win others over through warmth and creativity, and an opportunity full of beauty and feeling is drawing near."},r:{kw:["moodiness", "shattered illusions", "emotional manipulation", "unrealistic", "all talk"],m:"The knight's romance turns into hollow pretense. A person may use sweet words and emotional tactics they can't deliver on, or you lose yourself in romantic fantasy. Judge sincerity by action, not words.",love:"A partner may manipulate you with sweet words and emotional tactics yet fail to keep promises, or you cling to fantasy over reality.",career:"A plan sounds beautiful but lacks any practical way to execute it."}},
+48:{pl:"Gemini / Cancer",u:{kw:["empathy", "intuition", "emotional intelligence", "tenderness", "healer"],m:"The Queen sits by the sea gazing into an ornate, sealed cup, immersed in a deep emotional world — the embodiment of profound emotional wisdom and compassion. This card represents a tender, intuitive, deeply empathetic partner, or you nurturing a relationship with that same emotional depth.",love:"A gentle, intuitive, deeply empathetic partner who truly understands your inner world, or you caring for the relationship with that same sensitivity.",career:"You shine in counseling, healthcare, art, or education — work where intuition and empathy are your greatest strengths."},r:{kw:["overwhelmed by emotion", "emotional dependency", "blurred boundaries", "self-deception", "over-giving"],m:"You're lost in the ocean of your own emotions, possibly losing yourself through over-investment or basing your whole identity on the relationship. Set healthy emotional boundaries — caring for yourself first lets you truly care for others.",love:"You may lose yourself by over-investing, anchoring your entire identity in the relationship, or overwhelming your partner with emotional reactions.",career:"You're too easily affected by others' emotions and lack the psychological boundaries you need."}},
+49:{pl:"Libra / Scorpio",u:{kw:["emotional maturity", "calm wisdom", "compassion", "diplomacy", "emotional mastery"],m:"The King sits unmoved amid turbulent waves — mature wisdom that stays calm through emotional storms. He represents an emotionally mature, tolerant, compassionate partner who responds to conflict with reason and understanding rather than attack.",love:"An emotionally mature, accepting partner who stays rational and compassionate in disputes, supporting you with understanding rather than emotional attacks.",career:"You defuse crises with calm and diplomacy in high-pressure environments — ideal for managers, counselors, diplomats, or any role needing emotional intelligence."},r:{kw:["emotional suppression", "cold detachment", "emotional manipulation", "turmoil beneath calm", "escapism"],m:"The King's calm has become a mask for coldness. Someone appears unbothered while churning inside, responding to intimacy with detachment or manipulation, or numbing deep feelings through escapism and addiction.",love:"A partner seems unaffected on the surface but seethes within, responding to closeness with coldness or emotional manipulation.",career:"Someone manages through cold, ruthless tactics or exploits others' emotional weaknesses to control them."}},
+50:{pl:"Ace of Swords (Essence of Air)",u:{kw:["clarity", "truth", "breakthrough", "new thinking", "sword of justice"],m:"The Ace of Swords is the pure edge of Air, a blade descending from the heavens to cut through fog and reveal truth. It brings a breakthrough of clarity, honest communication, and powerful new ideas; act with honesty and wisdom to win.",love:"A breakthrough of clarity arrives — you finally see the relationship's truth, or honest communication clears up a long-standing misunderstanding.",career:"Sharp, powerful new ideas favor legal matters, debate, writing, and clear-minded decisions; truth emerges and integrity brings victory."},r:{kw:["mental confusion", "lies prevailing", "misjudgment", "hurtful words", "wrong decisions"],m:"This warns of mental confusion and the spread of lies. Communication becomes badly distorted, with lies and misunderstandings driving people apart, and decisions built on false information. Rethink things and verify that your information is true.",love:"Communication is severely distorted, with lies or misunderstandings driving you apart; hurtful words do more damage than any action.",career:"Your judgment is clouded and decisions rest on false information, possibly with unfair treatment or legal disputes ahead."}},
+51:{pl:"Libra / Moon",u:{kw:["stalemate", "avoiding decisions", "uneasy balance", "difficult choice", "blindness"],m:"A blindfolded figure sits by the water holding two crossed swords, deliberately shutting her eyes to avoid a choice she must make. The two-way dilemma leaves you stuck, and only a decision can break the stalemate.",love:"You or your partner avoid the relationship's direction, pretending not to see problems you both know exist, leaving you frozen until someone decides.",career:"Both options carry risk and you waste time in indecision; you must lift the blindfold to make a real choice."},r:{kw:["information overload", "lies revealed", "mounting confusion", "forced choice", "truth surfacing"],m:"Avoidance can no longer continue. Suppressed problems finally erupt and the truth becomes impossible to dodge — you must face the answer you've been afraid to consider. Prepare yourself, because facing it is the only way forward.",love:"Suppressed problems finally erupt and the truth surfaces, forcing you to confront the answer you've been avoiding.",career:"The situation is more complex than you thought, and hidden information emerges that forces you to reassess everything."}},
+52:{pl:"Libra / Saturn",u:{kw:["Heartbreak", "Separation", "Grief", "Betrayal", "Emotional pain"],m:"Three swords pierce a heart, the most direct image of heartbreak in tarot, representing deep emotional wounding. The pain is real and must be felt; avoiding it only drives it deeper, and honest acknowledgment is where healing begins.",love:"A breakup, lost love, betrayal, or a third party brings piercing emotional pain that must be grieved before it can heal.",career:"You may face betrayal, exclusion, or the failure of a collaboration that lands as a serious blow."},r:{kw:["Healing", "Releasing grief", "Forgiveness", "Recovery", "Acceptance"],m:"The deepest wound is slowly mending. Forgiving yourself and others is not for their sake but to set yourself free, and scars are becoming sources of resilience.",love:"You begin accepting the painful truth, the tears are drying, and there is finally room for something new.",career:"A past blow has made you tougher, and you rise again carrying your scars."}},
+53:{pl:"Libra / Jupiter",u:{kw:["Rest", "Recovery", "Contemplation", "Retreat", "Pause"],m:"A knight lies still upon a tomb, symbolizing necessary withdrawal from the battlefield to recover. This is not avoidance but gathering strength for the next fight, a time to let plans settle before acting.",love:"The relationship needs a pause to cool down and reassess; forcing it forward will only cause more harm.",career:"Exhausted, you need genuine rest to restore your strength, or a waiting period before taking action."},r:{kw:["Restlessness", "Refusing rest", "Awakening", "Overthinking", "Return to action"],m:"You urgently need rest but cannot let yourself stop, or you keep turning the same problem over and over. Alternatively, the rest period is complete and it is time to rejoin the world.",love:"You cannot let the relationship settle, and constant questioning and testing only heightens the tension.",career:"You burn out unable to switch off, or you are ready to wake from stillness and return to action."}},
+54:{pl:"Aquarius / Venus",u:{kw:["Conflict", "Hollow victory", "Betrayal", "Self-interest", "Mutual loss"],m:"One figure smugly gathers swords while defeated others walk away, a picture of winning the battle but losing everything. Keep your integrity in competition, for a victory that costs too much is really a defeat.",love:"A fierce quarrel, infidelity, or hurtful words leave both partners wounded, and even 'winning' drains the relationship.",career:"Success won by dishonorable means leaves trampled relationships in its wake."},r:{kw:["Reconciliation", "Letting go of resentment", "Learning", "Recovery", "Truce"],m:"The energy of conflict is fading and reconciliation becomes possible. Releasing the need to be right is what truly lets you walk away from the fight.",love:"Anger subsides and there is a chance to talk things through, or you admit your own share of the blame.",career:"Competition eases and you can begin repairing damaged relationships."}},
+55:{pl:"Aquarius / Mercury",u:{kw:["Transition", "Moving on", "Leaving hardship", "Toward calm", "Healing journey"],m:"A boat carries passengers away from troubled waters toward calmer shores, symbolizing a difficult but necessary transition. The journey is heavy, but the direction is right.",love:"The relationship moves out of turbulence toward stability, or you quietly leave a wounded bond behind to start anew.",career:"You retreat from a hard situation to safer ground, and travel or change brings improvement."},r:{kw:["Stagnation", "Unable to leave", "Lingering hardship", "Old wounds", "Holding on"],m:"You know you must move forward but cannot leave the turbulent waters behind. Gently ask yourself what is keeping you from setting sail.",love:"You know the relationship has ended but cannot find the courage to leave, or old pain follows you into new beginnings.",career:"You stay stuck in a difficult situation, unable to make the move you know is needed."}},
+56:{pl:"Aquarius / Moon",u:{kw:["Deception", "Strategy", "Stealth", "Avoidance", "Caution"],m:"A figure sneaks away from camp carrying stolen swords, symbolizing deceit, dishonesty, or strategic retreat. Be cautious of others' schemes, but also examine whether your own conduct is truly ethical.",love:"Lies, secrecy, or deception are present, whether from a partner who is not as honest as they seem or from your own evasions.",career:"Someone is scheming behind the scenes, or you must proceed discreetly and carefully with a plan."},r:{kw:["Lies exposed", "Conscience", "Facing consequences", "Changing course", "Honesty"],m:"The mask of deception is being torn away. Coming clean costs less than continuing to deceive, and lies cannot last forever.",love:"What has been hidden is about to surface, or your own conscience leads you to face things honestly.",career:"Underhanded tactics are about to be exposed, and the consequences are already emerging."}},
+57:{pl:"Gemini / Jupiter",u:{kw:["Self-imposed limits", "Feeling trapped", "Powerlessness", "Mental prison", "Blind spots"],m:"A blindfold figure stands loosely bound among swords, symbolizing that most of what traps you is mental, not real. The way out lies in your blind spot, waiting once you are willing to remove the blindfold.",love:"You feel powerless to leave a suffocating relationship, or past wounds make you feel unworthy of love.",career:"You feel boxed in by circumstances or people, unable to see the way out that is actually there."},r:{kw:["Liberation", "Clarity", "Breakthrough", "Empowerment", "Escape"],m:"This is a signal of breaking free from a mental prison. The ropes binding you were never as strong as you imagined, and you are more capable of change than you believed.",love:"You recognize the fears keeping you in an unhealthy relationship and find the courage to walk away.",career:"You see new possibilities for breaking through and realize your own power to change things."}},
+58:{pl:"Gemini / Mars",u:{kw:["Anxiety", "Nightmares", "Depression", "Fear", "Mental torment"],m:"A figure sits up in the dark, hands covering the face, symbolizing late-night anxieties magnified out of control. Most of these worries are rooted within rather than in real outer threats.",love:"Fears of abandonment, inadequacy, and loss flood in at night; ask how much is real threat and how much is illusion.",career:"Stress, anxiety, and self-criticism keep you awake, and you may need to seek emotional support."},r:{kw:["Emerging from darkness", "Seeking help", "Relief", "Dawn approaching", "Renewed hope"],m:"The darkest hour is passing, or you finally find the courage to ask for help. Dawn comes right after the struggle, and you are stronger than yesterday.",love:"The fears that overwhelmed you begin to recede, and you stop letting anxiety drive your relationship decisions.",career:"Pressure eases and you find a way to live alongside your mental burdens."}},
+59:{pl:"Gemini / Sun",u:{kw:["Painful ending", "Betrayal", "Rock bottom", "New dawn", "Letting go"],m:"A figure lies face-down with ten swords in the back, the most shocking image in tarot, marking a total and painful ending. The worst has already happened; the only way left is up, and dawn breaks on the horizon.",love:"A sudden breakup, a stab in the back, or a relationship reaches a point of no return.",career:"A plan utterly fails or you are betrayed, bringing you to your lowest point."},r:{kw:["Rising from the bottom", "Slow recovery", "Inevitable ending", "Acceptance", "New beginning"],m:"You are slowly climbing up from rock bottom. Pain is the price of transformation, and every ending is the first page of another story.",love:"You accept a devastating ending and try to stand again, or brace yourself for an ending still slowly arriving.",career:"You recover gradually from a major setback, or prepare for an unavoidable conclusion."}},
+60:{pl:"Air signs / Earth element",u:{kw:["Curiosity", "Vigilance", "Communication", "New ideas", "Bluntness"],m:"A youth raises a sword in the wind, gazing sharply, symbolizing curious and alert new thinking. Stay mentally keen and open, while learning to think a little more before you speak.",love:"A relationship full of stimulating conversation and mental sparring, or a young, clever but not yet steady suitor.",career:"Important news is coming, or a new opportunity that calls for quick, flexible thinking."},r:{kw:["Gossip", "Hurtful words", "Spreading lies", "Sloppy thinking", "Carelessness"],m:"Cleverness curdles into verbal harm. Before speaking, ask whether your words are true, necessary, and kind.",love:"The relationship is full of gossip and needless arguments, or someone spreads false rumors that erode trust.",career:"Careless words cause misunderstanding, and gossip or immature communication damages your professional image."}},
+61:{pl:"Capricorn / Aquarius",u:{kw:["Swift action", "Decisiveness", "Charging ahead", "Sharp mind", "Goal-driven"],m:"A knight charges full speed against the wind, symbolizing fearless drive and a sharp mind. He decides fast and acts at once, creating great change in a short time.",love:"A direct, decisive suitor who declares love or leaves just as quickly, or your own rapid pace that suffocates a partner.",career:"You seize opportunities without hesitation; debate, negotiation, and media work let you shine."},r:{kw:["Recklessness", "Verbal attacks", "Loss of control", "Wrong direction", "Regret"],m:"Speed turns into destructiveness. Stop and confirm your direction before your next move.",love:"Impulsive words cause lasting harm, or rushing forward breaks the relationship before it is even stable.",career:"A reckless decision causes a serious blunder, and you must bear the cost of acting too fast."}},
+62:{pl:"Virgo / Libra",u:{kw:["Clarity", "Independence", "Honesty", "Objective wisdom", "Boundaries"],m:"A queen raises her sword with a piercing gaze, symbolizing the power to see truth clearly and without bias. Her directness and clear boundaries are a strength.",love:"An independent, rational partner who loves through honesty rather than sweet words, or your own need for clearer judgment in love.",career:"You excel at work requiring critical thinking, law, analysis, or communication, where your candor is an asset."},r:{kw:["Coldness", "Bitterness", "Over-criticism", "Vengeance", "Emotional walls"],m:"Clarity becomes a wounding blade. Try adding a touch of gentleness to your clarity, for strength and warmth are not in conflict.",love:"Past hurt makes you build walls and defend a fragile heart with cold or cutting words.",career:"Excessive criticism creates rifts with colleagues, or bitterness clouds your judgment."}},
+63:{pl:"Taurus / Gemini",u:{kw:["Intellectual authority", "Logic", "Fair judgment", "Ethics", "Rational leadership"],m:"A king sits enthroned with a double-edged sword, symbolizing the highest intellectual authority grounded in truth, logic, and principle. His decisions rest on ethics and reason.",love:"A rational, fair, principled partner who builds love on honesty and respect, or your own need to view things more rationally.",career:"You hold unquestionable ability in law, academia, management, or any field needing clear judgment."},r:{kw:["Manipulation", "Distorting facts", "Coldness", "Intellectual bullying", "Self-serving"],m:"Wisdom degenerates into a tool for manipulation. True kingship means guiding your intellect with ethics and integrity.",love:"One partner uses intellectual dominance to gaslight the other, or handles emotional matters with cold logic that ignores feelings.",career:"You exploit information asymmetry for personal gain, or suppress dissent through autocratic control."}},
+64:{pl:"Earth element essence",u:{kw:["Material beginning", "Wealth opportunity", "Abundance", "Solid foundation", "Tangible results"],m:"The Ace of Pentacles is the pure essence of earth made manifest, abundance dropping into your palm like gold. It is a prime moment to plant a seed of wealth and grasp it solidly.",love:"An office romance or a connection made through work with grounded, lasting potential, or a relationship moving toward concrete commitment.",career:"Good news of a raise, promotion, new job, or investment return is on its way."},r:{kw:["Missed opportunity", "Financial instability", "Plans falling through", "Materialism", "Greed"],m:"A material opportunity slips through your fingers. Re-examine your material goals to ensure they serve your true happiness.",love:"Excessive material demands cost you a good connection, or money troubles destabilize the relationship.",career:"Financial plans spring leaks, investments misfire, or short-term gain blinds you to long-term opportunity."}},
+65:{pl:"Capricorn / Jupiter",u:{kw:["juggling priorities", "adaptability", "time management", "financial flow", "flexibility"],m:"A figure juggles two coins linked by an infinity symbol, balancing multiple responsibilities with grace. You are managing competing demands and need flexibility and a light touch to keep everything in motion.",love:"You or your partner are stretched thin by work and life, and the relationship needs more flexibility and patience to stay balanced.",career:"You are juggling several projects or financial obligations at once, and skillful resource management keeps you steady amid the chaos."},r:{kw:["imbalance", "overwhelmed", "financial chaos", "dropping the ball", "loss of control"],m:"The juggled balls begin to fall, signaling overload and lost equilibrium. It is time to set down what is unnecessary rather than try harder.",love:"Other pressures leave you no time or energy for the relationship, and neglect begins to crack the bond.",career:"Too many things at once spiral out of control, throwing your finances or schedule into disorder."}},
+66:{pl:"Capricorn / Mars",u:{kw:["collaboration", "craftsmanship", "recognition", "teamwork", "early success"],m:"An architect, monk, and craftsman study plans together, each playing their part to build something great. Your skills are being seen and valued, and early efforts are starting to bear fruit.",love:"You and your partner are building a shared future as true partners, not just lovers.",career:"Your expertise is recognized by colleagues or superiors, and it is an ideal time to collaborate and learn from those with experience."},r:{kw:["poor collaboration", "lack of skill", "working in silos", "being overlooked", "miscommunication"],m:"Cracks appear in a working partnership, with poor communication and uneven effort breeding resentment. Seek guidance humbly and improve how you work together.",love:"You and your partner clash over building a future, and an imbalance of effort lets frustration build.",career:"The team is disjointed and uncoordinated, or your skills do not yet meet what the project requires."}},
+67:{pl:"Capricorn / Sun",u:{kw:["financial stability", "caution", "security", "guarding resources", "saving"],m:"A figure clutches coins to his chest and pins others underfoot, guarding all he owns. Some caution is wise, but holding on too tightly can suffocate growth.",love:"The relationship is stable but guarded, with one person walling off their heart out of fear of being hurt.",career:"A time to consolidate, save, and plan finances carefully rather than spend, building a secure foundation."},r:{kw:["over-control", "stinginess", "financial insecurity", "letting go", "generosity"],m:"Guarding turns into the chains of greed or fear. The lesson is to release your grip and find a true balance between thrift and generosity.",love:"Possessiveness or emotional stinginess suffocates your partner, or financial anxiety casts a shadow over the bond.",career:"Excessive caution makes you miss an expansion opportunity, or financial control slips and your sense of security wavers."}},
+68:{pl:"Taurus / Mercury",u:{kw:["material hardship", "lack", "isolation", "poverty", "walking through darkness"],m:"Two destitute figures struggle through the snow, blind to the warm light glowing from a window nearby, symbolizing both material and spiritual poverty. Help is closer than you think, so do not let pride stop you from accepting it.",love:"The relationship strains under financial pressure or hardship, and the anxiety of scarcity erodes the bond, leaving you feeling alone.",career:"You face financial hardship, unemployment, or scarce resources, but support is near if you look up and accept it."},r:{kw:["recovery", "financial upturn", "accepting help", "rebuilding security", "after the dark"],m:"A signal that you are emerging from a dark period as the worst begins to pass. Allow yourself to receive help and rebuild a stable foundation.",love:"You and your partner have weathered the hardest times together, and adversity has made the bond more resilient.",career:"Your financial situation begins to turn around, and the most difficult stretch is ending."}},
+69:{pl:"Taurus / Moon",u:{kw:["giving and receiving", "flow of wealth", "generosity", "fair balance", "equitable sharing"],m:"A merchant holds scales and hands coins to a kneeling figure, symbolizing the flow of wealth and balance between giving and receiving. Give without expecting return, and receive without losing dignity.",love:"A dynamic of giving and receiving is present; healthy love needs both partners willing to give, and right now you may be the supporter or the one being helped.",career:"Financial aid, a raise, or a generous opportunity arrives, or you have the means to help others."},r:{kw:["financial manipulation", "unequal power", "strings-attached giving", "selfishness", "debt"],m:"An unhealthy power dynamic distorts giving and receiving, with generosity used as a tool of control. True generosity has no conditions and costs no one their dignity.",love:"One partner uses money or resources to control the other, or the give-and-take is so unbalanced the weaker side loses dignity.",career:"Possible financial fraud, false charity, or being taken advantage of."}},
+70:{pl:"Taurus / Saturn",u:{kw:["patience", "long-term investment", "assessing results", "reflection", "harvest nears"],m:"A farmer leans on his hoe, gazing at seven coins ripening on the vine, pausing to assess his long labor. Results are showing but not yet ripe, so reflect, adjust, and let patience do its work.",love:"The relationship needs time to mature and cannot be rushed; you are weighing whether it is worth continuing to invest in.",career:"The fruits of a long-term investment are emerging but not yet ready to harvest, making this a good time to assess progress and adjust strategy."},r:{kw:["impatience", "failed investment", "no return", "wrong direction", "wasted effort"],m:"Your effort is not paying off, or it was misdirected from the start. Some things are worth waiting for, but others call for cutting your losses in time.",love:"You keep pouring time and energy in yet the relationship goes nowhere, making you doubt whether it is worth the wait.",career:"A long-term investment shows signs of loss, and you must honestly judge whether to continue or pull out."}},
+71:{pl:"Virgo / Sun",u:{kw:["diligence", "mastery", "skill-building", "work ethic", "building strength"],m:"A craftsman carves coins one by one at his bench, finished work hanging nearby, wholly devoted to his craft. Diligent effort and attention to detail will bring excellent results.",love:"You tend the relationship with steady, caring effort, turning love into small concrete acts, or you keep growing into a better partner.",career:"An ideal time to learn new skills, earn certifications, and hone your expertise; dedication and detail set you apart from the mediocre."},r:{kw:["perfectionism", "cutting corners", "lack of motivation", "empty repetition", "stagnant skills"],m:"Your effort or motivation has gone astray, whether stuck in perfectionism or replacing real work with shortcuts. Find what truly engages you so your craftsmanship can shine.",love:"You overinvest in one aspect of the relationship while neglecting another, or repeat the same mistakes without real growth.",career:"You are mired in perfectionism, taking shortcuts, or bored and unmotivated in your current work."}},
+72:{pl:"Virgo / Venus",u:{kw:["self-sufficiency", "independent success", "material comfort", "self-fulfillment", "grace"],m:"An elegant woman stands alone in a flourishing garden, a falcon on her arm, symbolizing the full abundance and independence she has earned through her own effort. Enjoy the good life your hard work has built.",love:"You do not need a partner to define your happiness or worth; that independence makes you more attractive, and love is built on choice rather than need.",career:"Financial abundance and rich results from your own effort have built an enviable life worth savoring."},r:{kw:["financial setback", "over-dependence", "materialism", "surface abundance", "loss of independence"],m:"Trouble hides beneath a prosperous surface. Reconnect with your inner strength, for true abundance begins with self-sufficiency.",love:"You lean too heavily on your partner for security, or compromise the real quality of love for material comfort.",career:"A financial setback erodes what you have built, or you indulge in enjoyment and neglect the need to keep striving."}},
+73:{pl:"Virgo / Mercury",u:{kw:["family wealth", "lasting stability", "material fulfillment", "legacy", "secure roots"],m:"Three generations gather beneath an arch of abundant coins, symbolizing the height of material and family achievement. This is the most committed of relationships, pointing to marriage, family, and lasting foundations.",love:"The most long-term and committed of love cards, signifying marriage, family, and building enduring roots together, with both families supporting the union.",career:"Established success and accumulated wealth, not just personal achievement but a stable legacy to pass to the next generation."},r:{kw:["family conflict", "financial collapse", "inheritance dispute", "shaky foundation", "family discord"],m:"Cracks appear in a foundation that looked solid. Re-examine the stability you took for granted and repair it in time to secure lasting roots.",love:"Family pressure or elders' interference affects the relationship, or you and your partner deeply disagree on what 'home' should be.",career:"Financial foundations are threatened, with internal family-business conflict or an inheritance dispute."}},
+74:{pl:"Earth signs / Earth element",u:{kw:["diligent learning", "new opportunity", "grounded", "earnest effort", "financial beginnings"],m:"A young person stands in a green field, gazing intently at a coin held aloft, curious and earnest about the material world. A new learning or financial opportunity is unfolding; meet it with patience and a grounded attitude.",love:"A steady, earnest relationship built slowly; your partner may not be the most romantic but shows love through action and concrete effort.",career:"A worthwhile new learning or financial opportunity is opening, and a grounded, patient approach now builds future strength."},r:{kw:["lack of progress", "stuck in dreams", "learning difficulty", "unrealistic", "all talk"],m:"Fine plans stay only on paper, never moving into action. Move your dream from your head to your feet and take the first real step.",love:"You hold lovely ideals about love but take no concrete action, or set unrealistically high expectations of your partner.",career:"Plans are perfect but never executed, or learning hits obstacles you give up on, costing you real experience."}},
+75:{pl:"Leo / Virgo",u:{kw:["reliability", "patient progress", "responsibility", "steadfast", "keeping promises"],m:"A knight sits still on a dark horse, gazing steadily ahead, symbolizing patient and responsible forward progress. Steady, dependable work makes you someone others can rely on, and you will reach the goal.",love:"A reliable, responsible partner who keeps their word and offers solid security; the relationship may move slowly, but every step is a sincere commitment.",career:"Advance your plans steadily and dependably, seeking reliability over speed; your conscientious work ethic makes you trustworthy."},r:{kw:["stagnation", "rigidity", "workaholism", "over-caution", "inflexibility"],m:"Steadiness has curdled into suffocating stalemate. Learn to add a little flexibility to your grounded approach.",love:"The relationship stalls from being too conservative, or your partner is so consumed by work and material concerns that emotional nourishment is neglected.",career:"Excessive caution makes you miss opportunities, or you stubbornly cling to methods already proven ineffective."}},
+76:{pl:"Sagittarius / Capricorn",u:{kw:["abundant nurturing", "practical love", "material wisdom", "security", "earth mother"],m:"A queen cradles a coin amid blossoming flowers, expressing love and nurture in tangible ways, the warmest symbol of the earth element. She has a gift for turning resources into abundance and a comfortable home.",love:"A practical, warm partner who expresses love through action and fills the home with comfort, or you who care for the relationship through concrete, devoted acts.",career:"You excel in financial management, investment, or business, with a talent for turning resources into abundance."},r:{kw:["over-reliance on material", "loss of grounding", "self-neglect", "insecurity", "controlling care"],m:"The queen has lost her abundant grounding. Before nurturing others, make sure you yourself are full and replenished.",love:"Financial pressure or scarcity shakes the foundation, or you so neglect your own needs while caring for others that you burn out.",career:"Your financial security is threatened, or over-dependence on material conditions traps you in needless anxiety."}},
+77:{pl:"Aries / Taurus",u:{kw:["wealth and achievement", "material wisdom", "grounded leadership", "mature reliability", "long-term vision"],m:"A king sits enthroned amid grapevines and flowers in rich robes, a mature leader who has built the heights of material success through grounded wisdom. Your ability to turn vision into reality has reached its peak.",love:"An ideal partner who is materially well-off, reliable, and mature, offering full security and a stable presence you can lean on completely.",career:"A symbol of business success, financial abundance, and sound investment instinct, with a mature mastery of turning vision into reality."},r:{kw:["stubbornness", "materialism", "corruption", "reckless finance", "control through wealth"],m:"The king has lost his wisdom and wealth has become a corrupting poison. Build success on a foundation of integrity so that prosperity can last.",love:"One partner uses wealth or material conditions to control the other, creating a severe power imbalance, or material obsession blocks real love and fulfillment.",career:"Serious financial misjudgment and greed lead to reckless decisions, with a risk of corruption or unlawful conduct."}}
+};
+LORE_EN={
+0:{elem:"Air",astro:"Uranus · the energy of breaking convention, pursuing freedom and innovation",myth:"Dionysos, god of wine. Represents the free spirit that breaks convention and seeks ecstasy, a sacred madness unbound by worldly frameworks, viewing all possibilities with innocent eyes.",img:[["White rose","Innocence; a soul unstained by the world"],["Cliff's edge","The courage of ignorance—the reckless leap represents total trust in the universe"],["White sun","The radiance of pure consciousness, the universe's blessing"],["Small dog","Instinct and intuition, also the call and ties of the worldly"]]},
+1:{elem:"Air",astro:"Mercury · ruling planet of communication, intellect and skill",myth:"Hermes, messenger and god of commerce. Governs communication, craft and the crossing of boundaries, linking heaven and earth with wit and eloquence, turning potential into reality.",img:[["Infinity symbol overhead","Infinite potential and willpower transcending time and space"],["Four tools on the table","Wand/Cup/Sword/Pentacle, representing mastery of the four elements"],["Red and white robes","Red for passionate action, white for purity of will"],["Roses and lilies","The balance between desire (roses) and purity (lilies)"]]},
+2:{elem:"Water",astro:"Moon · symbol of the subconscious, intuition and mystical cycles",myth:"Persephone, queen of the underworld. Symbolizes wisdom hidden in the dark depths of the subconscious, cycling between light and dark, perceiving hidden truths through intuition.",img:[["Pillars B and J","Boaz (black/feminine) and Jachin (white/masculine), the gateway of duality"],["Pomegranate veil","Hidden mystical knowledge, passable only by the spiritually prepared"],["Lunar crown","The triple moon: new/full/waning, symbolizing feminine cyclical wisdom"],["TORA scroll","The universe's sacred law and hidden spiritual truths"]]},
+3:{elem:"Earth",astro:"Venus · ruling planet of love, beauty, abundance and sensory pleasure",myth:"Demeter, goddess of grain and harvest. Represents maternal nourishment, unconditional love and the generosity of the earth, nurturing life and guarding abundance.",img:[["Wheat field","Abundant material harvest is coming, the nourishment of the earth"],["Venus symbol ♀","A heart-shaped stone before her carved with the Venus symbol, blessing of love and beauty"],["Crown of twelve stars","The earth mother ruling the twelve zodiac signs, the universe's nurturing power"],["Waterfall","The free flow of emotional energy and spiritual nourishment"]]},
+4:{elem:"Fire",astro:"Aries · sign of initiative, leadership and pioneering action",myth:"Zeus, king of the gods. Represents order, law and supreme authority, ruling heaven and earth with mighty will, establishing structure and rules.",img:[["Four ram heads","The ram heads on the chair back symbolize initiative and unyielding will"],["Orb and scepter","The orb represents control of the world, the scepter represents spiritual power"],["Rugged mountains","Hardships already conquered, and challenges still to overcome"],["Red robe and armor","Passion (red robe) and protective power (armor), the brave guardian"]]},
+5:{elem:"Earth",astro:"Taurus · ruling sign of stability, tradition and the material world",myth:"Chiron, the wise centaur teacher. Bearing an incurable wound yet still teaching heroes, he symbolizes the transmission of wisdom, spiritual guidance and the mission to heal others.",img:[["Triple papal crown","The bridge connecting the three realms of heaven, humanity and earth"],["Crossed gold and silver keys","Unlocking sacred knowledge, gold (consciousness) and silver (subconscious)"],["Two disciples","The transmission of knowledge, guarding different spiritual paths"],["Triple-barred cross staff","The sacred power of the trinity and traditional wisdom"]]},
+6:{elem:"Air",astro:"Gemini · sign of duality, choice and communication",myth:"The Judgement of Paris, involving Hera, Aphrodite and Athene. Symbolizes facing life's most important choices, where every decision triggers far-reaching consequences.",img:[["Angel Raphael","The guardian angel of the air element, bringing sacred blessing and healing"],["Adam and Eve","The union of the two poles of yin and yang, facing life's deepest choice"],["Serpent and apple tree","Temptation, knowledge and choice, the line between good and evil"],["Volcano","Burning passion, the latent energy of transformation and change"]]},
+7:{elem:"Water",astro:"Cancer · sign of emotion, intuition and family protection",myth:"Ares, god of war. Symbolizes mighty willpower and the desire to conquer, driving the energy of opposing forces forward, achieving victory through discipline and resolve.",img:[["Black and white sphinxes","Mastery of opposing forces: balancing reason (white) and emotion (black) through will"],["Eight-pointed star crown","Symbol of victory at the level of spiritual evolution"],["Lunar shoulder plates","Guiding direction through intuition rather than brute force"],["No reins","Control through pure will and spirit, not external restraint"]]},
+8:{elem:"Fire",astro:"Leo · sign of courage, creativity and regal presence",myth:"Heracles, hero of the twelve labors. Symbolizes taming inner wildness through gentleness and perseverance; true strength comes from love and patience, not brute force.",img:[["Infinity symbol overhead","Echoing the Magician, representing transcendent spiritual power, infinite courage"],["Woman gently taming a lion","Taming wildness with love and patience; true strength comes from within"],["White robe and flower crown","The pure power of nature, gentleness overcoming force"],["Lion's open mouth","Primal instinct controlled by gentleness, not suppressed by fear"]]},
+9:{elem:"Earth",astro:"Virgo · sign of analysis, service and the pursuit of perfection",myth:"Cronos, guardian of the golden age. In solitude far from the world's clamor he guards time and memory, lighting the seeker's path forward with the lamp of wisdom.",img:[["Six-pointed star lantern","The Star of Solomon, the light of wisdom illuminating the path ahead"],["Gray-robed elder","Humble and plain, withdrawn from the world in pursuit of inner purity"],["Snow-white peak","The summit reached through spiritual practice, wisdom far from the worldly"],["Staff in hand","Support for the spiritual journey, guiding self and others"]]},
+10:{elem:"Fire",astro:"Jupiter · planet of expansion, fortune and philosophical wisdom",myth:"The Moirai, the three fates: Clotho (who spins the thread), Lachesis (who measures it), Atropos (who cuts it). Symbolize the cyclical law of the universe; no one can escape the turning wheel of fate.",img:[["TARO/ROTA letters","The letters on the rim spell fate, law and other meanings, the law of the universe"],["Four corner guardian creatures","Matthew (man) Mark (lion) Luke (ox) John (eagle), guardians of the four elements"],["Anubis rising","The rise of opportunity and consciousness, good fortune is coming"],["Typhon the serpent descending","The fading of old energy, transforming into new possibility"]]},
+11:{elem:"Air",astro:"Libra · sign of balance, justice and relationships",myth:"Athene, goddess of wisdom and justice. Judging all things with reason, intellect and fairness, representing the highest embodiment of the spirit of law and moral order.",img:[["Scales","Objectively weighing every aspect, pursuing true justice"],["Double-edged sword","Truth has two sides, the sharp power of rational analysis"],["Red robe and purple drape","Worldly power (red) and spiritual wisdom (purple) coexisting"],["Square crown","Clear and orderly thinking, reason leading judgment"]]},
+12:{elem:"Water",astro:"Neptune · planet of spirituality, sacrifice and illusion",myth:"Prometheus, the fire-thief. Suffering eternal torment for stealing divine fire for humanity, he symbolizes voluntary sacrifice and detached contemplation, gaining higher insight through pain.",img:[["T-shaped cross","The letter Tau, symbolizing voluntarily borne sacred sacrifice"],["Halo overhead","The light of enlightenment gained through stillness and waiting"],["Serene expression","This is a voluntarily chosen pause, not forced stagnation"],["Legs in a figure-4 shape","The posture of 'completion' under free will, stillness is action"]]},
+13:{elem:"Water",astro:"Scorpio · sign of transformation, secrets and deep rebirth",myth:"Hades, lord of the underworld. Ruling the realm of the dead, he symbolizes inevitable transformation; the end of the old is merely the prelude to the soul's rebirth.",img:[["White rose on black flag","Purity (white rose) still existing within death (black), the soul is eternal"],["Skeleton rider","All are equal before death; transformation is the path everyone must walk"],["Sun rising on the horizon","The sun rising on the horizon, symbolizing that rebirth follows every ending"],["Fallen figures of every rank","King, child, bishop; transformation is indifferent to status"]]},
+14:{elem:"Fire",astro:"Sagittarius · sign of philosophy, freedom and expanding horizons",myth:"Iris, goddess of the rainbow. Bridging heaven and earth to deliver messages, she symbolizes reconciling opposites, blending different forces into higher harmony through patience.",img:[["Two cups pouring into each other","The soul's alchemy, reconciling and blending opposites to produce miracles"],["Triangle emblem on the chest","The triangle of the fire element, guardian of the spiritual flame"],["One foot in water, one on land","Perfect balance between the spiritual world (water) and the earthly realm (earth)"],["Path to a distant crown of light","A goal visible in the distance, the destination of the spiritual journey awaits"]]},
+15:{elem:"Earth",astro:"Capricorn · sign of ambition, realism and the material world",myth:"Pan, god of the forest. Half-man, half-goat, he represents material instinct, sensory desire and dark impulses; the bonds we place on ourselves can in fact be undone at any time.",img:[["Loose chains","The bondage is voluntary and can be escaped at any time, a psychological shackle"],["Inverted pentagram","Symbol of materialism overriding spirituality, inverted values"],["Bat wings","The seductive power of the dark side, dominion in darkness"],["Man and woman growing tails and horns","Influenced by lust and fear, gradually losing the essence of humanity"]]},
+16:{elem:"Fire",astro:"Mars · planet of action, conflict and raw life energy",myth:"Poseidon, god of the sea. Triggering earthquakes with his trident, he symbolizes the unwarned destructive force that shatters the false tower built on pride, bringing shock and liberation.",img:[["Lightning striking the tower's peak","Divine intervention, shattering the summit built on false pride"],["Falling golden crown","The collapse of false status and arrogance, external titles cannot be relied upon"],["Two people falling from the tower","The collapse of old belief systems and life structures"],["22 small flame points","Ten Yods (the hand of God), the descent of transformative energy"]]},
+17:{elem:"Air",astro:"Aquarius · sign of humanitarianism, innovative thinking and hope",myth:"Pandora, with hope the last thing left in the box. She opened the box full of suffering, yet also let hope remain in the world, symbolizing that light still guides after darkness.",img:[["One large and seven small stars","Eight-pointed starlight, the universe's eternal hope, guiding the lost home"],["Naked woman","Innocent and candid, the true self with nothing concealed, the soul's original face"],["Two pitchers of water","Left pitcher pours onto the earth (nourishing consciousness), right into the water (the subconscious cycle)"],["White ibis","The messenger of wisdom, symbol of spiritual inspiration"]]},
+18:{elem:"Water",astro:"Pisces · sign of intuition, illusion and deep spirituality",myth:"Hecate, the triple moon goddess. Governing crossroads, ghosts and magic, she guides through the deep mist by intuition, revealing hidden fears and illusions.",img:[["The moon's face","The many faces of consciousness, another reality hidden beneath the surface"],["Crayfish crawling from the water","The contents of the subconscious surfacing, buried fears rising to consciousness"],["Dog and wolf","The dual instincts of civilized domestication (dog) and primal wildness (wolf)"],["Two towers","The gate into the unknown, the blurred line between reality and illusion"]]},
+19:{elem:"Fire",astro:"Sun · celestial body at the core of consciousness, vitality and the essence of life",myth:"Apollo, god of the sun. Bringing the power of light, art and prophecy, he symbolizes the pure joy of consciousness, the radiance of the self and the vitality to move forward fearlessly.",img:[["Giant sun","The light of pure consciousness, dispelling all shadow and mist"],["Child on a white horse","Innocent joy, free and unrestrained life vitality"],["Four sunflowers","The nourishment of the four elements, ever faithfully following the light"],["Red flag flying","The passion of life and the proclamation of victory"]]},
+20:{elem:"Fire",astro:"Pluto · planet of deep transformation, the rebuilding of power and death-rebirth",myth:"Hermes Psychopomp, guide of souls. Awakening sleeping souls with the sacred horn, he leads them to complete their final reckoning and move toward awakening and renewal.",img:[["Angel Gabriel blowing the horn","The sacred call to awakening, the universe's invitation to the soul"],["Figures rising from coffins","The soul's awakening, the old self transformed into an entirely new one"],["White flag with a cross","Guidance toward purity and light, the emblem of a sacred mission"],["Mountain backdrop","The summit of spiritual exploration, witnessing every soul's transformation"]]},
+21:{elem:"Earth",astro:"Saturn · planet of structure, the law of time and the completion of cycles",myth:"Hermaphroditus, the androgynous deity. Integrating all opposing forces, this figure symbolizes the perfect fusion of yin and yang, the completion of the journey and the wholeness of the universe.",img:[["Laurel wreath","Symbol of victorious completion; the circle represents the cyclical close"],["Figure dancing at the center","The dance at the center of the universe, the integrator of all elements"],["Four corner guardian creatures","The complete integration of the four elements (fire, earth, air, water), the harmony of the universe"],["Two wands","From the Fool's walking staff to the World's wands, the final sublimation of power"]]},
+22:{elem:"Fire",astro:"Pure Fire element · the primal impulse of creation, passion and inspiration",img:[["Glowing wand","Inspiration descending from above, creative energy granted by the universe"],["Sprout","The budding of a new project, a symbol of life force"],["Hand in cloud","Guidance of divine will, a call to action sent by the universe"],["Mountain landscape","The vast territory waiting to be explored ahead"]]},
+23:{elem:"Fire",astro:"Aries Mars · pioneering force, the will to conquer and command the whole situation",img:[["World globe","Holding the whole picture in hand, a grand visionary plan"],["Distant castle","An established foundation and new territory to conquer"],["Mountain horizon","Territory in view waiting to be expanded"],["Two wands","The completed first step and a bridge to the future"]]},
+24:{elem:"Fire",astro:"Aries Sun · the fruits of action, the life force of expansion",img:[["Three wands","Steady triangular support, a plan gradually maturing"],["Distant ships","Opportunity returning from afar, awaiting harvest"],["Orange sky","A hopeful prospect, a passionate outlook"],["Overlooking from a cliff","A commanding view, the whole situation in hand"]]},
+25:{elem:"Fire",astro:"Aries Venus · joyful construction, a beautiful foundation",img:[["Garland archway","The entrance to celebration, a symbol of victory"],["Celebrating crowd","The joy of community, the warmth of celebrating together"],["Castle background","A solid foundation, the security of home"],["Floral decorations","Beauty and abundance, the flourishing of life"]]},
+26:{elem:"Fire",astro:"Leo Saturn · blocked self-expression, chaotic competitive energy",img:[["Five-person melee","Disorderly competition, an argument where everyone holds their own view"],["Crossed wands","Energy in conflict, yet to find an outlet"],["No victor","This struggle symbolizes practice rather than a true contest"],["Open space","The conflict has no boundaries yet, the battlefield still stretches on"]]},
+27:{elem:"Fire",astro:"Leo Jupiter · public recognition, the expansion of glory and victory",img:[["Laurel wreath","A symbol of public victory and glory"],["White horse","A noble status, a triumphant posture"],["Welcoming crowd","Recognition and praise from others, public support"],["Raised wand","Displaying achievement, not hiding one's own light"]]},
+28:{elem:"Fire",astro:"Leo Mars · defending one's position, a commanding defense from high ground",img:[["High-ground position","The advantage of a commanding high position"],["Six attacking wands","Pressure from many sides, testing the firmness of one's stance"],["Resolute gaze","Unflinching courage, fighting for one's convictions"],["Hillside terrain","Your advantage lies in position, use it well"]]},
+29:{elem:"Fire",astro:"Sagittarius Mercury · rapid transmission of messages, racing thoughts",img:[["Eight flying wands","High-speed moving energy, things advancing quickly"],["Orderly direction","All forces toward the same direction, a clear goal"],["Clear sky","An unobstructed path ahead, obstacles cleared"],["Scene with no people","Pure flow of energy, undisturbed by personal will"]]},
+30:{elem:"Fire",astro:"Sagittarius Moon · the intuitive guard, resilience accumulated through trials",img:[["Bandaged head","The mark of past battles, wounded but not fallen"],["Wall of nine wands","Past battles, each wand a piece of history"],["Wary gaze","Caution learned from past wounds"],["Light of dawn","The last night, dawn is just ahead"]]},
+31:{elem:"Fire",astro:"Sagittarius Saturn · overwhelming responsibility, the Fire element reaching its limit",img:[["Stooped figure","A heavy burden has bent the back, yet has not given up"],["Ten wands","The weight of responsibility accumulated to its limit"],["Distant town","The destination is not far off, hold on a little longer"],["Heavy footsteps","Each step is an expression of willpower"]]},
+32:{elem:"Fire",astro:"Earth element of Fire signs · the beginner of Fire, full of untempered enthusiasm",img:[["Youthful posture","The beginner's energy, full of curiosity"],["Holding a wand and gazing","Full of enthusiasm and imagination for the future"],["Distant mountains","A vast world not yet explored"],["Traveling light","No baggage, ready to set off at any time"]]},
+33:{elem:"Fire",astro:"Scorpio Sagittarius · fearless charge, the full-speed action of the Fire element",img:[["Galloping horse","Uncontrolled speed and drive"],["Dancing flames","Fierce passion, burning through every obstacle"],["Rider not looking back","Wholly focused on the goal ahead"],["Banner in the wind","Drive and high spirits, pressing fearlessly forward"]]},
+34:{elem:"Fire",astro:"Aries Taurus · the confident Queen, the creativity born of Fire and Earth combined",img:[["Black cat","Mysterious intuitive power and personal charisma"],["Sunflower","Energetically pursuing light and abundance"],["Lion throne","A symbol of rule and confidence, the Queen's bearing"],["Brown garments","Down-to-earth wisdom, stability within passion"]]},
+35:{elem:"Fire",astro:"Cancer Leo · the mature leader, the union of flame and emotional wisdom",img:[["Lizard flicking its tongue","Keen perception, insight into subtle changes"],["Orange-red robe","Fierce passion and dignified leadership"],["Lion throne","The highest rule of the Fire element, commanding control"],["Open vista","Far-reaching vision, seeing possibilities others cannot"]]},
+36:{elem:"Water",astro:"Pure Water element · the primal flow of love, emotion and spiritual connection",img:[["Overflowing cup","Emotional abundance overflowing, an unstoppable flow of love"],["Descending white dove","A spiritual blessing, a symbol of divine love"],["Floating lotus","The purity of emotion, spirituality blooming on the water's surface"],["Five streams","The nourishment of the five senses, love flowing to every corner of life"]]},
+37:{elem:"Water",astro:"Cancer Venus · the union of emotions, the flow of love and harmony",img:[["Crossed goblets","Two souls reflecting and resonating with each other"],["Lion-headed serpent","The caduceus of Hermes, a symbol of sacred union and harmony"],["Red wings","Soaring within fierce emotion, the transcendence of love"],["Gazing at each other","Deep understanding and acceptance, seeing each other's soul"]]},
+38:{elem:"Water",astro:"Cancer Mercury · the joyful sharing of emotion, the happy flow of community",img:[["Three women dancing","The joy of friendship, the beauty of celebrating together"],["Abundant fruits","The harvest of the earth, the fullness of celebration"],["Toasting one another","Heartfelt sharing, giving blessings to each other"],["Floral headdresses","Festive joy, the beauty of the present moment"]]},
+39:{elem:"Water",astro:"Cancer Mars · the shock and loss within emotional transformation",img:[["Three fallen cups","The three things lost; the pain is real"],["Two standing cups","What remains intact, not yet lost"],["Black cloak","A wrapping of grief, emotional protection"],["Bridge and town","The road to the future still exists"]]},
+40:{elem:"Water",astro:"Scorpio Sun · nostalgic radiance, the warm current of childhood memory",img:[["Children exchanging flowers","Innocent giving and receiving, unconditional love"],["Six cups","Six different memories of love and layers of emotion"],["White house","Symbol of home, safe and familiar shelter"],["Back of an adult guardian","Contrast of past and present, the keeper of memory"]]},
+41:{elem:"Water",astro:"Scorpio Venus · the lure of fantasy, the fog of emotion",img:[["Seven cups of illusion","Seven different fantasies and possibilities"],["Castle","Illusion of material achievement"],["Dragon","Hidden danger, an enticing challenge"],["Snake and jewels","The temptation of desire, surface splendor"]]},
+42:{elem:"Water",astro:"Pisces Saturn · the courage to let go, a deeper spiritual quest",img:[["Departing figure","The act of bravely leaving the comfort zone"],["Eight intact cups","All that one has, deliberately left behind"],["Full moon and waning moon","Twin moons symbolizing transformation of consciousness and a spiritual call"],["Mountain path upward","The spiritual climb, seeking deeper meaning"]]},
+43:{elem:"Water",astro:"Pisces Jupiter · emotional fulfillment, abundant realization of wishes",img:[["Nine cups arranged","Symbol of abundance, wishes made manifest"],["Satisfied smile","Happiness from within, genuine joy"],["Crossed arms","A posture of self-satisfaction, needing no outside approval"],["Blue drapery","Displaying one's abundance openly"]]},
+44:{elem:"Water",astro:"Pisces Mars · emotional completion, the blessing of the family rainbow",img:[["Rainbow","Sacred promise, symbol of dreams come true"],["A family","Family fulfillment, the full expression of love"],["Celebratory pose","Arms open, embracing the beautiful present"],["House in the distance","Where home lies, the foundation of belonging"]]},
+45:{elem:"Water",astro:"Earth element of the water signs · a beginner of water, first exploration of intuition and spirit",img:[["Fish peeking from the cup","A mysterious message from intuition, a spiritual call"],["Gazing eyes","An open heart toward miracles, wondrous acceptance"],["Blue garment","The gentleness of the water element, emotional expression"],["Seaside background","The source of inspiration, the ocean of the subconscious"]]},
+46:{elem:"Water",astro:"Aquarius Pisces · the emotional knight pursuing romantic ideals",img:[["Slow-walking white horse","An unhurried pursuit, graceful advance"],["Cup held aloft","Carrying an ideal, moving forward with love"],["Crossing a river","Crossing emotional depths, a spiritual journey"],["Winged helmet","Symbol of dreams, romantic imagination"]]},
+47:{elem:"Water",astro:"Gemini Cancer · the queen of emotional wisdom, the depth of empathy",img:[["Ornate cup","A fathomless emotional world, a rich inner life"],["Pensive gaze","Looking inward, deeply understanding how emotions work"],["Water symbol","The queen of the water element, master of emotional flow"],["Moon symbol","Symbol of intuition, connection to the subconscious"]]},
+48:{elem:"Water",astro:"Libra Scorpio · the emotionally mature king, stability amid turbulence",img:[["Throne amid waves","Remaining unshaken upon the emotional seas"],["Fish motif","The wisdom of the deep, deep understanding of emotion"],["Scepter and cup","Balance of emotional power and reason"],["Blue royal robe","The profound water element, mature emotional wisdom"]]},
+49:{elem:"Air",astro:"Pure air element · the primal edge of truth, clarity, and the power of thought",img:[["Double-edged sword","Truth is double-edged; clarity brings both power and pain"],["Crown","The triumph of thought, clarity of consciousness"],["Laurel and palm leaves","The clarity of victory, the laurel of wisdom"],["Cloudy sky","The realm of thought; clouds remain but the sword has pierced through"]]},
+50:{elem:"Air",astro:"Libra Moon · the standoff between emotion and reason, the balance of avoidance",img:[["Blindfold","A truth one refuses to see, the choice to evade"],["Crossed swords","A defensive posture, a temporary balance"],["Bound hands","Self-imposed restraint, a lock that can be undone"],["Calm sea","Surface calm concealing inner trouble"]]},
+51:{elem:"Air",astro:"Libra Saturn · heartbroken clarity, the painful revelation of justice",img:[["Three swords piercing a heart","A direct symbol of pain; heartbreak that cannot be avoided"],["Stormy sky","The intensity of emotion, an inner storm"],["No figures","A pure emotional state, universal pain beyond the personal"],["Gray clouds","Grief looms, but the clouds will eventually part"]]},
+52:{elem:"Air",astro:"Libra Jupiter · rest after battle, intellectual recovery and reflection",img:[["Knight on a tomb","Temporary stillness, dormant restoration of energy"],["Three swords on the wall","Past battles; the wounds have become history"],["Praying posture","Silent reflection, dialogue with the inner self"],["Stained-glass window","Light shines through the glass; hope still exists"]]},
+53:{elem:"Air",astro:"Aquarius Venus · the bitterness after conflict, the aftermath of self-interested scheming",img:[["The victor's contempt","An unethical victory, an arrogant posture"],["The loser departing","A costly defeat, leaving alone"],["Gray sky","Emptiness after victory; there is no true winner"],["Three swords in hand","Spoils won by improper means"]]},
+54:{elem:"Air",astro:"Aquarius Mercury · a calm transition, the journey away from hardship",img:[["Poling across the water","Steadily guiding the transition, direction set"],["Six swords","Carrying past wounds, yet already moving forward"],["Still water","A calm path ahead, the waves gradually subsiding"],["Land in the distance","The destination drawing near; the journey will not last forever"]]},
+55:{elem:"Air",astro:"Aquarius Moon · strategic evasion, intellectual deception",img:[["Tiptoeing away with stolen swords","Light, low-key action, unwilling to confront directly"],["Two swords left behind","Deliberately left; not taking everything"],["Tent in the distance","The destination of escape, a temporary shelter"],["A grinning expression","Light-hearted deception, a seemingly harmless little scheme"]]},
+56:{elem:"Air",astro:"Gemini Jupiter · the cage of belief, the trap of mental limitation",img:[["Blindfolded and bound","Perception sealed off, a state of self-imposed limitation"],["Swords surrounding","A seeming entrapment, yet not truly sealed shut"],["Muddy ground","A feeling of stagnation, feet stuck and unable to advance"],["Castle background","Self-imprisonment; the answer is in fact nearby"]]},
+57:{elem:"Air",astro:"Gemini Mars · the anxious deep night, the storm of thoughts that cannot stop",img:[["Nine swords","The crushing weight of overthinking, the burden of worry"],["Weeping in the dead of night","A fragile moment facing fear alone"],["Patchwork quilt","A psychological protective layer; hiding but unable to truly comfort"],["Swords on the wall","Worries arranged in a row, each one a separate concern"]]},
+58:{elem:"Air",astro:"Gemini Sun · the end of pain, the dawn after the lowest point",img:[["Ten swords in the back","The extreme of pain; it cannot possibly get worse"],["Level ground","A fallen posture, also the final stillness"],["Light on the horizon","The coming of dawn; after an ending there must be a beginning"],["Deep red night","The darkest moment, also the closest to the light"]]},
+59:{elem:"Air",astro:"Gemini Jupiter · the trap of belief, the predicament of mental limitation",img:[["Blindfolded, bound hands","Perception is sealed off, a state of self-imposed limitation"],["Surrounding swords","An apparent encirclement that is not truly sealed"],["Muddy ground","A feeling of stagnation, feet stuck and unable to move forward"],["Castle backdrop","Self-imprisonment; the answer is actually close at hand"]]},
+60:{elem:"Air",astro:"Gemini Mars · the anxious late night, a storm of thoughts that will not stop",img:[["Nine swords","The crushing weight of overthinking, the burden of worry"],["Weeping in the deep night","A fragile moment of facing fear alone"],["Quilt with squares","A psychological protective layer, hiding but unable to truly comfort"],["Swords on the wall","Neatly arranged worries, each one a separate anxiety"]]},
+61:{elem:"Air",astro:"Gemini Sun · the end of pain, the dawn after the lowest point",img:[["Ten swords in the back","The extreme of pain; it cannot get any worse"],["Level ground","A fallen posture, also the final stillness"],["Light on the horizon","The arrival of dawn; after an ending there must be a beginning"],["Deep red night","The darkest hour, also the closest to the light"]]},
+62:{elem:"Air",astro:"Air signs, earth element · the beginner of Air, an alert and curious mind",img:[["Looking up at the sky","Vigilant observation, ready to meet challenges"],["Standing on high ground","A commanding view, an alert observer"],["Hair lifted in the wind","The presence of the Air element, an active mind"],["Distant city","A vast world awaiting exploration, information in motion"]]},
+63:{elem:"Air",astro:"Capricorn Aquarius · the charging knight of thought, advancing at full speed",img:[["Galloping horse","The speed of thought, swift and decisive action"],["Leaning posture","Charging with full force, fearless"],["Clouds in the wind","The rapid movement of thought; stillness is impossible"],["Brandished sword","Words like a sword, sharp and direct"]]},
+64:{elem:"Earth",astro:"Pure Earth element · the original seed of material abundance and practical achievement",img:[["Golden pentacle","A symbol of abundance, the crystallized essence of the material world"],["Garden archway","The gateway through which abundance enters reality"],["Divine hand","A material opportunity sent by the universe; catch it now"],["Fertile earth","Rich soil waiting to be sown, full of potential"]]},
+65:{elem:"Earth",astro:"Capricorn Sun · financial stability, cautious conservatism",img:[["A coin on the head, one in the arms, two underfoot","The cautious guarding of what one possesses"],["Defensive walls","Built up out of fear of being hurt, reluctant to open the heart"],["Holding tight","Possessiveness and emotional stinginess that can suffocate"],["Stable footing","A period of consolidation and accumulating security"]]},
+66:{elem:"Earth",astro:"Taurus Mercury · material hardship, a sense of scarcity, isolation without aid",img:[["Two destitute figures in the snow","The double scarcity of the material and the spiritual"],["Warm lamplight in the window","Help is nearby, yet unseen or ignored"],["Trudging through wind and snow","Struggling forward amid hardship and anxiety"],["Lift your head","Aid is often where you have not noticed; do not refuse help out of pride"]]},
+67:{elem:"Earth",astro:"Taurus Moon · giving and receiving, the flow of wealth, generosity",img:[["Merchant holding scales","The balance between giving and receiving"],["Coins given to the kneeling","Charity and the flow of wealth"],["The kneeling recipients","Receiving help; receive without losing dignity"],["The act of measuring","Fair distribution, giving without expecting return"]]},
+68:{elem:"Earth",astro:"Taurus Saturn · patient waiting, long-term investment, assessing results",img:[["Farmer leaning on a hoe","The moment of assessing results after long cultivation"],["Seven pentacle fruits on the vine","Fruits of long-term investment beginning to show"],["Gazing in contemplation","Evaluating progress, adjusting strategy; success needs patience"],["Not yet harvested","The final harvest has not yet come"]]},
+69:{elem:"Earth",astro:"Virgo Sun · diligent focus, refining craft, the work ethic",img:[["Craftsman carving coins on a bench","Wholehearted devotion to the craft"],["Completed works hung beside","Diligent effort bringing excellent results"],["Focused attention","Detail decides the gap between you and mediocrity"],["The workbench","The accumulation of skill and strength"]]},
+70:{elem:"Earth",astro:"Virgo Venus · self-sufficient abundance, independent achievement, material enjoyment",img:[["Elegant woman in a flowering garden","Complete abundance and independence earned through one's own effort"],["Falcon on the shoulder","Mastery and self-control, disciplined power"],["Standing alone","A whole individual who does not depend on a partner to define happiness"],["Lush flowers","Material abundance and a life built by one's own hands"]]},
+71:{elem:"Earth",astro:"Virgo Mercury · family wealth, long-term stability, material fulfillment, legacy",img:[["Three generations under a pentacle archway","The highest achievement of material wealth and family"],["The arch of abundant coins","Wealth that can be passed to the next generation"],["The elder and the family","Inheritance and the foundation of lasting security"],["Family dogs","Loyalty and the warmth of home and belonging"]]},
+72:{elem:"Earth",astro:"Earth signs, earth element · the beginner of Earth, grounded and diligent",img:[["Young person gazing up at a coin","A curious and earnest learner of the real world"],["Holding the pentacle aloft","Full of enthusiasm and imagination for the future"],["Lush green fields","A vast world not yet explored"],["Traveling light","No burdens, ready to set out at any time"]]},
+73:{elem:"Earth",astro:"Leo Virgo · reliable and grounded, patient progress, responsibility",img:[["Knight on a dark, still horse","The power of advancing steadily with patience and responsibility"],["Holding the pentacle level","A reliable partner who keeps his word"],["Stillness before the field","Slow but sincere, every step a genuine commitment"],["Plowed fields ahead","Diligent dedication that finally reaches the goal"]]},
+74:{elem:"Earth",astro:"Sagittarius Capricorn · nourishing abundance, practical love, the Earth Mother",img:[["Queen cradling a pentacle","The warmest symbol of the Earth element, expressing love through action"],["Flowers in full bloom around her","A home filled with comfort and abundance"],["A rabbit at her feet","Fertility and the abundance of nature"],["Practical care","Making a partner feel cherished and secure through concrete giving"]]},
+75:{elem:"Earth",astro:"Aries Taurus · wealth and achievement, material wisdom, far-sighted leadership",img:[["King enthroned in rich robes","A mature leader who built the highest material achievement through grounded wisdom"],["Surrounded by grapevines and flowers","Abundance and prosperity earned through steady effort"],["Globe and scepter","Command of the material world and the ability to turn vision into reality"],["A castle behind","A stable presence that can be fully relied upon"]]},
+76:{elem:"Earth",astro:"Sagittarius Capricorn · the wisdom of nourishment, the loss of one's grounding (reversed sense)",img:[["Queen having lost her abundant foundation","Financial pressure or scarcity shaking the relationship's base"],["Self-neglect while caring for others","Giving until one's own energy is drained"],["Insecurity","Over-dependence on material conditions breeding needless anxiety"],["Controlling care","Ensure your own abundance before nourishing others"]]},
+77:{elem:"Earth",astro:"Aries Taurus · stubborn rigidity, materialism, wealth used to control (reversed sense)",img:[["King who has lost his wisdom","Wealth become the poison that corrupts him"],["Using wealth to control a partner","A serious imbalance of power within the relationship"],["Reckless finance","Greed driving rash and aggressive decisions"],["Risk of corruption","Let success rest on integrity so wealth can last"]]}
+};
+TOPIC_EXTRA_EN={
+0:{u:{'$':"It's a good time to try a new income stream, but don't bet everything—keep a safety net before taking the leap.",h:"Your energy is light and lively, ideal for starting a new exercise habit, though watch for minor accidents caused by carelessness."},r:{'$':"Beware of impulse spending and unevaluated investments, as reckless financial decisions will bring losses.",h:"Watch for sprains and bumps from carelessness, as a sloppy routine is draining your stamina."}},
+1:{u:{'$':"You have the skills and resources to generate income, so actively pursuing a raise, freelance work, or negotiation favors you.",h:"Mind and body are well-coordinated, and your willpower is strong enough to support a new health plan."},r:{'$':"Beware of slick talk and scams around money; verify over-hyped investment opportunities before acting.",h:"Mental tension and overthinking may bring nervous headaches and insomnia."}},
+2:{u:{'$':"There is undisclosed financial information, so wait, do your research, and trust your intuition about when to enter.",h:"Your body is communicating through subtle signals; slow down, listen, and value sleep and hormonal balance."},r:{'$':"Something in your finances is being concealed; personally verify the accounts and contract details.",h:"Suppressed emotions are turning into physical symptoms; address gynecological, hormonal, or sleep issues directly."}},
+3:{u:{'$':"A period of financial abundance with steadily growing income; investing in yourself and enjoying life are both worthwhile.",h:"Your body is full of nourishing energy, with positive signs for matters of pregnancy and fertility."},r:{'$':"Watch out for overspending from indulging yourself, as luxury purchases are eroding your savings.",h:"Watch for overeating and metabolic issues; don't neglect your own body while caring for others."}},
+4:{u:{'$':"It's time to build financial structure—budgets, regular contributions, long-term planning—to steadily accumulate assets.",h:"A regular routine is the foundation of your health; your bones and joints need ongoing care."},r:{'$':"There are problems with financial control—you may be dominated by a forceful person, or be too rigid yourself and miss opportunities.",h:"Stress-related high blood pressure and neck-and-shoulder stiffness; let go of the need to do everything yourself."}},
+5:{u:{'$':"Managing money through proper, established channels serves you best; consulting a professional advisor beats figuring it out alone.",h:"Traditional remedies suit you, and regular life rituals can steady your mind and body."},r:{'$':"Don't blindly follow financial authorities or copy others' trades; mainstream advice may not fit your situation.",h:"Others' wellness methods don't necessarily suit you; listen to how your own body responds."}},
+6:{u:{'$':"You face an important financial choice; deciding by your values rather than short-term gain will last longer.",h:"Mind and body are in harmony, and the support of a partner has a positive effect on your health."},r:{'$':"Financial decisions waver, or you make irrational money arrangements driven by emotions.",h:"Inner conflict drains your energy, and the anxiety of indecision affects your sleep quality."}},
+7:{u:{'$':"Set clear financial goals and charge ahead; there's a chance for a breakthrough in income.",h:"Your willpower is strong, ideal for tackling fitness goals, but don't ignore your body's limits."},r:{'$':"Finances are spinning out of control with no clear direction; stop and regroup before moving forward.",h:"Overexertion makes your body protest; watch for sports injuries and burnout."}},
+8:{u:{'$':"Tame money anxiety with patience and discipline; a gentle, consistent savings strategy works best.",h:"Your body's self-healing power is strong; gentle care beats drastic measures."},r:{'$':"An inner sense of lack drives irrational spending; settle your emotions before handling money.",h:"Immunity is tied to low mood, and self-doubt is sapping your stamina."}},
+9:{u:{'$':"It's a good time to independently study financial knowledge; cutting social spending and living simply clarifies your finances.",h:"You need solitude and quiet rest; meditation and early nights serve your body best right now."},r:{'$':"Being overly closed off makes you miss financial information and helpful people; open up to exchange a little.",h:"Isolation is affecting your mental health; don't shut yourself away and tough it out alone."}},
+10:{u:{'$':"A turning point in your fortunes appears; timing is on your side, so seize the opportunities in motion.",h:"Your body is entering a new cycle; adjusting your routine to go with the flow brings double results."},r:{'$':"Financial luck is temporarily low; avoid major investments now and wait for the cycle to turn.",h:"Health is up and down and old ailments may recur; patiently ride out the low period."}},
+11:{u:{'$':"Financial contracts, taxes, and legal matters will turn out fairly; honest reporting works in your favor.",h:"Your body needs balance—diet, exercise, and rest must all be kept in check."},r:{'$':"Watch for unfair contract terms or financial disputes, and seek legal help if needed.",h:"Life is seriously out of balance, and indulgence in one area is costing your health."}},
+12:{u:{'$':"A financial pause is actually an opportunity; see money from a new angle and hold off on big expenses.",h:"Forced rest is your body's wisdom; go along with it and don't rush back."},r:{'$':"Needless sacrifice and delay are draining your finances; cut your losses when you should.",h:"A long-held posture and mindset are causing poor circulation; it's time to change."}},
+13:{u:{'$':"One financial chapter is ending; once the old income model is phased out, a new one can emerge.",h:"Your body is undergoing deep renewal; support it with detox and rest, and you'll emerge stronger."},r:{'$':"Resisting a necessary financial purge—refusing to accept losses on a bad investment—only digs you in deeper.",h:"Delaying medical care or refusing to change harmful habits lets problems pile up."}},
+14:{u:{'$':"A moderate financial allocation suits you best—spread the risk and let it grow steadily over time.",h:"Mind and body are in metabolic harmony; moderate restraint in diet and routine keeps you stable."},r:{'$':"Income and spending are out of balance with extreme moves; your finances need to be re-proportioned.",h:"Your rhythm of life is off; both binge eating and extreme restraint are harming your body."}},
+15:{u:{'$':"Watch for the grip of debt, gambling urges, and material desire; behind the lure of high returns lies a trap.",h:"Beware of addictive habits—tobacco, alcohol, sugar, and late nights are hijacking your health."},r:{'$':"You're breaking free of financial chains; a good time to quit bad habits and pay off debt.",h:"A turning point in escaping dependency; your body will gradually reclaim its freedom as you withdraw."}},
+16:{u:{'$':"Finances may face a sudden shock; your emergency fund is your lifeline, and rebuilding after a collapse is sturdier.",h:"Watch for sudden health warnings; a timely checkup can keep the impact to a minimum."},r:{'$':"A financial crisis is postponed but not resolved; tackling it actively beats waiting for it to explode.",h:"You've suppressed your body's warning signs, and small symptoms are brewing into a bigger problem."}},
+17:{u:{'$':"The dark financial period has passed and hope rekindles; now is the time to plant seeds for long-term investment.",h:"The energy for healing and recovery is strong, with a dawn of improvement in chronic problems."},r:{'$':"Pessimism about your financial outlook makes you miss opportunities; hope remains—you just can't see it yet.",h:"Recovery is slower than expected and discouraging, but don't abandon your pace of care."}},
+18:{u:{'$':"Financial information is unclear and there may be hidden truths behind the numbers; your intuition senses something is off.",h:"Emotions and the subconscious affect your body; watch your sleep quality and unexplained discomfort."},r:{'$':"The fog lifts and the financial truth surfaces; your earlier unease finally has an answer.",h:"A long-troubling symptom finds its cause, and as anxiety eases, your body improves."}},
+19:{u:{'$':"Fortunes are bright with transparent, growing income; favorable for open collaboration and legitimate expansion.",h:"Vitality is abundant and your complexion glows; sunshine and outdoor activity amplify this energy."},r:{'$':"You're too optimistic financially, and the numbers aren't as good as you imagined; re-verify before celebrating.",h:"Your vitality is temporarily clouded; fatigue and low mood are signals to rest."}},
+20:{u:{'$':"Past financial efforts reach a reckoning; old investments pay off and bad debts are settled.",h:"It's a good time for a full health checkup; face the results honestly and update your lifestyle."},r:{'$':"Avoiding your financial reality only delays renewal; opening the books is the first step.",h:"You've ignored your body's call for too long; stop putting off the checkups you need."}},
+21:{u:{'$':"A financial goal is fully achieved; enjoy the results, and the next phase will reach even higher.",h:"Mind and body are whole and harmonious; maintaining your current rhythm is the best care."},r:{'$':"Your financial goal is just one last mile away; don't slack off right before the finish.",h:"Your recovery is nearly complete but not quite there; persist a while longer."}},
+22:{u:{'$':"A new income opportunity is sparked; action itself is your fortune, so start right away.",h:"Your energy burns like fire, ideal for launching a new training plan."},r:{'$':"A new income source is all thunder and no rain; confirm it's viable before your enthusiasm fades.",h:"Your starting momentum has fizzled; recovering your motivation matters more than forcing yourself."}},
+23:{u:{'$':"Your financial blueprint is taking shape; look far ahead and prepare for a bigger picture.",h:"Your condition is stable, making it a good time to plan long-term health goals."},r:{'$':"Thinking too small or being afraid to step out leaves your finances stuck in planning and never growing.",h:"Indecision stalls your health plan; take the first step first."}},
+24:{u:{'$':"Earlier investments are starting to echo back; keep expanding, as the ship is coming into harbor.",h:"Your fitness enters a payoff period, and the results of past training gradually show."},r:{'$':"Expected income is delayed; keep a buffer in your cash flow.",h:"Recovery is slower than expected; adjust your expectations, and consistency will pay off."}},
+25:{u:{'$':"Your financial foundation is solid—worth celebrating small milestones, and family-related expenses go smoothly.",h:"Mind and body are settled and harmonious; gatherings with family and friends are good medicine."},r:{'$':"Stable on the surface but shaky underneath; examine the hidden leaks in your fixed expenses.",h:"Complacency has made you neglect self-care; your comfort zone is eroding your fitness."}},
+26:{u:{'$':"You face competition on multiple financial fronts—comparing prices, bargaining, bidding; keep your strategy amid the fray.",h:"Stress comes from all directions, and your tense muscles need an outlet for release."},r:{'$':"Avoid pointless money disputes; stepping back saves more than just money.",h:"Accumulated conflict and stress finally ease; give your body time to repair."}},
+27:{u:{'$':"Your financial efforts win recognition—a raise, bonus, or investment win; press your advantage.",h:"You're at a peak, and confidence makes you radiant."},r:{'$':"The financial recognition you hoped for falls through; review your strategy rather than doubting yourself.",h:"Caring too much about appearances actually wears your body down; let go of comparison."}},
+28:{u:{'$':"Your financial position is being challenged; hold your bottom line and don't give away your margins lightly.",h:"Defensive tension drains your stamina; showing a little vulnerability is also a form of care."},r:{'$':"Outnumbered by financial pressure, protect your core assets first and deal with the rest in time.",h:"You've reached the limit of toughing it out for too long; asking for help is nothing to be ashamed of."}},
+29:{u:{'$':"Financial progress accelerates with several sums moving quickly; seize this efficient period.",h:"Metabolism and circulation are flowing well, making it a golden time for weight loss and conditioning."},r:{'$':"Cash flow suddenly jams; clear it patiently, as haste only causes mistakes.",h:"Your rhythm is disrupted; steady your routine before talking about progress."}},
+30:{u:{'$':"Staying alert about money is right, but you have more backing than you think.",h:"Fatigue from a long fight has built up; while holding on, schedule some real rest."},r:{'$':"Being overly guarded makes you miss opportunities; not everyone is out to take advantage of you.",h:"Chronic fatigue is already clouding your judgment; complete rest is the top priority."}},
+31:{u:{'$':"Financial responsibilities are heavy; learn to share and let go—you don't have to carry it all yourself.",h:"Clear signs of overwork; back and waist aches are your body protesting the load."},r:{'$':"You're setting down financial burdens that aren't yours, and a sense of lightness is returning.",h:"A recovery period after putting down the load; let your tense body slowly unwind."}},
+32:{u:{'$':"Learn new financial knowledge with curiosity, and try out new tools in small amounts.",h:"You're eager to try a new sport or diet; start light."},r:{'$':"Half-hearted dabbling in financial learning rarely pays off; pick one thing and go deep.",h:"Your health plan is stuck at gathering information and never gets started."}},
+33:{u:{'$':"You have plenty of financial drive, but set stop-losses on quick in-and-out moves—momentum is a double-edged sword.",h:"A burst of vitality; challenging exercise suits you, but mind your safety gear."},r:{'$':"Reckless money decisions and giving up halfway; cool down before you act.",h:"High risk of sports injury; warm-ups and moderation are both essential."}},
+34:{u:{'$':"Manage your financial network with warmth and confidence; your charm brings opportunities.",h:"Health radiates from the inside out, and confidence is the best care of all."},r:{'$':"Don't keep up appearances at a cost; vanity spending is bleeding you dry.",h:"Big emotional swings; jealousy and comparison are burning up your energy."}},
+35:{u:{'$':"Lead your financial strategy with vision—a bold but accountable investment style.",h:"You manage your energy well, a health leader who leads by example."},r:{'$':"Domineering financial decisions that won't heed advice; watch out for a crash.",h:"Irritability and anger harm the liver and drain the spirit; learn to turn that fire into drive."}},
+36:{u:{'$':"Let money flow toward what nourishes your soul; meaningful spending brings true abundance.",h:"Emotional health is thriving, with your heart and feelings well nourished."},r:{'$':"Emotional spending can't fill the hole inside; deal with your feelings before you spend.",h:"Pent-up emotions affect appetite and sleep; find a healthy outlet."}},
+37:{u:{'$':"Mutually beneficial financial cooperation is favored; fair splits and joint accounts go smoothly.",h:"Deep connection with others is your nourishment; when relationships are harmonious, your body thrives."},r:{'$':"Cracks appear in a financial partnership; only clear accounts can save the relationship.",h:"The drain of an unbalanced relationship shows in your body; honest communication is the cure."}},
+38:{u:{'$':"It's worth spending on celebration and socializing; financial opportunities hide within gatherings and networks.",h:"Gatherings and laughter are natural immunity; spend more time with good friends."},r:{'$':"Social spending is out of control, and excessive partying is draining your wallet.",h:"After the overindulgence of partying, your body needs a quiet period of recovery."}},
+39:{u:{'$':"Feeling numb to a financial opportunity in front of you? Take stock again — the gift may be one you've overlooked.",h:"Burnout is a signal: your body isn't broken, your heart is simply tired."},r:{'$':"You're emerging from financial apathy and seeing overlooked opportunities again.",h:"Waking from a low spell, your appetite and zest for life are returning."}},
+40:{u:{'$':"It's okay to grieve money lost, but don't forget what still remains in your hands.",h:"Grief needs an outlet and a deadline — don't let it drag your body down."},r:{'$':"You rise from financial loss; the resources left are enough to begin again.",h:"Climbing out of an emotional low, your vitality returns with your mood."}},
+41:{u:{'$':"Money tied to the past surfaces: a returning client, a gift from elders, or a childhood skill turned profitable.",h:"Revisiting activities you loved in youth brings nostalgic joy that nourishes body and mind."},r:{'$':"Living in past financial glory keeps you stuck — look forward.",h:"Old habits may not suit your current body; update how you care for yourself."}},
+42:{u:{'$':"Dazzling financial options abound where dreams and illusions mingle — assess realistically before choosing.",h:"Too many wellness methods you want to try means none get done; pick one and start."},r:{'$':"Illusions clear and your financial goals finally come into focus, ready to execute.",h:"You return from unrealistic health fantasies to concrete action."}},
+43:{u:{'$':"It's time to walk away from an unprofitable financial setup — turning around takes courage.",h:"Leaving an environment that drains you is the deepest form of self-care."},r:{'$':"You know you should cut losses yet linger, and the cost of staying keeps rising.",h:"Wanting to change yet fearing it — the inner conflict itself saps your vitality."}},
+44:{u:{'$':"Your financial wishes are near fulfillment; contentment and gratitude keep abundance flowing.",h:"High satisfaction in body and mind — savoring the present is the best healing."},r:{'$':"Outward abundance masks inner emptiness; money can't buy what you truly want.",h:"After indulgence comes emptiness and bloat; return to simple contentment."}},
+45:{u:{'$':"Family finances are harmonious, with money flowing smoothly between generations.",h:"A happy home is the soil of your health; belonging heals all."},r:{'$':"Family financial expectations create pressure; ideals and reality need reconciling.",h:"Tension in family relationships affects your health — boundaries are necessary."}},
+46:{u:{'$':"Explore new money knowledge with a playful spirit; real opportunity hides in wild ideas.",h:"Curiosity leads you to try new wellness approaches — keep a light heart."},r:{'$':"Naivety about money leaves you easily deceived; ask and verify more.",h:"Emotional eating and erratic routines call for grown-up self-care."}},
+47:{u:{'$':"You chase an ideal financial vision — romantic, but remember to set checkpoints.",h:"Body and mind seek beauty; art and aesthetic pursuits nourish you."},r:{'$':"Financial promises sound lovely but are hard to deliver; watch actions, not words.",h:"A habit of escaping reality disrupts your routine; come back to the present."}},
+48:{u:{'$':"Sense the flow of money by intuition — your financial sixth sense is sharp now.",h:"Emotions are calm and deep; a healing time of mind-body integration."},r:{'$':"Emotions flood reason in money decisions; steady your heart before touching cash.",h:"Sentimental inner turmoil — watch for stress-related physical symptoms."}},
+49:{u:{'$':"You manage wealth with mature emotional intelligence, steadying family finances.",h:"You master your emotions; body and mind are as steady as a calm deep sea."},r:{'$':"Suppressed emotions erupt as out-of-control spending; face your feelings honestly.",h:"The cost of long-suppressed emotions surfaces; find a professional to confide in."}},
+50:{u:{'$':"Financial thinking suddenly clears; a new strategy cuts right to the point.",h:"A time of clear-headed decisiveness — good for major health decisions."},r:{'$':"Financial judgment is off; when information is muddled, hold off acting.",h:"Mental clutter disrupts sleep; your mind needs time to switch off."}},
+51:{u:{'$':"Two financial options are deadlocked; avoidance won't bring an answer — lay the numbers bare.",h:"Stress is deliberately ignored, but closing your eyes won't make it disappear."},r:{'$':"The deadlock breaks, and a financial truth you're forced to face brings relief.",h:"Tension eases once your guard drops, and your perspective opens again."}},
+52:{u:{'$':"Financial damage is done — a bad debt, a loss, or a betrayal; only after the pain can the wound be cleaned.",h:"Heartache is a real physical sensation; give yourself time to heal."},r:{'$':"A financial wound is healing; forgiveness frees you, not the other party.",h:"Emerging from heartbreak, the tightness in your chest slowly loosens."}},
+53:{u:{'$':"Financial activity pauses for a ceasefire; this stillness is to go a longer road.",h:"A mandatory rest order is issued — sleep is your only task right now."},r:{'$':"You've rested enough; it's time to restart your financial plans.",h:"The recovery period is over; ease back into your normal rhythm step by step."}},
+54:{u:{'$':"There's a risk of winning the money but losing the relationship; count the true cost of this victory.",h:"A competitive mindset keeps your nerves taut — winning isn't all of health."},r:{'$':"Withdrawing from a zero-sum game; the energy saved by a truce is priceless.",h:"After laying down the fight, your long-tense body can finally breathe."}},
+55:{u:{'$':"Your finances are sailing from storm toward calm; stay low-key and steady through the transition.",h:"On the road to recovery, a steady daily routine is the best medicine."},r:{'$':"You want out of financial trouble but keep circling in place; outside help may be needed.",h:"The old stressor keeps following you; better to change your mindset than your surroundings."}},
+56:{u:{'$':"Watch for gray-area financial dealings — whether others' schemes or your own wishful shortcuts.",h:"An avoidant coping style drives problems underground; face your body honestly."},r:{'$':"A hidden financial problem comes to light, and honesty brings relief.",h:"Stop the self-deceiving wellness routines and face the real numbers."}},
+57:{u:{'$':"Self-imposed limits leave your finances stuck; most of the constraints are imagined.",h:"An anxious sense of helplessness — your body is far more capable than you think."},r:{'$':"Breaking free of self-limits, your financial options are wider than you believed.",h:"Released from feeling trapped, you regain freedom of action."}},
+58:{u:{'$':"Money worries magnify in the dead of night; in daylight, most aren't so frightening.",h:"Insomnia and anxiety feed each other; first break the nighttime loop of thoughts."},r:{'$':"You wake from the financial nightmare to find reality far gentler than the fear.",h:"The peak of anxiety has passed; sleep quality is steadily recovering."}},
+59:{u:{'$':"You've hit the financial bottom; the worst has already happened, and only the climb remains.",h:"At the lowest point of exhaustion, admitting you've collapsed is the only way to truly rebuild."},r:{'$':"Slowly climbing from the financial bottom — recovery is slower than hoped but the direction is right.",h:"A convalescence like recovering from serious illness — neither rush it nor stop."}},
+60:{u:{'$':"Gather financial intelligence with keen curiosity — watch and ask much, act little.",h:"Sharp to new health knowledge — verify before putting it into practice."},r:{'$':"Hearsay money tips aren't trustworthy; beware misjudgments born of gossip.",h:"Don't try random internet remedies; consult a professional to stay safe."}},
+61:{u:{'$':"A time for swift, decisive financial moves — but confirm your direction before charging ahead.",h:"Energy for action is high; mind the risk of accidents at a fast pace."},r:{'$':"Reckless headlong financial moves are bound to cause damage; calm down first.",h:"Haste gets you hurt; slowing down actually gets you there faster."}},
+62:{u:{'$':"Judge finances with reason and experience; once emotion is cut away, the answer is clear.",h:"Clear-minded discipline keeps your body in precise condition."},r:{'$':"Overly harsh financial criticism — too cold toward yourself and others.",h:"Severe self-demands are harming body and mind; be gentler."}},
+63:{u:{'$':"Steer your finances with expertise and principle; complex situations need your calm authority.",h:"Manage your health data rationally — regular check-ups and science-based care."},r:{'$':"Cold financial manipulation, or being manipulated; power games eventually backfire.",h:"Overusing your mind while ignoring feelings — the body is not a machine."}},
+64:{u:{'$':"A concrete new financial opportunity lands: a new job, a new contract, or your first pot of gold.",h:"The best starting point to build a strong foundation — begin with basic habits."},r:{'$':"An opportunity in hand slips away; examine where money is leaking out.",h:"A good start that won't quite materialize; aim for done before perfect."}},
+65:{u:{'$':"Juggling multiple income streams and expenses with agility — balance is a dynamic art.",h:"Maintaining balance in a multitasking life; flexible scheduling protects your exercise time."},r:{'$':"Burning the candle at both ends throws finances off balance; simplifying is the only fix.",h:"A body run ragged by imbalance starts to protest — cut some commitments."}},
+66:{u:{'$':"Professional collaboration brings steady returns; your skills are being recognized by the market.",h:"Working with professionals (a coach, a doctor) doubles the results of your regimen."},r:{'$':"Going it alone caps your income; mediocre results come from refusing to collaborate.",h:"Closed-off, self-taught health management has limits — seek professional help."}},
+67:{u:{'$':"Holding steady is sound, but gripping too tightly keeps money from growing; don't stake all your security on savings.",h:"Defensive tension: a clenched fist can't catch new energy."},r:{'$':"Loosening your death grip on money; some flow and sharing bring new opportunity.",h:"Learning to relax and give, your tense body and mind can finally breathe."}},
+68:{u:{'$':"In a financial winter, don't forget to ask for help — support is right at your door.",h:"A sense of lack harms more than actual lack; accepting help is no shame."},r:{'$':"A turning point appears in financial hardship; the winter is ending and help has arrived.",h:"From rock bottom comes the upturn; warmth is flowing back into body and mind."}},
+69:{u:{'$':"A healthy cycle of financial giving and receiving — generous and gracious in both.",h:"A network where giving and receiving are balanced is the hidden pillar of your health."},r:{'$':"An imbalance of power in money dealings: giving with strings attached is control.",h:"Over-giving without knowing how to receive — the caregiver needs care too."}},
+70:{u:{'$':"Investments enter a waiting harvest phase; assess before deciding to add or reap.",h:"The results of your regimen need time to ferment; patience is the lesson now."},r:{'$':"A frustrating sense of effort gone to waste; review your return on investment before reallocating.",h:"Tempted to quit because you see no results? Adjust your method rather than starting from zero."}},
+71:{u:{'$':"Honing your craft is the best investment; the compound interest of skill is accruing.",h:"Health is a craft built day by day; small acts of persistence make big change."},r:{'$':"A half-hearted attitude shows up in your income; reclaim the craftsman's spirit.",h:"Fishing two days and drying nets for three — your health habits need re-rooting."}},
+72:{u:{'$':"An abundant life earned by your own hand, blending independence and taste; enjoy what you deserve.",h:"A poise won through discipline; gracefully enjoy solitude and self-care."},r:{'$':"A refined lifestyle that outspends your income; behind the polish is overdraft.",h:"Sacrificing inner health for outward gloss puts things backwards."}},
+73:{u:{'$':"The fullness of long-term wealth: assets, legacy, and family stability all secured.",h:"A solid foundation of generational health; family support is the recipe for longevity."},r:{'$':"Tangles in family finances: inheritance, dependence, or pressure to support relatives need boundaries.",h:"Hereditary health issues run in the family — early prevention beats treatment."}},
+74:{u:{'$':"Study money matters with an apprentice's mindset; small, steady experiments build experience.",h:"Earnestly learning about your body; recording and observing are a good start."},r:{'$':"Financial learning abandoned halfway — armchair theory with no practice.",h:"A health plan forever set to start tomorrow; move today."}},
+75:{u:{'$':"Slow but utterly reliable wealth-building; the tortoise strategy wins in the end.",h:"A wellness rhythm so steady it's nearly boring — that's the very secret of longevity."},r:{'$':"Excessive caution leaves your assets treading water; adjust your allocation moderately.",h:"Unchanging routine stiffens the body; add a little fresh stimulation."}},
+76:{u:{'$':"A money style both practical and warm, turning resources into real care.",h:"The wisdom of living close to the land: good food, good surroundings, a good body."},r:{'$':"Fretting over others' finances while neglecting your own; take care of yourself first.",h:"Busy caring for everyone, you alone forget your own check-up."}},
+77:{u:{'$':"The commanding presence of a wealth empire; career and assets enter a mature, abundant harvest.",h:"The ease of ample resources steadies body and mind; enjoy success while keeping restraint."},r:{'$':"Miserly stubbornness or showy extravagance — your view of wealth needs recalibrating.",h:"A health deficit built from socializing and comfort; the more affluent, the more you must mind your wellness."}}
+};
+function cardName(cid){ return LANG==='en' ? (C[cid].en||C[cid].zh) : C[cid].zh; }
+function cardPL(cid){ return LANG==='en' ? (EN_CARD[cid]&&EN_CARD[cid].pl||C[cid].pl) : C[cid].pl; }
+function cardKw(cid,rev){ const e=LANG==='en'&&EN_CARD[cid]?EN_CARD[cid][rev?'r':'u']:null; return (e&&e.kw)?e.kw:(rev?C[cid].r:C[cid].u).kw; }
+function cardMeaning(cid,rev){ const e=LANG==='en'&&EN_CARD[cid]?EN_CARD[cid][rev?'r':'u']:null; return (e&&e.m)?e.m:(rev?C[cid].r:C[cid].u).m; }
+function loreOf(cid){ return LANG==='en'&&LORE_EN[cid]?LORE_EN[cid]:LORE[cid]; }
+function topicExtraOf(cid){ return LANG==='en'&&TOPIC_EXTRA_EN[cid]?TOPIC_EXTRA_EN[cid]:TOPIC_EXTRA[cid]; }
+const SEP = ()=> LANG==='en' ? ', ' : '、';
+function revLabel(rev){ return LANG==='en' ? (rev?' (reversed)':'') : (rev?'（逆位）':''); }
+
+async function callGemini(key, proxyEmail=null){
+  const spreadName=S.type==='custom'?L('自訂牌陣','Custom Spread'):spreadNameOf(S.type);
+  const en = LANG==='en';
+
+  // 建立背景知識：數字象徵 + 感情連結牌組
+  const numRef = Object.entries(NUM_SYM).map(([n,t])=>t).join(' ');
+  const comboRef = COMBOS.map(c=>`【${c.pair.join('＋')}】${c.note}`).join(' ');
+  const refCtx = en ? '' : `\n\n【數字象徵系統】${numRef}\n\n【感情連結牌組參考】${comboRef}`;
+
+  const cardLines=S.picked.map((di,i)=>{
+    const {cid,rev}=S.deck[di];
+    return en
+      ? `  ${S.pos[i]}: ${cardName(cid)}${rev?' (reversed)':' (upright)'}\n  Keywords: ${cardKw(cid,rev).join(', ')}\n  Meaning: ${cardMeaning(cid,rev)}`
+      : `  ${S.pos[i]}：${cardName(cid)}（${rev?'逆位':'正位'}）\n  關鍵字：${cardKw(cid,rev).join('、')}\n  牌義：${cardMeaning(cid,rev)}`;
+  }).join('\n\n');
+
+  const proj = getActiveProject();
+  let projectCtx = '';
+  if (proj) {
+    const past = proj.readings.slice(-5); // last 5
+    if (past.length) {
+      projectCtx = en
+        ? `\n\n[Project theme] ${proj.name}${proj.desc?'\nDescription: '+proj.desc:''}\nThis is reading #${proj.readings.length+1} for this project. Past records (most recent ${past.length}):\n`
+          + past.map((r,i)=>`\n#${i+1} (${r.date}): "${r.q}"\nSpread: ${r.spread}\nCards: ${r.cards.map((c,j)=>`${r.pos[j]} ${cardName(c.cid)}${c.rev?'(rev)':''}`).join(', ')}${r.interp?'\nSummary: '+r.interp.slice(0,120)+'…':''}`).join('\n─────\n')
+        : `\n\n【專案主題】${proj.name}${proj.desc?'\n主題描述：'+proj.desc:''}\n這是此專案第 ${proj.readings.length+1} 次占卜。以下是過去的記錄（最近 ${past.length} 次）：\n`
+          + past.map((r,i)=>`\n第${i+1}次（${r.date}）：「${r.q}」\n牌陣：${r.spread}\n抽到：${r.cards.map((c,j)=>`${r.pos[j]} ${cardName(c.cid)}${c.rev?'↓':''}`).join('、')}${r.interp?'\n解讀摘要：'+r.interp.slice(0,120)+'…':''}`).join('\n─────\n');
+    } else {
+      projectCtx = en
+        ? `\n\n[Project theme] ${proj.name}${proj.desc?'\nDescription: '+proj.desc:''} (reading #1 for this project)`
+        : `\n\n【專案主題】${proj.name}${proj.desc?'\n主題描述：'+proj.desc:''}（本專案第 1 次占卜）`;
+    }
+  }
+
+  let prompt;
+  if(S.type==='five'){
+    // 無視論解牌法 - 五張無位置牌陣
+    const cards = S.picked.map((di,i)=>{
+      const {cid,rev}=S.deck[di];
+      const lore=loreOf(cid);
+      return {name:cardName(cid), rev, kw:cardKw(cid,rev), m:cardMeaning(cid,rev), elem:lore.elem, astro:lore.astro, num:cid};
+    });
+    const revCount = cards.filter(c=>c.rev).length;
+    const uprightCount = 5 - revCount;
+    const elemCount = {};
+    cards.forEach(c=>{ elemCount[c.elem]=(elemCount[c.elem]||0)+1; });
+    const elemSummary = Object.entries(elemCount).sort((a,b)=>b[1]-a[1]).map(([e,n])=>`${e}×${n}`).join(SEP());
+    const cardDescs = cards.map((c,i)=> en
+      ? `  Card ${i+1}: ${c.name} (${c.rev?'reversed':'upright'}) | element: ${c.elem} | keywords: ${c.kw.join(', ')} | meaning: ${c.m}`
+      : `  牌${i+1}：${c.name}（${c.rev?'逆位':'正位'}）｜元素：${c.elem}｜關鍵字：${c.kw.join('、')}｜牌義：${c.m}`).join('\n');
+    const revCnt = cards.filter(c=>c.rev).length;
+    const uprCnt = 5 - revCnt;
+    let keyCards, supCards;
+    if(revCnt !== uprCnt){
+      const keyIsRev = revCnt < uprCnt;
+      keyCards = cards.filter(c=> keyIsRev ? c.rev : !c.rev).map(c=>c.name);
+      supCards  = cards.filter(c=> keyIsRev ? !c.rev : c.rev).map(c=>c.name);
+    } else {
+      keyCards = []; supCards = cards.map(c=>c.name);
+    }
+    const keyStr = keyCards.length ? keyCards.join(SEP()) : L('（全正或全逆，請自行以數字法判斷）','(all upright or all reversed — judge by numerology yourself)');
+    const supStr  = supCards.join(SEP());
+    prompt = en ? `[IMPORTANT] Respond entirely in English. Do NOT use any markdown symbols (*, **, #, -, •). Output plain text paragraphs only.
+
+You are a tarot reader skilled in the "Wuxi" (ignore-position) method. Its core: ignore spread positions; let the "key card(s)" (the minority of upright/reversed) define the overall direction, the "supporting cards" fill in detail, then weave everything into one integrated reading focused on the question.${projectCtx}
+
+[This reading]
+Question: "${S.q}"
+
+[Five cards]
+${cardDescs}
+
+[Wuxi basis]
+Upright: ${uprCnt} / Reversed: ${revCnt}
+Key cards (minority): ${keyStr}
+Supporting cards (majority): ${supStr}
+Element distribution: ${elemSummary}
+
+[Requirements]
+Write one flowing fortune-analysis essay. Do not use card names or "Card 1/2" as headings, and do not list card-by-card. Card names may flow naturally into sentences, but the whole must read as a complete analysis of "${S.q}".
+
+Structure (seamless, no visible headings):
+Para 1: Open with the key card's core energy — the querent's inner state and the essential direction of this question.
+Para 2: Bring in the supporting cards — how outer environment, other people, or hidden background interweave with the key card.
+Para 3: From the elemental angle — what does the "${elemSummary}" distribution reveal? What does an over-abundant element trend toward, and what does a lacking element suggest is needed?
+Para 4: Integrate everything into concrete advice, warm and empowering.${proj && proj.readings.length ? '\nAlso weave in the past records to point out how this theme is developing.' : ''}
+
+About 350-450 words. Begin the essay directly; no self-introduction.` : `【重要指令】你必須全程使用繁體中文回覆，禁止使用任何英文或其他語言。禁止使用 markdown 符號（*、**、#、-、•）。只能輸出純文字段落。
+
+你是一位精通無視論塔羅解牌法的占卜師。無視論核心：忽略牌陣位置，以「重點牌」定大局方向，以「輔助牌」補充細節，最終融會貫通圍繞問題給出整體解讀。${projectCtx}
+
+【本次占卜】
+問題：「${S.q}」
+
+【五張牌組】
+${cardDescs}
+
+【無視論分析基礎】
+正位：${uprCnt} 張 ／ 逆位：${revCnt} 張
+重點牌（少數）：${keyStr}
+輔助牌（多數）：${supStr}
+元素分佈：${elemSummary}
+${refCtx}
+
+【解牌要求】
+請寫成一篇流暢的運勢分析文章，不得用「牌一」「牌二」或任何牌名當段落標題，不得逐牌列點。牌的名字可以自然融入句子中，但整體必須像一篇針對「${S.q}」寫的完整分析，讓人讀來一氣呵成。
+
+文章結構（內容無縫銜接，不需要顯示標題）：
+第一段：以重點牌的核心能量開展，點出問卜者目前的內在狀態與這個問題的本質走向。
+第二段：帶入輔助牌的影響，說明外在環境、他人因素或潛在背景如何交織在這個問題中，與重點牌形成什麼樣的關係。
+第三段：從元素能量角度切入——「${elemSummary}」的分佈透露什麼訊息？過盛的元素代表什麼趨勢，欠缺的元素暗示什麼需要補充？
+第四段：整合所有訊息給出具體建議，語氣溫暖有力，讓問卜者感到被理解且有所啟發。${proj && proj.readings.length ? '\n同時結合過去紀錄，指出此主題的發展脈絡。' : ''}
+
+約 500-600 字。請直接開始寫文章，不需要自我介紹。`;
+  } else {
+    prompt = en ? `[IMPORTANT] Respond entirely in English. Do NOT use any markdown symbols (*, **, #, -, •). Output plain text paragraphs only.
+
+You are a tarot reader with deep tarot knowledge and spiritual insight.${projectCtx}
+
+[This reading]
+Question: "${S.q}"
+Spread: ${spreadName}
+
+${cardLines}
+
+[Requirements]
+Write one flowing fortune-analysis essay. Do not use position names ("Past"/"Present"/"Future") or card names as headings, and do not list card-by-card. Card names may flow naturally into sentences, but the whole must read as a complete analysis of "${S.q}".
+
+Structure (seamless, no visible headings):
+Para 1: Survey the overall energy — the core of this question and the present situation; what are the cards saying to one another?
+Para 2: Go deeper — the upright/reversed contrast, the flow of energy, the hidden influences, and how they jointly answer "${S.q}".${proj && proj.readings.length ? '\nWeave in the past records to show how this theme is developing and shifting.' : ''}
+Para 3: Integrate everything into concrete advice, warm and empowering.
+
+About 300-400 words. Begin directly; no self-introduction.` : `【重要指令】你必須全程使用繁體中文回覆，禁止使用任何英文或其他語言。禁止使用 markdown 符號（*、**、#、-、•）。只能輸出純文字段落。
+
+你是一位具有深厚塔羅知識與靈性智慧的占卜師。${projectCtx}
+
+【本次占卜】
+問題：「${S.q}」
+牌陣：${spreadName}
+
+${cardLines}
+${refCtx}
+
+【解牌要求】
+請寫成一篇流暢的運勢分析文章，不得用「過去」「現在」「未來」或任何牌名、位置名稱當段落標題，不得逐牌列點。牌的名字可以自然融入句子中，但整體必須像一篇針對「${S.q}」寫的完整分析，讓人讀來一氣呵成。
+
+文章結構（內容無縫銜接，不需要顯示標題）：
+第一段：綜觀牌組整體能量，點出此問題的核心本質與現況，牌與牌之間的呼應在說什麼？
+第二段：深入分析——正逆位的對比、能量的流動、潛在的影響因素，如何共同回應「${S.q}」這個問題？${proj && proj.readings.length ? '\n結合過去占卜紀錄，指出此主題的發展脈絡與轉變。' : ''}
+第三段：整合所有訊息給出具體建議，語氣溫暖有力，讓問卜者感到被理解且有所啟發。
+
+約 400-500 字。請直接開始寫文章，不需要自我介紹。`;
+  }
+
+  const geminiBody = {
+    contents:[{parts:[{text:prompt}]}],
+    generationConfig:{temperature:.85,maxOutputTokens:8192},
+    systemInstruction:{parts:[{text:AI_SYS_TEXT()}]}
+  };
+
+  let resp, data;
+  let useOwnKey = !(proxyEmail && WORKER_URL);
+  if(!useOwnKey){
+    resp=await fetchRetry(()=>fetch(WORKER_URL+'/gemini',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({email:proxyEmail,body:geminiBody})
+    }));
+    data=await resp.json().catch(()=>({}));
+    if(!resp.ok){
+      if(resp.status===403){
+        // email 不再有效（訂閱到期/失效）→ 清掉本機解鎖狀態並給明確訊息
+        localStorage.removeItem('tr_verified_email');
+        if(typeof updateApiStatus==='function') updateApiStatus();
+        throw new Error(L('訂閱已到期或未生效，請續訂以繼續使用 AI 解牌','Your subscription has lapsed — please resubscribe to keep using AI readings'));
+      }
+      // 訂閱額度已滿(429)且用戶有自備 API Key → 自動改用自備 key，不中斷體驗
+      if(resp.status===429 && key){
+        useOwnKey=true;
+        toast(L('今日訂閱額度已滿，已自動改用你的 API Key 🔑','Daily subscription limit reached — switched to your own API key 🔑'));
+      } else {
+        throw new Error(data.error||`Worker ${resp.status}`);
+      }
+    }
+  }
+  if(useOwnKey){
+    const cleanKey=key.split('').filter(c=>c.charCodeAt(0)>=32&&c.charCodeAt(0)<=126).join('');
+    if(apiProvider(cleanKey)==='openai'){
+      return callOpenAI(cleanKey, AI_SYS_TEXT(), [{role:'user',content:prompt}]);
+    }
+    resp=await fetchRetry(()=>fetch(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent',
+      {method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':cleanKey},
+       body:JSON.stringify(geminiBody)}
+    ));
+    if(!resp.ok){const e=await resp.json().catch(()=>({}));throw new Error(`API ${resp.status}: ${e?.error?.message||resp.statusText}`);}
+    data=await resp.json();
+  }
+  if(data.error)throw new Error(data.error.message||data.error);
+  return data.candidates?.[0]?.content?.parts?.[0]?.text||L('無法取得回應','No response received');
+}
+
+// ── 暫時性錯誤自動重試：503（過載）/ 429（限流）/ 500，最多重試 2 次 ──
+async function fetchRetry(doFetch, tries=3){
+  let resp;
+  for(let i=0;i<tries;i++){
+    try{ resp=await doFetch(); }
+    catch(e){ if(i===tries-1)throw e; await new Promise(r=>setTimeout(r,2000*(i+1))); continue; }
+    if(resp.ok || ![503,429,500].includes(resp.status)) return resp;
+    if(i<tries-1) await new Promise(r=>setTimeout(r,2000*(i+1)));
+  }
+  return resp;
+}
+
+// ── OpenAI 支援：自備 sk- 開頭的 Key 時改走 OpenAI ──
+function AI_SYS_TEXT(){ return LANG==='en'
+  ? 'Respond only in English. Never use any markdown syntax (no *, **, #, -, • symbols). Output plain text paragraphs only. Do not assume the gender of the querent or of anyone in their situation; avoid gendered pronouns — use "they/them" or "this person" instead of he/she.'
+  : '你只能用繁體中文回覆。絕對不能使用任何 markdown 語法（不能用 *、**、#、-、• 等符號）。只能輸出純文字段落。不要預設提問者或對方的性別；避免使用「她」「妳」等帶性別的代名詞，一律改用中性的「他」，或視情況用「對方」「這個人」。請不要使用「TA」這種寫法。'; }
+function apiProvider(key){return key&&key.startsWith('sk-')?'openai':'gemini';}
+async function callOpenAI(key, sysText, messages){
+  const resp=await fetchRetry(()=>fetch('https://api.openai.com/v1/chat/completions',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
+    body:JSON.stringify({
+      model:'gpt-4o-mini',
+      temperature:.85,
+      max_completion_tokens:8192,
+      messages:[{role:'system',content:sysText},...messages]
+    })
+  }));
+  const d=await resp.json().catch(()=>({}));
+  if(!resp.ok)throw new Error(`OpenAI ${resp.status}: ${d?.error?.message||resp.statusText}`);
+  return d.choices?.[0]?.message?.content||'無法取得回應';
+}
+
+// ══════════════════════════════════════════
+//  BUILT-IN INTERPRETATION
+// ══════════════════════════════════════════
+// 牌義吉凶判斷：正位≠吉，要看牌義本身（如寶劍十、權杖五正位仍是辛苦牌）
+const NEG_STEMS = ['衝突','競爭','混亂','重擔','過度','負荷','痛苦','背叛','低谷','失去','失落','悲傷','哀慟','焦慮','恐懼','停滯','欺','束縛','災','毀','崩','壓力','孤獨','匱乏','拖延','逃避','犧牲','挫','失敗','損失','分離','終結','破裂','困','病','憂','背刺','倦怠','掙扎'];
+const NEG_STEMS_EN = ['conflict','rivalry','chaos','burden','overwhelm','overload','pain','betray','rock bottom','loss','lose','grief','sorrow','anxiety','fear','stagnat','deceit','bondage','restrict','disaster','ruin','collapse','stress','isolat','lonely','lack','scarcity','delay','avoid','escape','sacrifice','setback','fail','separat','ending','rupture','stuck','illness','worry','exhaust','struggle','crisis'];
+function kwIsHeavy(kws){
+  const stems = LANG==='en' ? NEG_STEMS_EN : NEG_STEMS;
+  const hits = kws.filter(k=>stems.some(s=>k.toLowerCase().includes(s))).length;
+  return hits >= 2 || hits >= Math.ceil(kws.length/3);
+}
+
+// ── 主題偵測：中英文皆可，從問題文字判斷主題 ──
+function detectTopic(q){
+  q=(q==null)?'':String(q);
+  const rules=[
+    ['health',/健康|身體|生病|手術|睡眠|體力|療養|health|body|sick|illness|surgery|sleep|wellness|fitness/i],
+    ['study',/學業|考試|讀書|學校|論文|證照|升學|成績|stud(y|ies)|exam|test|school|thesis|degree|grade|college|class/i],
+    ['money',/金錢|錢|財運|財務|投資|股票|收入|買房|負債|薪水|薪資|money|financ|invest|stock|income|salary|wealth|debt|cash|wage|budget/i],
+    ['career',/工作|事業|職場|職涯|老闆|同事|面試|轉職|創業|升遷|專案|案子|生意|客戶|合作|career|job|work|boss|colleague|interview|business|promotion|project|client|startup/i],
+    ['love',/感情|愛情|戀愛|喜歡|曖昧|關係|對方|復合|結婚|脫單|告白|分手|桃花|他|她|love|relationship|dating|crush|romance|partner|marriage|breakup|ex\b|him|her|boyfriend|girlfriend|spouse/i]
+  ];
+  for(const [k,re] of rules) if(re.test(q)) return k;
+  return 'general';
+}
+function topicLabel(topic){ return t('h.topic.'+topic); }
+
+// 財務（$）與健康（h）補充牌義：依標準偉特體系撰寫，u=正位 r=逆位
+const TOPIC_EXTRA={
+0:{u:{$:'財務上適合嘗試新的收入來源，但別孤注一擲，保留安全網再冒險。',h:'健康狀態輕盈有活力，適合開始新的運動習慣，留意因大意造成的小意外。'},r:{$:'警惕衝動消費與未經評估的投資，魯莽的財務決定會帶來損失。',h:'注意因粗心引起的扭傷跌撞，生活作息散漫正在消耗你的體力。'}},
+1:{u:{$:'你具備開源的技能與資源，主動爭取加薪、接案或談判都有利。',h:'身心協調狀態佳，意志力足以支持你建立新的健康計畫。'},r:{$:'小心金錢上的話術與詐騙，過度包裝的投資機會要查證再行動。',h:'精神緊繃、用腦過度，留意神經性的頭痛與失眠。'}},
+2:{u:{$:'有未公開的財務資訊，先觀望、多做功課，直覺會告訴你何時進場。',h:'身體正透過細微訊號與你溝通，放慢腳步傾聽，重視睡眠與內分泌平衡。'},r:{$:'財務狀況有被隱瞞的部分，帳目、合約細節要親自查核。',h:'壓抑的情緒正轉化為身體症狀，婦科、荷爾蒙或睡眠問題需正視。'}},
+3:{u:{$:'財務豐饒期，收入穩定成長，投資自己與享受生活都值得。',h:'身體富有滋養能量，與懷孕、生育相關的事項有正面跡象。'},r:{$:'留意過度寵溺自己造成的透支，奢侈消費正在侵蝕儲蓄。',h:'注意飲食過量與代謝問題，照顧別人之餘別忽略自己的身體。'}},
+4:{u:{$:'適合建立財務制度：預算、定期定額、長期規劃，穩健累積資產。',h:'規律作息是你健康的基石，骨骼、關節需要持續保養。'},r:{$:'財務控制權出現問題，可能被強勢者支配，或自己過度死板錯失機會。',h:'壓力型的高血壓與肩頸僵硬，放下事必躬親的執著。'}},
+5:{u:{$:'遵循正規管道理財最有利，向專業顧問請教勝過自己摸索。',h:'傳統調理方式適合你，規律的生活儀式能穩定身心。'},r:{$:'別盲從理財權威或跟單，主流建議未必適合你的狀況。',h:'別人的養生方法不一定適合你，傾聽自己身體的反應。'}},
+6:{u:{$:'面臨重要的財務選擇，依照價值觀而非短利做決定會更長久。',h:'身心和諧，伴侶或夥伴的支持對你的健康有正面影響。'},r:{$:'財務決策搖擺不定，或因感情因素做出不理性的金錢安排。',h:'內在矛盾消耗能量，選擇困難帶來的焦慮影響睡眠品質。'}},
+7:{u:{$:'設定明確財務目標並全力衝刺，收入有突破性進展的機會。',h:'意志力旺盛，適合挑戰體能目標，但別忽略身體的極限。'},r:{$:'財務失速，收支方向混亂，先停下來重整再前進。',h:'過度逞強導致身體抗議，留意運動傷害與過勞。'}},
+8:{u:{$:'以耐心與紀律馴服金錢焦慮，溫和而持續的儲蓄策略最有效。',h:'身體的自癒力強，溫和的調養勝過激烈的手段。'},r:{$:'內在的匱乏感驅動非理性消費，先安頓情緒再處理金錢。',h:'免疫力與情緒低落相關，自我懷疑正在削弱你的體力。'}},
+9:{u:{$:'適合獨立研究理財知識，減少社交開銷，簡樸生活讓財務更清晰。',h:'需要獨處與靜養，冥想、早睡對你此刻的身體最有幫助。'},r:{$:'過度封閉讓你錯過財務資訊與貴人，適度開放交流。',h:'孤立感正在影響心理健康，別把自己關起來硬撐。'}},
+10:{u:{$:'財運出現轉機，時機站在你這邊，把握流動中的機會。',h:'身體狀態進入新週期，順勢調整作息能事半功倍。'},r:{$:'財務運勢暫時低迷，避免此刻做重大投資，等週期翻轉。',h:'健康起伏不定，舊疾可能反覆，耐心度過低潮期。'}},
+11:{u:{$:'財務上的合約、稅務、法律事項結果公正，誠實申報對你有利。',h:'身體需要平衡：飲食、運動、休息三者不可偏廢。'},r:{$:'留意不公平的合約條款或財務糾紛，必要時尋求法律協助。',h:'生活嚴重失衡，某一方面的放縱正在付出健康代價。'}},
+12:{u:{$:'財務暫時停滯反而是機會，換個角度看待金錢，暫緩大額支出。',h:'被迫的休息是身體的智慧，順從它，別急著復出。'},r:{$:'不必要的犧牲與拖延正在損耗財務，該止損就止損。',h:'長期僵持的姿勢與心態造成循環不良，是時候改變了。'}},
+13:{u:{$:'一個財務階段正在結束：舊的收入模式淘汰後，新的才會出現。',h:'身體正在深度汰舊換新，配合排毒與休息，轉化後更強壯。'},r:{$:'抗拒必要的財務斷捨離，賠錢的投資不願認賠反而越陷越深。',h:'拖延就醫或不願改變傷身的習慣，問題正在累積。'}},
+14:{u:{$:'中庸的理財配置最適合你，分散風險、細水長流。',h:'身心代謝協調，適度節制飲食與作息讓狀態更穩定。'},r:{$:'收支失衡、極端操作，財務需要重新調配比例。',h:'生活節奏失調，暴飲暴食或過度節制都在傷害身體。'}},
+15:{u:{$:'留意債務、賭性與物質慾的綑綁，高報酬誘惑背後是枷鎖。',h:'警惕成癮性習慣：菸酒、糖分、熬夜正在綁架你的健康。'},r:{$:'你正在掙脫財務枷鎖，戒除壞習慣、償清債務的好時機。',h:'擺脫依賴的轉捩點，身體會隨著戒斷逐漸找回自由。'}},
+16:{u:{$:'財務可能出現突發狀況，預備金是你的救生圈，崩塌後重建更穩。',h:'留意突發性的健康警訊，及時檢查能把衝擊降到最低。'},r:{$:'財務危機被暫時延後但未解除，主動處理勝過等它爆發。',h:'身體的警訊被你壓下來了，小症狀正在醞釀大問題。'}},
+17:{u:{$:'財務黑暗期已過，前景重燃希望，長期投資此刻播種。',h:'療癒與復原的能量強，慢性問題出現好轉的曙光。'},r:{$:'對財務前景悲觀讓你錯失機會，希望仍在，只是你暫時看不見。',h:'康復比預期慢而令人氣餒，別放棄調養的步調。'}},
+18:{u:{$:'財務資訊不明朗，數字背後可能有隱情，直覺告訴你哪裡不對勁。',h:'情緒與潛意識影響身體，留意睡眠品質與莫名的不適。'},r:{$:'迷霧散去，財務真相浮現，之前的不安終於有了答案。',h:'困擾已久的症狀找到原因，焦慮緩解後身體跟著好轉。'}},
+19:{u:{$:'財運明朗，收入透明且成長，適合公開合作與正當擴張。',h:'活力充沛、氣色明亮，多曬太陽與戶外活動放大這份能量。'},r:{$:'財務樂觀過頭，數字沒有想像中漂亮，重新核實再慶祝。',h:'活力暫時被烏雲遮蔽，疲憊與低落是提醒你休息的訊號。'}},
+20:{u:{$:'過去的財務努力迎來總結算，舊投資回收、呆帳了結。',h:'是健康總體檢的好時機，誠實面對檢查結果並更新生活方式。'},r:{$:'逃避面對財務現況只會拖延重生，攤開帳本是第一步。',h:'忽視身體的呼喚太久了，該做的檢查別再拖。'}},
+21:{u:{$:'一個財務目標圓滿達成，享受成果，下一階段將更上層樓。',h:'身心完整和諧，維持現有節奏即是最好的保養。'},r:{$:'財務目標只差最後一哩路，別在終點前鬆懈。',h:'調養已近完成但未竟全功，再堅持一段時間。'}},
+22:{u:{$:'新的收入機會點燃，行動力就是財運，立即開始。',h:'精力如火般旺盛,適合開啟新的鍛鍊計畫。'},r:{$:'新財源雷聲大雨點小，熱情消退前先確認可行性。',h:'起步的衝勁熄火，找回動機比勉強硬練重要。'}},
+23:{u:{$:'財務藍圖正在擘劃，眼光放遠，為更大的版圖做準備。',h:'狀態穩定，是規劃長期健康目標的好時機。'},r:{$:'格局太小或不敢跨出去，財務停在規劃永遠不會成長。',h:'猶豫不決讓健康計畫停滯，先跨出第一步。'}},
+24:{u:{$:'先前的投資開始出現回音，持續拓展，船正在進港。',h:'體能進入回報期，之前的鍛鍊成果逐漸顯現。'},r:{$:'預期的進帳延遲，現金流要預留緩衝。',h:'復原比預期慢，調整期望值，持續就有效。'}},
+25:{u:{$:'財務根基穩固，值得慶祝小里程碑，家庭相關支出順利。',h:'身心安定和諧，與家人朋友的歡聚是良藥。'},r:{$:'表面穩定但根基鬆動，檢視固定開銷裡的隱形漏洞。',h:'安逸讓你疏於保養，舒適圈正在侵蝕體能。'}},
+26:{u:{$:'財務上面臨多方競爭，比價、議價、競標，混戰中保持策略。',h:'壓力源四面八方，肌肉緊繃需要釋放的出口。'},r:{$:'避開無謂的金錢糾紛，退一步省下的不只是錢。',h:'累積的衝突壓力終於緩解，給身體時間修復。'}},
+27:{u:{$:'財務成果獲得肯定：加薪、獎金或投資告捷，乘勝追擊。',h:'狀態達到高峰，自信讓你容光煥發。'},r:{$:'期待的財務肯定落空，檢討策略而非否定自己。',h:'過度在意表現反而拖垮身體，放下比較心。'}},
+28:{u:{$:'你的財務立場受到挑戰，堅守底線，不要輕易讓利。',h:'防禦性的緊繃消耗體力，適度示弱也是保養。'},r:{$:'寡不敵眾的財務壓力，先守住核心資產，其餘從長計議。',h:'長期硬撐已到極限，求助不可恥。'}},
+29:{u:{$:'財務進展加速，多筆款項快速流動，把握高效期。',h:'代謝與循環暢旺，是減重與調理的黃金期。'},r:{$:'金流突然卡住，耐心疏通，急躁只會出錯。',h:'節奏被打亂，先穩住作息再談進步。'}},
+30:{u:{$:'財務上保持警戒是對的，但你比想像中更有底氣。',h:'久戰的疲憊累積，撐住的同時安排真正的休息。'},r:{$:'過度防備讓你錯失機會，並非人人都想佔你便宜。',h:'慢性疲勞已影響判斷，徹底休息是當務之急。'}},
+31:{u:{$:'財務責任沉重，學會分擔與斷捨離，不必全部自己扛。',h:'過勞警訊明顯，腰背痠痛是身體在抗議負重。'},r:{$:'你正在放下不屬於你的財務重擔，輕盈感即將回來。',h:'卸下重擔後的恢復期，讓緊繃的身體慢慢鬆開。'}},
+32:{u:{$:'帶著好奇心學習新的理財知識，小額嘗試新工具。',h:'對新的運動或飲食法躍躍欲試，從輕量開始。'},r:{$:'三分鐘熱度的理財學習難有成果，挑一樣深入。',h:'健康計畫只停在收集資訊，遲遲沒有開始。'}},
+33:{u:{$:'財務行動力十足，但快進快出要設停損，衝勁是雙面刃。',h:'活力爆發期，挑戰性運動適合你，注意安全防護。'},r:{$:'魯莽的金錢決定與半途而廢，先冷靜再出手。',h:'運動傷害風險高，熱身與節制缺一不可。'}},
+34:{u:{$:'以溫暖自信的方式經營財務人脈，魅力帶來機會。',h:'由內而外的健康光彩，自信是最好的保養品。'},r:{$:'別為了面子打腫臉充胖子，虛榮消費正在失血。',h:'情緒起伏大，嫉妒與比較心正在燃燒你的能量。'}},
+35:{u:{$:'以願景領導財務佈局，大膽但有擔當的投資風格。',h:'精力管理得當，以身作則的健康領導者。'},r:{$:'獨斷的財務決策聽不進建議，小心翻車。',h:'暴躁易怒傷肝耗神，學習把火氣轉化為動力。'}},
+36:{u:{$:'錢要流向滋養心靈的地方，有意義的消費帶來真富足。',h:'情緒健康正盛，心臟與情感系統都被好好滋養。'},r:{$:'情緒性消費填不滿內心的洞，先處理感受再花錢。',h:'情緒淤積影響食慾與睡眠，找到健康的宣洩口。'}},
+37:{u:{$:'互惠的財務合作運佳，公平的拆帳與共同帳戶順利。',h:'與人的深刻連結是你的養分，關係和諧身體就好。'},r:{$:'財務合作出現裂痕，帳目分明才能保住關係。',h:'關係失衡的內耗反映在身體上，誠實溝通是解方。'}},
+38:{u:{$:'值得為慶祝與社交花費，人脈聚會中藏著財務機會。',h:'歡聚與歡笑是天然的免疫力，多與好友相聚。'},r:{$:'社交開銷失控，宴樂過度正在掏空荷包。',h:'狂歡後的透支，身體需要安靜的修復期。'}},
+39:{u:{$:'對眼前的財務機會無感？重新盤點，禮物可能被你忽略。',h:'倦怠感是訊號：不是身體壞了，是心累了。'},r:{$:'走出財務麻木期，重新看見被忽略的機會。',h:'從低潮中甦醒，胃口與興致正在回來。'}},
+40:{u:{$:'為失去的錢悲傷沒關係，但別忘了還留在手上的部分。',h:'悲傷需要出口也需要期限，別讓情緒拖垮身體。'},r:{$:'從財務損失中站起來，剩下的資源足夠重新開始。',h:'走出情緒低谷，身體的元氣隨著心情回升。'}},
+41:{u:{$:'與過去相關的財務出現：舊客戶回頭、長輩餽贈或童年技能變現。',h:'重拾年少時喜歡的活動，懷舊的快樂滋養身心。'},r:{$:'活在過去的財務輝煌裡無法前進，往前看。',h:'舊習慣不一定適合現在的身體，更新你的保養方式。'}},
+42:{u:{$:'財務選項眼花撩亂，美夢與泡影並存，落地評估再選。',h:'想做的養生法太多反而都沒做，挑一個開始。'},r:{$:'幻象散去，財務目標終於清晰，開始踏實執行。',h:'從不切實際的健康幻想回到具體行動。'}},
+43:{u:{$:'是時候離開無利可圖的財務佈局，轉身需要勇氣。',h:'離開消耗你的環境，是最深層的養生。'},r:{$:'明知該止損卻徘徊不去，留下來的成本越來越高。',h:'想改變又怕改變，糾結本身就在耗損元氣。'}},
+44:{u:{$:'財務願望接近實現，知足與感恩讓豐盛持續。',h:'身心滿足度高，享受當下就是最好的療癒。'},r:{$:'表面豐盛內在空虛，金錢買不到你真正想要的。',h:'放縱享樂後的空虛與虛胖，回歸簡單的滿足。'}},
+45:{u:{$:'家庭財務圓滿，世代之間的金錢流動和諧。',h:'家庭和樂是你健康的土壤，歸屬感療癒一切。'},r:{$:'家庭財務期待造成壓力，理想與現實需要磨合。',h:'家庭關係的張力影響健康，界線是必要的。'}},
+46:{u:{$:'以玩心探索理財新知，天馬行空中有真機會。',h:'好奇心讓你嘗試新的健康方式，保持輕鬆的心。'},r:{$:'理財上的天真讓你容易受騙，多問多查。',h:'情緒化的飲食與作息，需要大人式的自我照顧。'}},
+47:{u:{$:'追逐理想中的財務藍圖，浪漫但記得設定查核點。',h:'身心追求美好狀態，藝術與美感活動滋養你。'},r:{$:'財務承諾說得漂亮卻難兌現，看行動不看言語。',h:'逃避現實的習慣影響規律作息，回到當下。'}},
+48:{u:{$:'憑直覺感知金錢的流向，你的財務第六感此刻很準。',h:'情緒穩定深沉，是身心整合的療癒期。'},r:{$:'情緒淹沒理智的金錢決定，先穩定心情再動錢。',h:'多愁善感的內耗，留意情緒性的身體症狀。'}},
+49:{u:{$:'以成熟的情緒智慧管理財富，家人財務由你穩住大局。',h:'情緒駕馭自如，身心如平靜的深海般穩定。'},r:{$:'壓抑的情緒以失控的消費爆發，誠實面對感受。',h:'長期壓抑情緒的代價浮現，找專業的傾訴管道。'}},
+50:{u:{$:'財務思路豁然開朗，新的理財策略一刀見血。',h:'頭腦清晰的決斷期，適合做健康上的重大決定。'},r:{$:'財務判斷失準，資訊混亂時先不要出手。',h:'思緒混亂影響睡眠，大腦需要關機時間。'}},
+51:{u:{$:'兩個財務選項僵持不下，逃避不會讓答案出現，攤開數字。',h:'壓力被刻意忽視，閉上眼睛問題仍在。'},r:{$:'僵局打破，被迫面對的財務真相反而帶來解脫。',h:'卸下心防後緊繃緩解，視野重新打開。'}},
+52:{u:{$:'財務上的傷害已造成：被倒帳、虧損或背叛，痛過才能清創。',h:'心痛是真實的生理感受，給自己療傷的時間。'},r:{$:'財務創傷正在癒合，原諒不是為了對方而是放過自己。',h:'走出心碎期，胸口的鬱結逐漸鬆開。'}},
+53:{u:{$:'財務活動暫停休兵，這段靜止期是為了走更長的路。',h:'強制休息令已下達，睡眠是此刻唯一的任務。'},r:{$:'休息夠了，重新啟動財務計畫的時候到了。',h:'復原期結束，循序漸進回到正常節奏。'}},
+54:{u:{$:'贏了金錢輸了關係的風險，這場財務勝利的代價要算清楚。',h:'競爭心態讓神經緊繃，贏不是健康的全部。'},r:{$:'從零和遊戲中退出，停戰省下的心力價值連城。',h:'放下對抗後，長期緊繃的身體終於能呼吸。'}},
+55:{u:{$:'財務狀況正從風暴駛向平靜，過渡期保持低調穩健。',h:'復原的航道上，平穩的日常就是最好的藥。'},r:{$:'想擺脫財務困境卻一直在原地打轉，可能需要外力協助。',h:'舊的壓力源一直跟著你，換環境不如換心境。'}},
+56:{u:{$:'留意財務上的灰色操作，無論是別人的算計或自己的僥倖。',h:'迴避型的應對方式讓問題地下化，誠實面對身體。'},r:{$:'隱瞞的財務問題被攤開，坦白後反而輕鬆。',h:'停止自欺欺人的養生方式，面對真實數據。'}},
+57:{u:{$:'自我設限讓財務動彈不得，束縛大多是想像出來的。',h:'焦慮性的無力感，身體其實比你想的更有行動力。'},r:{$:'掙脫自我設限，財務選項比你以為的多。',h:'從受困感中解放，恢復行動的自由。'}},
+58:{u:{$:'對金錢的焦慮在深夜放大，攤在陽光下大多沒那麼可怕。',h:'失眠與焦慮互為因果，先處理夜間的思緒迴圈。'},r:{$:'財務惡夢醒來，現實比恐懼溫和許多。',h:'焦慮高峰已過，睡眠品質逐步回穩。'}},
+59:{u:{$:'財務谷底已到，最壞的已經發生，接下來只剩上坡。',h:'身心耗竭的最低點，承認倒下才能真正重建。'},r:{$:'從財務谷底緩慢爬起，復甦比想像中慢但方向正確。',h:'大病初癒般的恢復期，急不得也停不得。'}},
+60:{u:{$:'用旺盛的好奇心收集財務情報，多看多問少出手。',h:'對健康新知敏銳，求證後再實踐。'},r:{$:'道聽塗說的理財消息不可信，留意八卦造成的誤判。',h:'網路偏方別亂試，諮詢專業才安全。'}},
+61:{u:{$:'財務決策快狠準的時機，但衝鋒前確認方向正確。',h:'行動力極強，注意快節奏下的意外風險。'},r:{$:'橫衝直撞的財務操作必有損傷，先冷靜。',h:'急躁讓你受傷，慢下來反而更快。'}},
+62:{u:{$:'以理性與經驗做財務判斷，剪除情緒因素後答案清晰。',h:'清明的自律讓身體維持精準狀態。'},r:{$:'過度嚴苛的財務批判，對自己對別人都太冷。',h:'苛刻的自我要求正在傷害身心，溫柔一點。'}},
+63:{u:{$:'以專業與原則掌舵財務，複雜局面需要你的冷靜權威。',h:'理智管理健康數據，定期檢查、科學保養。'},r:{$:'冷酷的財務操控或被操控，權力遊戲終會反噬。',h:'用腦過度而忽略感受，身體不是機器。'}},
+64:{u:{$:'實質的財務新機會落地：新工作、新合約或第一桶金。',h:'打好身體底子的最佳起點，從基礎習慣開始。'},r:{$:'到手的機會留不住，檢視漏財的破口。',h:'好的開始遲遲無法落實，先求有再求好。'}},
+65:{u:{$:'多頭收支靈活調度中，平衡是動態的藝術。',h:'多工生活中維持平衡，彈性排程保住運動時間。'},r:{$:'蠟燭多頭燒導致財務失衡，簡化是唯一解。',h:'忙到失衡的身體開始抗議，砍掉一些承諾。'}},
+66:{u:{$:'專業合作帶來穩定報酬，你的技術正被市場認可。',h:'與專業人士（教練、醫師）合作調理，效果加倍。'},r:{$:'單打獨鬥限制了收入，平庸的成果來自不願協作。',h:'閉門造車的健康管理效果有限，尋求專業。'}},
+67:{u:{$:'守成有理，但過度緊抓讓錢無法生錢，安全感別全押在存款。',h:'防衛性的緊繃：握緊的拳頭無法接住新的能量。'},r:{$:'鬆開對金錢的死守，適度的流動與分享帶來新機。',h:'學會放鬆與付出，緊繃的身心終於透氣。'}},
+68:{u:{$:'財務寒冬中別忘了求助，支援其實就在門邊。',h:'匱乏感比實際匱乏更傷身，接受幫助不丟臉。'},r:{$:'財務困境出現轉機，寒冬將盡，援手已至。',h:'低潮觸底回升，身心的暖意正在回流。'}},
+69:{u:{$:'財務付出與回收的良性循環，慷慨與受惠都自在。',h:'施與受平衡的人際網絡，是你健康的隱形支柱。'},r:{$:'金錢往來的權力不對等：附帶條件的給予是控制。',h:'過度付出而不懂接受，照顧者也需要被照顧。'}},
+70:{u:{$:'投資進入靜待收成期，評估後再決定加碼或收割。',h:'保養的成效需要時間發酵，耐心是此刻的功課。'},r:{$:'白忙一場的挫折感，檢討投入產出比再重新配置。',h:'看不到成效就想放棄？調整方法而非歸零。'}},
+71:{u:{$:'磨練專業就是最好的投資，技能的複利正在累積。',h:'健康是日復一日的工藝，微小的堅持成就大改變。'},r:{$:'敷衍了事的態度反映在收入上，重拾匠人精神。',h:'三天打魚兩天曬網，健康習慣需要重新紮根。'}},
+72:{u:{$:'憑自己掙來的豐盛生活，獨立與品味兼得，享受應得的。',h:'自律換來的從容狀態，優雅地享受獨處與保養。'},r:{$:'入不敷出的精緻生活，體面背後是透支。',h:'追求外表光鮮而犧牲內在健康，本末倒置。'}},
+73:{u:{$:'長期財富的圓滿：資產、傳承與家族安穩兼備。',h:'世代健康的根基穩固，家族的支持是長壽配方。'},r:{$:'家族財務的糾葛：遺產、啃老或金援壓力需要界線。',h:'家族遺傳的健康課題，及早預防勝於治療。'}},
+74:{u:{$:'以學徒心態鑽研理財，踏實的小額實驗累積經驗。',h:'認真學習身體知識，紀錄與觀察是好的開始。'},r:{$:'理財學習半途而廢，紙上談兵沒有實作。',h:'健康計畫永遠停在明天開始，今天就動。'}},
+75:{u:{$:'緩慢但極其可靠的財務累積，烏龜策略終將勝出。',h:'穩定到近乎無聊的養生節奏，正是長壽的秘訣。'},r:{$:'過度保守讓資產原地踏步，適度調整配置。',h:'一成不變的慣性讓身體僵化，加入一點新刺激。'}},
+76:{u:{$:'務實與溫暖兼具的理財風格，把資源化為實際的照顧。',h:'身土不二的生活智慧：好食物、好環境、好身體。'},r:{$:'為他人操心財務而自顧不暇，先把自己顧好。',h:'忙於照顧所有人，唯獨忘了自己的健康檢查。'}},
+77:{u:{$:'財富版圖的王者格局，事業與資產都進入成熟豐收期。',h:'資源充足的從容讓身心安穩，享受成就也維持節制。'},r:{$:'守財奴式的固執或炫富式的揮霍，財富觀需要校準。',h:'應酬與安逸堆出的健康赤字，富貴更要養生。'}}
+};
+
+function topicSentence(topic,cid,rev){
+  // 財務/健康優先使用補充牌義
+  const ex=topicExtraOf(cid);
+  if((topic==='money'||topic==='health') && ex){
+    const e=ex[rev?'r':'u'][topic==='money'?'$':'h'];
+    if(e) return LANG==='en' ? (topic==='money'?'On money: ':'On health: ')+e : (topic==='money'?'財務上，':'健康上，')+e;
+  }
+  if(LANG==='en'){
+    // 英文：結構化欄位 love/career；缺漏時取牌義第一句
+    const en=EN_CARD[cid] && EN_CARD[cid][rev?'r':'u'];
+    if(en){
+      if(topic==='love' && en.love) return en.love;
+      if((topic==='career'||topic==='money'||topic==='study') && en.career) return en.career;
+    }
+    const m=cardMeaning(cid,rev); return m.split('. ')[0].replace(/\.$/,'')+'.';
+  }
+  // 中文：從牌義抽「感情上…」「事業上…」段
+  const m=cardMeaning(cid,rev);
+  const tag = topic==='love' ? '感情上' : (topic==='career'||topic==='money'||topic==='study') ? '事業上' : '';
+  if(tag){
+    const i=m.indexOf(tag);
+    if(i>=0){
+      const rest=m.slice(i);
+      const next=rest.slice(3).search(/感情上|事業上/);
+      let seg = next>=0 ? rest.slice(0,next+3) : rest;
+      seg=seg.replace(/[，、；]$/,'');
+      if(!seg.endsWith('。'))seg+='。';
+      return seg;
+    }
+  }
+  return m.split('。')[0]+'。';
+}
+// 組出主題段落：挑最多 3 張牌，抽出主題對應牌義
+function buildTopicHtml(topic, indices){
+  if(topic==='general'||!indices.length) return '';
+  const dash = LANG==='en' ? ' — ' : '——';
+  const lines=indices.slice(0,3).map(di=>{
+    const {cid,rev}=S.deck[di];
+    return `<span style="color:var(--gold)">${cardName(cid)}${revLabel(rev)}</span>${dash}${topicSentence(topic,cid,rev)}`;
+  });
+  return LANG==='en'
+    ? `<p class="interp-p">Focused on your "<span style="color:var(--gold)">${topicLabel(topic)}</span>" question: ${lines.join(' ')}</p>`
+    : `<p class="interp-p">聚焦在你問的「<span style="color:var(--gold)">${topicLabel(topic)}</span>」層面：${lines.join('')}</p>`;
+}
+
+function buildInterpBuiltin(){
+  // 無視論（重點牌/輔助牌）解法只適用於五張無視論牌陣
+  if(S.type==='five') return buildInterpWuxi();
+  return buildInterpPositional();
+}
+
+// ── 無視論五張牌陣：少數牌 = 重點牌，定整體方向 ──
+function buildInterpWuxi(){
+  const n = S.picked.length;
+  const revCount = S.picked.filter(di=>S.deck[di].rev).length;
+  const uprCount = n - revCount;
+
+  // 五張牌不會平手；只有全正/全逆時沒有重點牌
+  const hasMinority = revCount > 0 && uprCount > 0;
+  const keyIsRev = hasMinority && revCount < uprCount;  // 逆位是少數 → 逆位是重點
+  const keyRev = hasMinority ? keyIsRev : revCount === n;
+
+  const sep=SEP(), en=LANG==='en';
+  const cardNames = [], allKw = [], keyKw = [], supKw = [], keyCards = [], supCards = [], keyIdx = [];
+
+  S.picked.forEach((di,i)=>{
+    const {cid,rev}=S.deck[di]; const kw=cardKw(cid,rev);
+    cardNames.push(cardName(cid)+revLabel(rev));
+    allKw.push(...kw.slice(0,2));
+    const isKey = !hasMinority ? null : (keyIsRev ? rev : !rev);
+    if(isKey===null||isKey){ keyKw.push(...kw.slice(0,3)); if(isKey!==null){ keyCards.push(cardName(cid)+revLabel(rev)); keyIdx.push(di); } }
+    else { supKw.push(...kw.slice(0,2)); supCards.push(cardName(cid)); }
+  });
+
+  const dominantKw = [...new Set(keyKw.length ? keyKw : allKw)].slice(0,4).join(sep);
+  const supportKw = [...new Set(supKw)].slice(0,4).join(sep);
+  const revRatio = revCount===0?L('全數正位','all upright'):revCount===n?L('全數逆位','all reversed'):en?`${revCount} reversed, ${uprCount} upright`:`${revCount} 逆 ${uprCount} 正`;
+
+  const rowsHtml = S.picked.map((di,i)=>{
+    const {cid,rev}=S.deck[di];
+    const isKey = !hasMinority ? null : (keyIsRev ? rev : !rev);
+    const badge = isKey===null ? '' : isKey
+      ? `<span class="wuxi-badge key" style="margin-right:6px;vertical-align:middle">${L('重點','Key')}</span>`
+      : `<span class="wuxi-badge sup" style="margin-right:6px;vertical-align:middle">${L('輔助','Support')}</span>`;
+    const revSpan = rev ? `<span style="color:var(--red);font-size:.75rem">${L('逆','R')}</span>` : `<span style="color:var(--muted);font-size:.75rem">${L('正','U')}</span>`;
+    return `<div style="display:flex;align-items:baseline;gap:4px;padding:4px 0;border-bottom:1px solid rgba(212,175,55,.08)">
+      ${badge}<span style="color:var(--muted);font-size:.8rem;min-width:28px">${S.pos[i]}</span>
+      <span style="font-size:.88rem;color:var(--white)">${cardName(cid)}</span>${revSpan}
+      <span style="color:var(--gold);font-size:.78rem;margin-left:4px">${en?`"${cardKw(cid,rev).slice(0,3).join(', ')}"`:`「${cardKw(cid,rev).slice(0,3).join('、')}」`}</span>
+    </div>`;
+  }).join('');
+
+  const isHeavy = kwIsHeavy(keyKw.length ? keyKw : allKw);
+
+  let conclusionText = '';
+  if(keyCards.length){
+    const kc=keyCards.join(sep);
+    if(keyRev){
+      conclusionText = en
+        ? `The key card(s) (${kc}) appear reversed, setting the core of this spread: "${dominantKw}" — for "${S.q}", energy or resistance that asks you to pause and re-examine.`
+        : `重點牌（${kc}）以逆位定調，核心是「${dominantKw}」——關於「${S.q}」，有需要停下來重新審視的能量或阻力。`;
+    } else if(isHeavy){
+      conclusionText = en
+        ? `The key card(s) (${kc}) are upright, core: "${dominantKw}". The meanings lean toward testing, so "${S.q}" brings real tasks — but they're out in the open, so meeting them head-on works.`
+        : `重點牌（${kc}）正位定調，核心是「${dominantKw}」。牌義偏向考驗，關於「${S.q}」眼前有實際課題；但困難都攤在檯面上，正面處理即可。`;
+    } else {
+      conclusionText = en
+        ? `The key card(s) (${kc}) are upright, setting the core: "${dominantKw}" — the main energy carrying you forward, so trust this momentum.`
+        : `重點牌（${kc}）正位定調，核心是「${dominantKw}」——這是推動你前進的主要能量，順勢而行即可。`;
+    }
+    if(supCards.length) conclusionText += en
+      ? ` Supporting cards (${supCards.join(sep)}) add the context of "${supportKw}".`
+      : `輔助牌（${supCards.join(sep)}）補充「${supportKw}」的脈絡。`;
+  } else {
+    if(keyRev){
+      conclusionText = en
+        ? `The whole spread is reversed — reflection and adjustment, centered on "${dominantKw}". A time to look inward rather than force things forward.`
+        : `牌組全數逆位，整體偏向反思與調整，核心圍繞「${dominantKw}」——此刻更適合向內審視，而非強行推進。`;
+    } else if(isHeavy){
+      conclusionText = en
+        ? `The whole spread is upright, energy direct and clear, centered on "${dominantKw}". The meanings lean toward testing, so "${S.q}" brings real pressure — but it's all in the open, so meeting it head-on is best.`
+        : `牌組全數正位、能量直接展現，核心圍繞「${dominantKw}」。牌義偏向考驗，關於「${S.q}」有實際壓力；但挑戰都在檯面上，正面應對最好。`;
+    } else {
+      conclusionText = en
+        ? `The overall energy is positive, focused on "${dominantKw}" — you already hold what you need, so trust your direction.`
+        : `牌組整體能量積極，核心聚焦「${dominantKw}」——你已具備所需的資源，信任自己的方向即可。`;
+    }
+  }
+
+  // 逐張列出全部 5 張對你問題的訊息（標示重點/輔助），讓基本解讀更完整、不只講重點牌
+  const topic = detectTopic(S.q);
+  const dash = en ? ' — ' : '——';
+  const cardSentence = (cid,rev)=> topic==='general'
+    ? (en ? (cardMeaning(cid,rev).split('. ')[0].replace(/\.$/,'')+'.') : cardMeaning(cid,rev).split('。')[0]+'。')
+    : topicSentence(topic,cid,rev);
+  const perCardItems = S.picked.map(di=>{
+    const {cid,rev}=S.deck[di];
+    const isKey = !hasMinority ? null : (keyIsRev ? rev : !rev);
+    const badge = isKey===null ? '' : isKey
+      ? `<span class="wuxi-badge key" style="margin-right:6px;vertical-align:middle">${L('重點','Key')}</span>`
+      : `<span class="wuxi-badge sup" style="margin-right:6px;vertical-align:middle">${L('輔助','Support')}</span>`;
+    return `<div style="padding:8px 0;border-bottom:1px solid rgba(212,175,55,.08);font-size:.9rem;line-height:1.8">${badge}<span style="color:var(--gold)">${cardName(cid)}${revLabel(rev)}</span>${dash}${cardSentence(cid,rev)}</div>`;
+  }).join('');
+  const perCardHeading = topic==='general'
+    ? L('五張牌各自給你的訊息','What each of the five cards tells you')
+    : en ? `Focused on "${topicLabel(topic)}" · each card's message` : `聚焦「${topicLabel(topic)}」· 每張牌給你的訊息`;
+  const topicHtml = `<div style="margin:12px 0">
+    <div style="font-family:'Cinzel',serif;font-size:.78rem;color:var(--gold);letter-spacing:.08em;margin-bottom:6px">${perCardHeading}</div>
+    ${perCardItems}</div>`;
+  const intro = en
+    ? `For your question "${S.q}", this spread brings the combined energy of ${cardNames.join(', ')}.`
+    : `針對你的問題「${S.q}」，這次牌組帶出了 ${cardNames.join('、')} 的組合能量。`;
+  const foot = L('以上為無視論的初步梳理。想要結合感情連結牌組、數字象徵與你個人脈絡的「深度解讀」，可解鎖 AI 解牌。','An initial read by the Wuxi method. Unlock AI readings for a deeper analysis that weaves in card-combos, numerology and your personal context.');
+
+  // 醒目「關鍵結論」：依重點牌的正逆與吉凶傾向給一句明確方向（與其他牌陣一致）
+  let wuxiV='', wuxiHook='';
+  if(keyRev){ wuxiV=L(`明確結論：核心能量偏向「內省與調整」。關於「${S.q}」，此刻更適合向內檢視、放慢腳步，而非強行推進——時機尚未成熟，但你可以先把方向校準好。`,`Clear verdict: the core energy leans toward reflection and adjustment. For "${S.q}", now favors looking inward and slowing down rather than forcing ahead — the timing isn't ripe yet, but you can recalibrate your direction first.`); wuxiHook=DEEP_HOOK(); }
+  else if(isHeavy){ wuxiV=L(`明確結論：能量直接、但偏向考驗。關於「${S.q}」，眼前有實際課題要面對；好消息是困難都攤在檯面上、沒有暗流，正面迎戰就是現在最好的策略。`,`Clear verdict: the energy is direct but leans toward testing. For "${S.q}", there are real tasks ahead — the good news is the challenges are all out in the open with no hidden undercurrents, so meeting them head-on is the best strategy now.`); wuxiHook=DEEP_HOOK(); }
+  else { wuxiV=L(`明確結論：整體走勢正向。關於「${S.q}」，你已具備所需的資源與動力，順著這股能量推進就對了。`,`Clear verdict: the overall trajectory is positive. For "${S.q}", you already have the resources and momentum you need — move with this energy.`); }
+
+  const wuxiCards = S.picked.map(di=>({cid:S.deck[di].cid, rev:S.deck[di].rev, kw:cardKw(S.deck[di].cid,S.deck[di].rev)}));
+  return `
+    <p class="interp-p">${intro}</p>
+    <div style="margin:14px 0 10px;padding:12px 14px;background:rgba(42,22,96,.25);border-radius:8px;border:1px solid rgba(212,175,55,.12)">
+      <div style="font-family:'Cinzel',serif;font-size:.72rem;color:rgba(212,175,55,.6);letter-spacing:.12em;margin-bottom:8px">${L('無視論分析','Wuxi Analysis')} · ${revRatio}</div>
+      ${rowsHtml}
+    </div>
+    ${verdictBox(wuxiV, wuxiHook)}
+    <p class="interp-p">${conclusionText}</p>
+    ${topicHtml}
+    ${buildOverallSummary(wuxiCards)}
+    <p class="interp-p" style="font-size:.82rem;color:rgba(212,175,55,.55);margin-top:6px">${foot}</p>`;
+}
+
+// ── 關鍵結論：共用的醒目結論框 + 引導 hook ──
+const DEEP_HOOK = ()=>L('想知道針對你的處境具體該怎麼做？解鎖 AI 解牌可獲得 step-by-step 的個人化行動建議。','Want to know exactly what to do in your situation? Unlock AI readings for step-by-step, personalized guidance.');
+function verdictBox(v, hook){
+  return `
+    <div style="margin:14px 0;padding:14px 16px;background:linear-gradient(135deg,rgba(212,175,55,.13),rgba(42,22,96,.25));border:1px solid rgba(212,175,55,.38);border-radius:10px">
+      <div style="font-family:'Cinzel',serif;font-size:.74rem;color:var(--gold);letter-spacing:.12em;margin-bottom:7px">✦ ${L('關鍵結論','Key Verdict')} ✦</div>
+      <p style="margin:0;font-size:.92rem;color:var(--white);line-height:1.85">${v}</p>
+      ${hook?`<p style="margin:9px 0 0;font-size:.78rem;color:rgba(212,175,55,.8);line-height:1.7">→ ${hook}</p>`:''}
+    </div>`;
+}
+
+// ── 關鍵結論：給明確方向與「結論感」，強化使用者想深入了解的 hook ──
+function buildVerdict(cards){
+  const en=LANG==='en';
+  const heavy=c=>kwIsHeavy(c.kw);
+  const kw=(c,k=2)=>en?c.kw.slice(0,k).join(', '):c.kw.slice(0,k).join('、');
+  const nm=c=>cardName(c.cid)+(c.rev?L('（逆位）',' reversed'):'');
+  const deepHook=DEEP_HOOK();
+  let v='', hook='';
+
+  if(S.type==='one'){
+    const c=cards[0];
+    if(heavy(c)){ v=L(`結論偏向「需要謹慎面對」。這張${nm(c)}直指「${kw(c,3)}」，提醒你眼前有實際的課題，正面處理會比迴避更有利。`,`The verdict leans toward "handle with care." This ${nm(c)} points straight to "${kw(c,3)}" — there's a real task in front of you, and meeting it head-on beats avoiding it.`); hook=deepHook; }
+    else { v=L(`結論偏向「順勢而為」。這張${nm(c)}帶來「${kw(c,3)}」的正向能量，順著這個方向走，事情會往你期待的方向發展。`,`The verdict leans positive. This ${nm(c)} brings the supportive energy of "${kw(c,3)}" — follow this direction and things move your way.`); }
+  } else if(S.type==='three' && cards.length>=3){
+    const pres=cards[1], fut=cards[2], pH=heavy(pres), fH=heavy(fut);
+    if(!fH && pH){ v=L(`明確結論：低谷正在過去。「現在」的${nm(pres)}顯示你正處於壓力或卡關的階段，但「未來」的${nm(fut)}轉為「${kw(fut,2)}」的正向能量——趨勢明顯向上，你會度過這個階段，之後會漸入佳境。`,`Clear verdict: the low point is passing. "Present" (${nm(pres)}) shows you under pressure or stuck, but "Future" (${nm(fut)}) shifts to the positive energy of "${kw(fut,2)}." The trend is clearly rising — you get through this stage, and it improves afterward.`); }
+    else if(!fH && !pH){ v=L(`明確結論：走勢穩定向好。「現在」與「未來」都呈現正向能量，保持目前的方向與步調，事情會自然推進到你期待的結果。`,`Clear verdict: steadily improving. Both "Present" and "Future" carry positive energy — hold your current direction and pace, and things move toward the outcome you want.`); }
+    else if(fH && !pH){ v=L(`明確結論：留意後續的變數。「現在」的${nm(pres)}相對順遂，但「未來」的${nm(fut)}提醒「${kw(fut,2)}」的挑戰會浮現——提前因應，就能避免被打亂。`,`Clear verdict: watch what's coming. "Present" (${nm(pres)}) is relatively smooth, but "Future" (${nm(fut)}) flags the challenge of "${kw(fut,2)}" emerging — prepare early and you can keep it from derailing you.`); hook=deepHook; }
+    else { v=L(`明確結論：低谷還沒完全結束，但這不是定數。「現在」與「未來」都偏向考驗，代表這個階段需要你「主動調整」而非被動等待；牌反映的是目前的趨勢，而趨勢是可以被你改變的。`,`Clear verdict: the low point isn't fully over yet — but this is not fixed fate. Both "Present" and "Future" lean toward testing, so this stage calls for active adjustment rather than passive waiting. The cards reflect the current trend — and that trend is yours to change.`); hook=deepHook; }
+  } else if(S.type==='triangle' && cards.length>=3){
+    const adv=cards[2];
+    v=L(`明確結論：你的盲點，在於「我以為（${kw(cards[0],2)}）」與「真相（${kw(cards[1],2)}）」之間的落差。跨越它的鑰匙是建言牌${nm(adv)}——往「${kw(adv,2)}」的方向調整，就能突破目前的卡點。`,`Clear verdict: your blind spot is the gap between "what you assume (${kw(cards[0],2)})" and "the truth (${kw(cards[1],2)})." The key to crossing it is the advice card ${nm(adv)} — adjust toward "${kw(adv,2)}" and you break through where you're stuck.`);
+    if(heavy(cards[1])) hook=deepHook;
+  } else if(S.type==='choice' && cards.length>=5){
+    const oa=S.optA||L('選項1','Option 1'), ob=S.optB||L('選項2','Option 2');
+    const fav=(pro,con)=>(heavy(pro)?0:1)+(heavy(con)?0:1);
+    const aF=fav(cards[0],cards[1]), bF=fav(cards[2],cards[3]), adv=cards[4];
+    if(aF>bF){ v=L(`明確結論：整體而言「${oa}」（左）較為有利——它的優勢（${kw(cards[0],2)}）較穩固，要面對的阻力也較小。`,`Clear verdict: overall "${oa}" (left) looks more favorable — its strength (${kw(cards[0],2)}) is more solid and it faces less resistance.`); }
+    else if(bF>aF){ v=L(`明確結論：整體而言「${ob}」（右）較為有利——它的優勢（${kw(cards[2],2)}）較穩固，要面對的阻力也較小。`,`Clear verdict: overall "${ob}" (right) looks more favorable — its strength (${kw(cards[2],2)}) is more solid and it faces less resistance.`); }
+    else { v=L(`明確結論：「${oa}」與「${ob}」勢均力敵，關鍵落在建議牌${nm(adv)}——以「${kw(adv,2)}」的精神去衡量，會幫你做出更不後悔的選擇。`,`Clear verdict: "${oa}" and "${ob}" are evenly matched — the deciding factor is the advice card ${nm(adv)}: weigh them in the spirit of "${kw(adv,2)}" to choose with the least regret.`); hook=deepHook; }
+  } else {
+    return ''; // 其他類型（如自訂）不額外下結論，交給逐位解析
+  }
+
+  return verdictBox(v, hook);
+}
+
+// ── 整體能量總結：用元素分布 + 正逆比例 + 關鍵字串聯，把整盤牌融會貫通 ──
+function buildOverallSummary(cards){
+  const en=LANG==='en';
+  const n=cards.length;
+  const revCount=cards.filter(c=>c.rev).length, uprCount=n-revCount;
+  const elemCount={};
+  cards.forEach(c=>{ const el=loreOf(c.cid).elem; if(el) elemCount[el]=(elemCount[el]||0)+1; });
+  const sorted=Object.entries(elemCount).sort((a,b)=>b[1]-a[1]);
+  const dom=sorted[0]?sorted[0][0]:'', domN=sorted[0]?sorted[0][1]:0;
+  const ELEM_THEME = en
+    ? {Fire:'action, passion and momentum', Water:'emotion, intuition and relationships', Air:'thinking, communication and clarity', Earth:'practicality, stability and tangible results'}
+    : {'火':'行動、熱情與動力', '水':'情感、直覺與關係', '風':'思考、溝通與理性', '土':'務實、穩定與落實'};
+  const allKw=[...new Set(cards.flatMap(c=>c.kw.slice(0,2)))];
+  const heavy=kwIsHeavy(allKw);
+  const kwStr=en?allKw.slice(0,4).join(', '):allKw.slice(0,4).join('、');
+  const elemSentence = (dom && domN>=2)
+    ? L(`這次牌組以「${dom}」元素為主（${domN} 張），整體能量圍繞${ELEM_THEME[dom]||''}。`,`This spread is led by the ${dom} element (${domN} cards), so the energy centers on ${ELEM_THEME[dom]||''}. `)
+    : L('這次牌組元素分布平均，能量較多元，需要綜合來看。',`The elements are evenly spread here, so the energy is multifaceted and best read as a whole. `);
+  const revSentence = revCount===0
+    ? L('牌面全數正位，能量直接展現、阻力較小。',`All cards are upright — the energy shows up directly with little resistance. `)
+    : revCount===n
+    ? L('牌面全數逆位，此刻更適合向內沉澱、調整，而非強行推進。',`All cards are reversed — a time to turn inward and adjust rather than push forward. `)
+    : L(`${uprCount} 正 ${revCount} 逆，部分順勢、部分需要修正，留意逆位牌所指的面向。`,`${uprCount} upright / ${revCount} reversed — partly flowing, partly needing adjustment; mind the reversed cards. `);
+  const synth = heavy
+    ? L(`把「${kwStr}」這幾股能量串起來看，關於「${S.q}」眼前有實際的課題要面對；但牌義都攤在檯面上，正視並一步步處理，方向就能穩住。`,`Weaving "${kwStr}" together, "${S.q}" brings real tasks to face — yet nothing is hidden, so meeting them step by step keeps your direction steady.`)
+    : L(`把「${kwStr}」這幾股能量串起來看，關於「${S.q}」你其實已具備所需的資源與方向，順著這股能量推進即可。`,`Weaving "${kwStr}" together, you already hold what "${S.q}" needs — keep moving with this momentum.`);
+  return `<div style="margin:14px 0 6px;padding:14px 16px;background:rgba(42,22,96,.28);border:1px solid rgba(212,175,55,.2);border-radius:10px">
+    <div style="font-family:'Cinzel',serif;font-size:.78rem;color:var(--gold);letter-spacing:.08em;margin-bottom:7px">${L('✦ 整體能量總結','✦ Overall Energy')}</div>
+    <p class="interp-p" style="margin:0">${elemSentence}${revSentence}${synth}</p>
+  </div>`;
+}
+
+// ── 其他牌陣：傳統位置解法，每張牌依其位置意義解讀 ──
+function buildInterpPositional(){
+  const n = S.picked.length;
+  const revCount = S.picked.filter(di=>S.deck[di].rev).length;
+  const uprCount = n - revCount;
+  const spread = SPREADS[S.type];
+
+  const en=LANG==='en', sep=SEP();
+  const cards = S.picked.map((di,i)=>{
+    const {cid,rev}=S.deck[di]; const pd=spreadPosDesc(S.type);
+    return {cid, rev, kw:cardKw(cid,rev), m:cardMeaning(cid,rev), pos:S.pos[i], posDesc: pd?pd[i]:''};
+  });
+
+  const cardNames = cards.map(c=>cardName(c.cid)+revLabel(c.rev));
+  const allKw = [...new Set(cards.flatMap(c=>c.kw.slice(0,2)))];
+  const isHeavy = kwIsHeavy(allKw);
+  const revRatio = revCount===0?L('全數正位','all upright'):revCount===n?L('全數逆位','all reversed'):en?`${revCount} reversed, ${uprCount} upright`:`${revCount} 逆 ${uprCount} 正`;
+  const kwq = (arr,k)=> en ? `"${arr.slice(0,k).join(', ')}"` : `「${arr.slice(0,k).join('、')}」`;
+
+  const rowsHtml = cards.map(c=>{
+    const revSpan = c.rev ? `<span style="color:var(--red);font-size:.75rem">${L('逆','R')}</span>` : `<span style="color:var(--muted);font-size:.75rem">${L('正','U')}</span>`;
+    return `<div style="display:flex;align-items:baseline;gap:4px;padding:4px 0;border-bottom:1px solid rgba(212,175,55,.08)">
+      <span style="color:var(--muted);font-size:.8rem;min-width:60px;flex-shrink:0">${c.pos}</span>
+      <span style="font-size:.88rem;color:var(--white)">${cardName(c.cid)}</span>${revSpan}
+      <span style="color:var(--gold);font-size:.78rem;margin-left:4px">${kwq(c.kw,3)}</span>
+    </div>`;
+  }).join('');
+
+  const firstSentence = m => en ? (m.split('. ')[0].replace(/\.$/,'')+'.') : (m.split('。')[0]+'。');
+  let storyText = '';
+  if(S.type==='one'){
+    const c = cards[0];
+    storyText = en
+      ? `This ${cardName(c.cid)}${c.rev?', reversed,':''} brings the message of ${kwq(c.kw,3)} — ${firstSentence(c.m)}`
+      : `這張${cardName(c.cid)}${c.rev?'以逆位出現':''}，帶來「${c.kw.slice(0,3).join('、')}」的訊息——${firstSentence(c.m)}`;
+  } else if(S.type==='choice'){
+    const [aPro,aCon,bPro,bCon,advice] = cards;
+    const oa=S.optA||L('選項1','Option 1'), ob=S.optB||L('選項2','Option 2');
+    storyText = en
+      ? `${oa} (left) — its strength is the ${kwq(aPro.kw,2)} of ${cardName(aPro.cid)}${revLabel(aPro.rev)}; its challenge is the ${kwq(aCon.kw,2)} of ${cardName(aCon.cid)}${revLabel(aCon.rev)}. ${ob} (right) — its strength is the ${kwq(bPro.kw,2)} of ${cardName(bPro.cid)}${revLabel(bPro.rev)}; its challenge is the ${kwq(bCon.kw,2)} of ${cardName(bCon.cid)}${revLabel(bCon.rev)}. And in the advice position, ${cardName(advice.cid)}${revLabel(advice.rev)} reminds you: ${kwq(advice.kw,3)} — guidance from a higher view that transcends both options.`
+      : `「${oa}」（左）方面：優勢是${cardName(aPro.cid)}${revLabel(aPro.rev)}帶來的「${aPro.kw.slice(0,2).join('、')}」，挑戰則是${cardName(aCon.cid)}${revLabel(aCon.rev)}所指的「${aCon.kw.slice(0,2).join('、')}」。`
+      + `「${ob}」（右）方面：優勢是${cardName(bPro.cid)}${revLabel(bPro.rev)}的「${bPro.kw.slice(0,2).join('、')}」，挑戰則是${cardName(bCon.cid)}${revLabel(bCon.rev)}的「${bCon.kw.slice(0,2).join('、')}」。`
+      + `而整體建議位置的${cardName(advice.cid)}${revLabel(advice.rev)}提醒你：「${advice.kw.slice(0,3).join('、')}」——這是超越兩個選項本身、更高視角的指引。`;
+  } else {
+    // 逐位敘事已由下方「逐張分析」涵蓋，這裡只留各牌陣的綜合句，避免重複、精簡篇幅
+    storyText = '';
+    if(S.type==='three'){
+      storyText = en
+        ? `On the timeline: the past laid the ground for the present, and the present is shaping where the future heads — together the three cards trace how "${S.q}" is developing.`
+        : `從時間軸來看：過去奠定了現在，現在正形塑未來的走向——三張牌連起來，就是「${S.q}」的發展脈絡。`;
+    } else if(S.type==='triangle'){
+      storyText = en
+        ? `The Holy Triangle turns on the "gap" between cards one and two — the distance between "what I assume" and "the truth" is your blind spot, and the advice card is the key to crossing it.`
+        : `聖三角的關鍵在「落差」：比較第一、二張牌——「我以為」與「真實」的距離正是你的盲點，而建言牌就是跨越它的鑰匙。`;
+    }
+  }
+
+  let toneText = '';
+  if(revCount===n && n>1){
+    toneText = L('牌組全數逆位，提示這個問題的能量目前多處於受阻、內化或需要調整的狀態，先放慢腳步、處理內在，比急著行動更重要。','The whole spread is reversed, suggesting the energy here is mostly blocked, internalized, or in need of adjustment. Slowing down and tending to the inner work matters more than rushing to act.');
+  } else if(revCount>0 && n>1){
+    toneText = en?`${revCount} card(s) are reversed, meaning some energy is blocked or in transition — pay attention to those positions.`:`牌陣中有 ${revCount} 張逆位，代表部分能量受阻或正在轉化中，留意這些位置所對應的面向。`;
+  }
+  if(isHeavy){
+    toneText += en
+      ? ` Overall the meanings lean toward hardship and testing — regarding "${S.q}", there are real tasks ahead. But the spread lays the problem out plainly so you can meet it clearly.`
+      : `整體牌義偏向辛苦與考驗，表示關於「${S.q}」，眼前有實際的課題要面對——但牌陣把問題攤開來給你看，正是為了讓你能清楚地應對。`;
+  } else if(!toneText){
+    toneText = en?`The overall energy flows smoothly — regarding "${S.q}", the resources and direction you need are already showing in the cards.`:`整體牌面能量流暢，關於「${S.q}」，你所需要的資源與方向都已在牌中顯現。`;
+  }
+
+  // 逐張列出每張牌對你問題的訊息（含位置），讓正文更完整
+  const tpc = detectTopic(S.q);
+  const tdash = en ? ' — ' : '——';
+  const tcardSentence = (cid,rev)=> tpc==='general'
+    ? (en ? (cardMeaning(cid,rev).split('. ')[0].replace(/\.$/,'')+'.') : cardMeaning(cid,rev).split('。')[0]+'。')
+    : topicSentence(tpc,cid,rev);
+  const tperItems = cards.map(c=>
+    `<div style="padding:8px 0;border-bottom:1px solid rgba(212,175,55,.08);font-size:.9rem;line-height:1.8"><span style="color:var(--muted);font-size:.78rem;margin-right:6px">${c.pos}</span><span style="color:var(--gold)">${cardName(c.cid)}${revLabel(c.rev)}</span>${tdash}${tcardSentence(c.cid,c.rev)}</div>`
+  ).join('');
+  const theading = tpc==='general'
+    ? L('每張牌給你的訊息','What each card tells you')
+    : en ? `Focused on "${topicLabel(tpc)}" · each card's message` : `聚焦「${topicLabel(tpc)}」· 每張牌給你的訊息`;
+  const topicHtml = `<div style="margin:12px 0">
+    <div style="font-family:'Cinzel',serif;font-size:.78rem;color:var(--gold);letter-spacing:.08em;margin-bottom:6px">${theading}</div>
+    ${tperItems}</div>`;
+  const intro = en
+    ? `For your question "${S.q}", the ${spreadNameOf(S.type)||'spread'} drew ${cardNames.join(', ')}.`
+    : `針對你的問題「${S.q}」，${spreadNameOf(S.type)||'牌陣'}抽出了 ${cardNames.join('、')}。`;
+  const foot = L('以上為初步梳理，完整牌義見下方單牌解析。想要結合感情連結牌組、數字象徵與你個人脈絡的「深度解讀」，可解鎖 AI 解牌。','An initial read; see the card-by-card section below for full meanings. Unlock AI readings for a deeper analysis that weaves in card-combos, numerology and your personal context.');
+
+  return `
+    <p class="interp-p">${intro}</p>
+    <div style="margin:14px 0 10px;padding:12px 14px;background:rgba(42,22,96,.25);border-radius:8px;border:1px solid rgba(212,175,55,.12)">
+      <div style="font-family:'Cinzel',serif;font-size:.72rem;color:rgba(212,175,55,.6);letter-spacing:.12em;margin-bottom:8px">${L('牌陣總覽','Spread Overview')} · ${revRatio}</div>
+      ${rowsHtml}
+    </div>
+    ${buildVerdict(cards)}
+    ${storyText?`<p class="interp-p">${storyText}</p>`:''}
+    ${topicHtml}
+    ${n>=2 ? buildOverallSummary(cards) : `<p class="interp-p">${toneText}</p>`}
+    <p class="interp-p" style="font-size:.82rem;color:rgba(212,175,55,.55);margin-top:6px">${foot}</p>`;
+}
+
+function buildDetails(){
+  const topic = detectTopic(S.q);
+  const en=LANG==='en';
+  const pd=spreadPosDesc(S.type);
+  return S.picked.map((di,i)=>{
+    const {cid,rev}=S.deck[di];
+    const kw=cardKw(cid,rev); const fullM=cardMeaning(cid,rev);
+    const lore=loreOf(cid);
+    const pid=`lore-${i}`;
+    const posDesc = pd ? pd[i] : '';
+    const imgUrl=IMG_BASE+CARD_IMG_FILES[cid]+'&width=300';
+    const firstSentence = m => en ? (m.split('. ')[0].replace(/\.$/,'')+'.') : (m.split('。')[0]+'。');
+    // 有明確主題時只顯示「總述第一句＋主題段落」，不顯示其他主題的牌義
+    let meaning;
+    if(topic==='general'){
+      meaning=fullM;
+    } else {
+      const first=firstSentence(fullM);
+      const seg=topicSentence(topic,cid,rev);
+      meaning=(seg.startsWith(first)?'':first+' ')+seg
+        +`<span style="display:block;margin-top:6px;font-size:.74rem;color:rgba(212,175,55,.5)">${en?`✦ Focused on the "${topicLabel(topic)}" theme — expand the card lore below for the full meaning`:`✦ 已聚焦「${topicLabel(topic)}」主題，完整牌義可展開下方牌面學習`}</span>`;
+    }
+    return `<div class="card-block">
+      <div style="display:flex;gap:14px;align-items:flex-start;margin-bottom:12px">
+        <div style="flex-shrink:0;width:72px">
+          <img src="${imgUrl}" alt="${cardName(cid)}" loading="lazy"
+            style="width:72px;border-radius:6px;display:block;box-shadow:0 2px 12px rgba(0,0,0,.5);${rev?'transform:rotate(180deg)':''}"
+            onerror="this.style.display='none'">
+        </div>
+        <div style="flex:1;min-width:0">
+          <div class="card-block-title" style="margin-bottom:6px">${S.pos[i]}${L('：',': ')}${cardName(cid)}${rev?` <span style="color:var(--red);font-size:.75rem">(${L('逆位','reversed')})</span>`:''}
+            <span style="color:var(--muted);font-size:.72rem;margin-left:6px">${cardPL(cid)}</span></div>
+          <div class="kw-list" style="margin-bottom:8px">${kw.map(k=>`<span class="kw">${k}</span>`).join('')}</div>
+        </div>
+      </div>
+      <div class="interp-p">${meaning}</div>
+      <div class="lore-toggle" onclick="toggleLore('${pid}',this)"><i class="lore-arr">›</i> ${L('牌面學習：完整牌義 &amp; 圖像星象解析','Card lore: full meaning &amp; imagery / astrology')}</div>
+      <div class="lore-panel" id="${pid}">
+        ${topic!=='general'?`<div class="lore-pos-desc" style="font-style:normal">${L('✦ 完整牌義：','✦ Full meaning: ')}${fullM}</div>`:''}
+        ${posDesc?`<div class="lore-pos-desc">${en?`✦ The "${S.pos[i]}" position represents: ${posDesc}`:`✦ 此位置「${S.pos[i]}」代表：${posDesc}`}</div>`:''}
+        <div class="lore-meta">
+          <div class="lore-meta-item"><span class="lore-meta-lbl">${L('元素','Element')}</span><span class="lore-meta-val">${lore.elem}</span></div>
+          <div class="lore-meta-item"><span class="lore-meta-lbl">${L('星象','Astrology')}</span><span class="lore-meta-val">${lore.astro}</span></div>
+          ${lore.myth?`<div class="lore-meta-item" style="width:100%"><span class="lore-meta-lbl">${L('神話原型','Myth')}</span><span class="lore-meta-val">${lore.myth}</span></div>`:''}
+        </div>
+        <div class="lore-img-title">${L('✦ 牌面圖像象徵','✦ Imagery Symbolism')}</div>
+        <div class="lore-img-grid">${lore.img.map(([nm,mn])=>`<div class="lore-img-item"><div class="lore-img-name">${nm}</div><div class="lore-img-meaning">${mn}</div></div>`).join('')}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+// 追問輸入：手機（粗指標裝置）的 Enter＝換行，避免想換行卻誤送出；電腦 Enter 送出、Shift+Enter 換行
+const CHAT_TOUCH = typeof matchMedia==='function' && matchMedia('(pointer: coarse)').matches;
+function chatKeydown(e){
+  if(e.key!=='Enter' || e.shiftKey || e.isComposing || e.keyCode===229) return;
+  if(CHAT_TOUCH) return; // 手機：讓 Enter 正常插入換行，送出只靠「送出」鈕
+  e.preventDefault(); sendChat();
+}
+function autoGrowChat(el){
+  el.style.height='auto';
+  el.style.height=Math.min(el.scrollHeight,120)+'px';
+}
+async function sendChat(){
+  const input=document.getElementById('chat-input');
+  const q=input.value.trim().replace(/[<>]/g,'');
+  if(!q)return;
+  const key=getApiKey();
+  const proxyEmail=isVerified()?getVerifiedEmail():null;
+  if(!key&&!proxyEmail){toast(L('請先設定 API Key 或驗證購買 Email','Set an API key or verify your purchase email first'));return;}
+  // 每次占卜的追問次數上限（避免無止境聊天、控制成本）
+  const usedTurns=(S.chatHistory||[]).filter(m=>m.role==='user').length;
+  if(usedTurns>=CHAT_LIMIT){
+    toast(L(`本次占卜的追問次數已用完（${CHAT_LIMIT} 次），重新抽牌即可再次追問`,`You've used all ${CHAT_LIMIT} follow-ups for this reading — draw again to ask more`));
+    updateChatRemaining();
+    return;
+  }
+  // 付費 AI 暫停中（且無自備 key）→ 不呼叫，回覆暫停訊息
+  if(AI_PAUSED && proxyEmail && !key){
+    input.value=''; input.style.height='auto';
+    if(!S.chatHistory) S.chatHistory=[];
+    S.chatHistory.push({role:'user',text:q});
+    S.chatHistory.push({role:'ai',text:L('AI 解牌目前暫停服務中（API 配額已滿），很快會恢復，請稍後再試 🙏','AI readings are paused right now (quota full). Service will be back soon — please try again later 🙏')});
+    renderChat();
+    if(S.currentReadingId) saveReading(true, true); // 追問也即時入檔，網頁重整不遺失
+    return;
+  }
+  input.value=''; input.style.height='auto';
+  if(!S.chatHistory) S.chatHistory=[];
+  S.chatHistory.push({role:'user',text:q});
+  renderChat();
+  const msgsEl=document.getElementById('chat-msgs');
+  const loadingEl=document.createElement('div');
+  loadingEl.className='chat-msg-ai';
+  loadingEl.innerHTML='<div class="ai-dots"><div class="ai-dot"></div><div class="ai-dot"></div><div class="ai-dot"></div></div>';
+  msgsEl.appendChild(loadingEl);
+  msgsEl.scrollTop=msgsEl.scrollHeight;
+  try{
+    const context=LANG==='en'
+      ? `You are a tarot reader. Here is the reading just given:\nQuestion: "${S.q}"\nReading: ${S.lastInterpText}\n\nAnswer the querent's follow-up based on this reading. Your answer must be complete and not cut off. Respond entirely in English, no markdown symbols, plain text paragraphs only. Do not assume anyone's gender; avoid gendered pronouns — use "they/them" or "this person".`
+      : `你是一位精通塔羅的占卜師。以下是剛才的占卜結果：\n問題：「${S.q}」\n解讀：${S.lastInterpText}\n\n請根據以上解讀回答問卜者的追問。回答必須完整，不能中途停止。全程用繁體中文，禁止使用 markdown 符號，輸出純文字段落。不要預設任何人的性別，避免使用「她」「妳」等帶性別代名詞，一律改用中性的「他」，或視情況用「對方」「這個人」。請不要使用「TA」這種寫法。`;
+    const history=S.chatHistory.slice(0,-1).map(m=>({role:m.role==='user'?'user':'model',parts:[{text:m.text}]}));
+    const geminiBody={
+      systemInstruction:{parts:[{text:context}]},
+      contents:[...history,{role:'user',parts:[{text:q}]}],
+      generationConfig:{temperature:.85,maxOutputTokens:8192}
+    };
+    let ans;
+    let ownK = !(proxyEmail&&WORKER_URL);
+    if(!ownK){
+      const r=await fetchRetry(()=>fetch(WORKER_URL+'/gemini',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:proxyEmail,body:geminiBody})}));
+      const data=await r.json().catch(()=>({}));
+      if(!r.ok){
+        if(r.status===403){ localStorage.removeItem('tr_verified_email'); if(typeof updateApiStatus==='function') updateApiStatus(); throw new Error(L('訂閱已到期或未生效，請續訂以繼續使用 AI 解牌','Your subscription has lapsed — please resubscribe to keep using AI readings')); }
+        if(r.status===429 && key){ ownK=true; toast(L('今日訂閱額度已滿，已自動改用你的 API Key 🔑','Daily subscription limit reached — switched to your own API key 🔑')); }
+        else throw new Error(data.error||`Worker ${r.status}`);
+      } else {
+        ans=data.candidates?.[0]?.content?.parts?.[0]?.text||'無法取得回應';
+      }
+    }
+    if(ownK){
+      const cleanKey=key.split('').filter(c=>c.charCodeAt(0)>=32&&c.charCodeAt(0)<=126).join('');
+      if(apiProvider(cleanKey)==='openai'){
+        const oaMsgs=S.chatHistory.slice(0,-1).map(m=>({role:m.role==='user'?'user':'assistant',content:m.text}));
+        ans=await callOpenAI(cleanKey, context, [...oaMsgs,{role:'user',content:q}]);
+      } else {
+        const r=await fetchRetry(()=>fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent',
+          {method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':cleanKey},body:JSON.stringify(geminiBody)}));
+        const data=await r.json();
+        ans=data.candidates?.[0]?.content?.parts?.[0]?.text||L('無法取得回應','No response received');
+      }
+    }
+    S.chatHistory.push({role:'ai',text:ans.replace(/\*\*(.+?)\*\*/g,'$1').replace(/\*(.+?)\*/g,'$1').replace(/[*#`_~]/g,'')});
+  }catch(e){
+    S.chatHistory.push({role:'ai',text:L('抱歉，發生錯誤：','Sorry, an error occurred: ')+e.message});
+  }
+  renderChat();
+  if(S.currentReadingId) saveReading(true, true); // 追問後即時入檔：網頁重整/自動刷新也不會遺失對話與剩餘額度
+}
+function renderChat(){
+  const el=document.getElementById('chat-msgs');
+  el.innerHTML=S.chatHistory.map(m=>
+    m.role==='user'
+      ?`<div class="chat-msg-user">${escHtml(m.text)}</div>`
+      :`<div class="chat-msg-ai">${escHtml(m.text).replace(/\n/g,'<br>')}</div>`
+  ).join('');
+  // 捲到最新一則訊息的「頂端」，長回覆讓用戶自己往下捲
+  const last=el.lastElementChild;
+  if(last) el.scrollTop=Math.max(0, last.offsetTop-el.offsetTop-8);
+  updateChatRemaining();
+}
+// 顯示本次占卜剩餘追問次數；用完即鎖住輸入
+function updateChatRemaining(){
+  const el=document.getElementById('chat-remaining'); if(!el) return;
+  const used=(S.chatHistory||[]).filter(m=>m.role==='user').length;
+  const left=Math.max(0, CHAT_LIMIT-used);
+  const input=document.getElementById('chat-input');
+  const btn=document.getElementById('chat-send-btn');
+  if(left<=0){
+    el.style.color='rgba(224,85,85,.85)';
+    el.textContent=L(`已達本次追問上限（${CHAT_LIMIT} 次）。重新抽牌即可再次追問。`,`Follow-up limit reached (${CHAT_LIMIT}). Draw again to ask more.`);
+    if(input){input.disabled=true;input.placeholder=L('本次追問已達上限','Follow-up limit reached');}
+    if(btn){btn.disabled=true;btn.style.opacity='.4';}
+  } else {
+    el.style.color='rgba(212,175,55,.75)';
+    el.textContent=L(`本次占卜可追問 ${CHAT_LIMIT} 次 · 還剩 ${left} 次`,`${CHAT_LIMIT} follow-ups per reading · ${left} left`);
+    if(input){input.disabled=false;}
+    if(btn){btn.disabled=false;btn.style.opacity='';}
+  }
+}
+function toggleLore(id,btn){
+  const panel=document.getElementById(id);
+  panel.classList.toggle('open');
+  btn.classList.toggle('open');
+}
+
+// ══════════════════════════════════════════
+//  SAVE READING
+// ══════════════════════════════════════════
+function saveReading(silent, skipProject){
+  const spreadName = S.type==='custom'?L('自訂牌陣','Custom Spread'):spreadNameOf(S.type);
+  const id = S.currentReadingId || Date.now();
+  S.currentReadingId = id;
+  // 更新既有記錄時保留原本的占卜日期（補解析不應改到抽牌結果/日期）
+  const prev = safeParse('tr_full','[]').find(r=>r.id===id);
+  const recDate = (prev && prev.date) ? prev.date : new Date().toLocaleString(LANG==='en'?'en-US':'zh-TW');
+  const rec = {
+    id, type:S.type, // type 供日後「用 AI 重新解析」重建牌局
+    date:recDate,
+    q:S.q, spread:spreadName, pos:S.pos,
+    cards:S.picked.map(di=>({cid:S.deck[di].cid, rev:S.deck[di].rev})),
+    interp: S.lastInterpText,
+    chat: S.chatHistory ? [...S.chatHistory] : []
+  };
+  const lite = {id, date:rec.date, q:rec.q, spread:spreadName, cards:S.picked.map((di,i)=>({name:cardName(S.deck[di].cid),pos:S.pos[i],rev:S.deck[di].rev}))};
+  // 以 id upsert（去重，避免自動保存 + 手動保存 重複）
+  S.readings = S.readings.filter(r=>r.id!==id);
+  S.readings.unshift(lite);
+  if(S.readings.length>60)S.readings.pop();
+  localStorage.setItem('tr_readings',JSON.stringify(S.readings));
+  let fullRecs = safeParse('tr_full','[]').filter(r=>r.id!==id);
+  fullRecs.unshift(rec);
+  if(fullRecs.length>60)fullRecs.pop();
+  localStorage.setItem('tr_full',JSON.stringify(fullRecs));
+  // 專案同步：任何專案裡已存在同 id 的紀錄 → 一律同步最新內容
+  // （修正：過去 skipProject 的更新只寫入歷史，專案副本會停在舊解讀/空解讀）
+  let inProject=false;
+  S.projects.forEach(p=>{
+    p.readings=p.readings.map(r=>{ if(r.id===id){ inProject=true; return rec; } return r; });
+  });
+  if(inProject) saveProjects();
+  // skipProject 只阻止「新增」進專案（草稿自動保存不加入專案）；既有紀錄的更新不受限
+  if(!skipProject){
+    const proj = getActiveProject();
+    if(proj){
+      if(!proj.readings.some(r=>r.id===id)){ proj.readings.push(rec); saveProjects(); }
+      if(!silent) toast(LANG==='en'?`✦ Saved to project "${proj.name}"`:`✦ 已儲存至專案「${proj.name}」`);
+    } else if(!silent){
+      toast(L('✦ 占卜記錄已儲存','✦ Reading saved'));
+    }
+  } else if(!silent){
+    toast(L('✦ 占卜記錄已儲存','✦ Reading saved'));
+  }
+  syncPush();
+}
+
+// ══════════════════════════════════════════
+//  HISTORY
+// ══════════════════════════════════════════
+let histTopic='all';
+function showHistory(){
+  // 主題分類籤（依問題文字自動分類，含筆數）
+  const counts={all:S.readings.length};
+  S.readings.forEach(r=>{const tp=detectTopic(r.q);counts[tp]=(counts[tp]||0)+1;});
+  const TOPICS=['all','love','career','money','health','study','general'];
+  document.getElementById('hist-topics').innerHTML=TOPICS
+    .filter(k=>k==='all'||counts[k])
+    .map(k=>{
+      const on=histTopic===k;
+      return `<button onclick="setHistTopic('${k}')" style="padding:6px 14px;border-radius:50px;cursor:pointer;font-size:.78rem;letter-spacing:.05em;transition:all .25s;
+        background:${on?'rgba(212,175,55,.18)':'rgba(8,3,26,.4)'};
+        border:1px solid ${on?'var(--gold)':'rgba(212,175,55,.25)'};
+        color:${on?'var(--gold)':'var(--muted)'}">${t('h.topic.'+k)} ${k==='all'?counts.all:counts[k]||0}</button>`;
+    }).join('');
+  renderSyncBar();
+  renderHistList();
+  go('s-history');
+}
+// 歷史頁頂端同步列（僅驗證後顯示）：上次同步時間 + 立即同步按鈕
+function fmtSyncTime(iso){
+  const d=new Date(iso); if(isNaN(d.getTime())) return iso;
+  const diff=(Date.now()-d.getTime())/1000;
+  if(diff<60) return L('剛剛','just now');
+  if(diff<3600) return L(`${Math.floor(diff/60)} 分鐘前`,`${Math.floor(diff/60)} min ago`);
+  if(diff<86400) return L(`${Math.floor(diff/3600)} 小時前`,`${Math.floor(diff/3600)} hr ago`);
+  return d.toLocaleString(LANG==='en'?'en-US':'zh-TW',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
+}
+function renderSyncBar(){
+  const sb=document.getElementById('hist-sync-bar'); if(!sb) return;
+  if(!isVerified()){ sb.style.display='none'; return; }
+  const last=localStorage.getItem('tr_last_sync');
+  const lastTxt=last?fmtSyncTime(last):L('尚未同步','not synced yet');
+  sb.style.display='flex';
+  sb.innerHTML=`<span style="font-size:.74rem;color:var(--muted)">☁ ${L('上次同步','Last synced')}：${lastTxt}</span>
+    <button class="btn btn-sm btn-ghost" style="margin:0" onclick="manualSync()">${L('☁ 立即同步','☁ Sync now')}</button>`;
+}
+function setHistTopic(k){histTopic=k;showHistory();}
+function renderHistList(){
+  const el=document.getElementById('hist-list');
+  const kw=(document.getElementById('hist-search').value||'').trim().toLowerCase();
+  const fullRecs = sanitizeRecs(safeParse('tr_full','[]'));
+  const fullMap = {};
+  fullRecs.forEach(r=>{ fullMap[r.id]=r; });
+  let list=S.readings;
+  if(histTopic!=='all') list=list.filter(r=>detectTopic(r.q)===histTopic);
+  if(kw) list=list.filter(r=>{
+    const full=fullMap[r.id]||{};
+    const hay=(r.q+' '+r.cards.map(c=>c.name).join(' ')+' '+(full.interp||'')+' '+((full.chat||[]).map(m=>m.text).join(' '))).toLowerCase();
+    return hay.includes(kw);
+  });
+  el.innerHTML=list.length
+    ?list.map(r=>{
+        const full=fullMap[r.id]||{};
+        const canAI = full.cards && full.cards.length; // 有牌面資料即可（type 缺漏會自動反推）
+        const usedT=(full.chat||[]).filter(m=>m.role==='user').length;
+        const chatBtn=(canAI && full.interp && usedT<CHAT_LIMIT)
+          ? `<button class="btn btn-sm" style="margin:0" onclick="resumeChat(${r.id})">${L(`💬 繼續追問（還剩 ${CHAT_LIMIT-usedT} 次）`,`💬 Continue asking (${CHAT_LIMIT-usedT} left)`)}</button>` : '';
+        const aiBtn = canAI ? `<button class="btn btn-sm btn-ghost" style="margin:0" onclick="analyzeWithAI(${r.id})">${full.interp?L('🔄 用 AI 重新解析','🔄 Re-analyze with AI'):L('✦ 用 AI 解析這次占卜','✦ Analyze with AI')}</button>` : '';
+        const btnRow=(chatBtn||aiBtn)?`<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">${chatBtn}${aiBtn}</div>`:'';
+        const interpHtml=full.interp?`<div style="margin-top:10px;font-size:.82rem;color:var(--muted);line-height:1.7;border-top:1px solid rgba(212,175,55,.12);padding-top:10px">${escHtml(full.interp).replace(/\n/g,'<br>')}</div>`:'';
+        const chatHtml=(full.chat&&full.chat.length)?`<div style="margin-top:10px;border-top:1px solid rgba(212,175,55,.1);padding-top:10px">${full.chat.map(m=>m.role==='user'?`<div style="font-size:.78rem;color:var(--gold);margin-bottom:4px">▶ ${escHtml(m.text)}</div>`:`<div style="font-size:.78rem;color:var(--muted);margin-bottom:8px;line-height:1.6">${escHtml(m.text).replace(/\n/g,'<br>')}</div>`).join('')}</div>`:'';
+        return `<div style="border:1px solid rgba(212,175,55,.18);background:rgba(42,22,96,.18);padding:18px 20px;margin-bottom:12px;position:relative">
+          <button onclick="deleteReading(${r.id})" title="${L('刪除這筆記錄','Delete this record')}"
+            style="position:absolute;top:10px;right:10px;background:none;border:1px solid rgba(224,85,85,.3);color:rgba(224,85,85,.7);width:26px;height:26px;border-radius:50%;cursor:pointer;font-size:.8rem;line-height:1;transition:all .2s"
+            onmouseover="this.style.background='rgba(224,85,85,.15)';this.style.color='var(--red)'"
+            onmouseout="this.style.background='none';this.style.color='rgba(224,85,85,.7)'">✕</button>
+          <div style="font-size:.72rem;color:var(--muted);margin-bottom:5px;padding-right:30px">${r.date} · ${r.spread}</div>
+          <div style="font-size:.92rem;color:var(--white)">「${escHtml(r.q)}」</div>
+          <div style="font-size:.78rem;color:var(--gold);margin-top:7px">${r.cards.map(c=>`${c.name}${c.rev?'↓':''}`).join(' · ')}</div>
+          ${interpHtml}${chatHtml}${btnRow}
+        </div>`;
+      }).join('')
+      + `<div style="text-align:center;margin-top:18px">
+          <button class="btn btn-ghost btn-sm" onclick="clearAllReadings()" style="color:rgba(224,85,85,.8);border-color:rgba(224,85,85,.3)">${t('h.clearall')}</button>
+        </div>`
+    :(S.readings.length
+      ?`<p style="text-align:center;color:var(--muted);padding:40px">${t('h.noresult')}</p>`
+      :`<p style="text-align:center;color:var(--muted);padding:40px">${t('h.empty')}</p>`);
+}
+function deleteReading(id){
+  if(!confirm(L('確定要刪除這筆占卜記錄嗎？刪除後無法復原。','Delete this reading? This cannot be undone.')))return;
+  S.readings=S.readings.filter(r=>r.id!==id);
+  localStorage.setItem('tr_readings',JSON.stringify(S.readings));
+  const fullRecs=safeParse('tr_full','[]').filter(r=>r.id!==id);
+  localStorage.setItem('tr_full',JSON.stringify(fullRecs));
+  showHistory();
+  toast(L('已刪除該筆記錄','Record deleted'));
+  syncPush();
+}
+function clearAllReadings(){
+  if(!confirm(L('確定要清除「全部」占卜記錄嗎？此動作無法復原。','Clear ALL reading history? This cannot be undone.')))return;
+  S.readings=[];
+  localStorage.removeItem('tr_readings');
+  localStorage.removeItem('tr_full');
+  showHistory();
+  toast(L('已清除全部記錄','All history cleared'));
+  syncPush();
+}
+
+// ══════════════════════════════════════════
+//  API KEY / SETTINGS
+// ══════════════════════════════════════════
+
+// Email verification via Cloudflare Worker
+// 解鎖（驗證 email 或存 key）後的自動接續：
+// ① 若是從記錄按「用 AI 解析」但當時沒解鎖 → 解鎖後自動接著解析那筆
+// ② 若正停在解牌畫面且這次抽牌還在 → 立即用 AI 解析這次
+let pendingAnalyzeId=null;
+function maybeRunAIAfterUnlock(){
+  if(pendingAnalyzeId!=null){ const pid=pendingAnalyzeId; pendingAnalyzeId=null; analyzeWithAI(pid); return; }
+  const cur=document.querySelector('.screen.on');
+  if(cur && cur.id==='s-reading' && S.picked && S.picked.length && typeof runAIReading==='function'){
+    runAIReading();
+  }
+}
+async function verifyEmail(){
+  const email=document.getElementById('unlock-input').value.trim().toLowerCase();
+  if(!email){toast(L('請輸入 Email','Please enter your email'));return;}
+  if(!WORKER_URL){toast(L('⚠ 管理員尚未設定 Worker URL','⚠ Worker URL not configured'));return;}
+  const ubar=document.getElementById('unlock-status-bar');
+  ubar.style.display='block';ubar.className='api-status api-none';ubar.textContent=L('驗證中...','Verifying...');
+  try{
+    const r=await fetch(WORKER_URL+'/check',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});
+    const d=await r.json();
+    if(d.verified){
+      localStorage.setItem('tr_verified_email',email);
+      ubar.className='api-status api-ok';ubar.textContent=L('✓ 驗證成功！已解鎖 AI 解牌','✓ Verified! AI reading unlocked');
+      updateApiStatus();toast(L('✦ 驗證成功！AI 解牌已解鎖','✦ Verified! AI reading unlocked'));closeSettings();
+      maybeRunAIAfterUnlock(); // 解鎖後立即解析當前這次抽牌
+      // 驗證後拉回雲端歷史並合併，再推回（跨裝置同步）
+      syncPull().then(merged=>{ if(merged) toast(L('☁ 已同步雲端歷史記錄','☁ Cloud history synced')); syncPush(); });
+    } else {
+      ubar.textContent=L('✗ 此 Email 尚未有購買記錄，請確認使用 Gumroad 購買時填寫的 Email','✗ No purchase found for this email. Please use the email from your Gumroad checkout.');
+    }
+  }catch(e){ubar.textContent=L('✗ 無法連線，請稍後再試：','✗ Connection failed, please try again: ')+e.message.slice(0,60);}
+}
+function clearVerifiedEmail(){
+  localStorage.removeItem('tr_verified_email');
+  document.getElementById('unlock-input').value='';
+  updateApiStatus();toast(L('已清除驗證','Verification cleared'));
+}
+function isVerified(){return !!localStorage.getItem('tr_verified_email')&&!!WORKER_URL;}
+function getVerifiedEmail(){return localStorage.getItem('tr_verified_email')||'';}
+// 開頁時重新確認訂閱仍有效（訂閱可能已到期）。回傳「是否仍有效」。
+async function revalidateAccess(){
+  if(!isVerified())return false;
+  try{
+    const r=await fetch(WORKER_URL+'/check',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:getVerifiedEmail()})});
+    const d=await r.json();
+    if(d&&d.verified===false){
+      // 訂閱已到期/失效 → 清掉本機解鎖狀態並提示
+      localStorage.removeItem('tr_verified_email');
+      updateApiStatus();
+      toast(L('訂閱已到期，AI 解牌已鎖定，續訂即可恢復','Your subscription has lapsed — AI readings are locked; resubscribe to restore'));
+      return false;
+    }
+    return true;
+  }catch(e){ return true; } // 網路失敗就保留現狀，不誤鎖
+}
+
+// ── 跨裝置歷史同步（付費驗證 email 專屬） ──
+async function syncPush(){
+  if(!isVerified())return;
+  try{
+    const r=await fetch(WORKER_URL+'/sync',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({email:getVerifiedEmail(),action:'push',
+        readings:S.readings, full:safeParse('tr_full','[]'), projects:S.projects})});
+    if(r&&r.ok) localStorage.setItem('tr_last_sync', new Date().toISOString());
+  }catch(e){/* 靜默失敗，本地仍保留 */}
+}
+// 專案合併：cloud 先、local 後（同 id 時 local 的名稱/描述/顏色優先），readings 依 id 聯集
+function mergeProjects(local, cloud){
+  const map={};
+  [...(Array.isArray(cloud)?cloud:[]), ...(Array.isArray(local)?local:[])].forEach(p=>{
+    if(!p || p.id==null) return;
+    const recs=sanitizeRecs(p.readings||[]);
+    if(!map[p.id]){
+      map[p.id]={...p, readings:recs};
+    } else {
+      const tgt=map[p.id];
+      const have=new Set(tgt.readings.map(r=>r.id));
+      recs.forEach(r=>{ if(!have.has(r.id)){ tgt.readings.push(r); have.add(r.id); } });
+      if(p.name) tgt.name=p.name;
+      if(p.desc!=null) tgt.desc=p.desc;
+      if(p.color) tgt.color=p.color;
+      if(p.createdAt) tgt.createdAt=p.createdAt;
+    }
+  });
+  return Object.values(map).map(p=>{ p.readings.sort((a,b)=>(a.id||0)-(b.id||0)); return p; });
+}
+async function syncPull(){
+  if(!isVerified())return false;
+  try{
+    const r=await fetch(WORKER_URL+'/sync',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({email:getVerifiedEmail(),action:'pull'})});
+    if(!r.ok)return false;
+    const cloud=await r.json();
+    if(!cloud||!Array.isArray(cloud.readings))return false;
+    localStorage.setItem('tr_last_sync', new Date().toISOString()); // 成功連上雲端 → 記錄同步時間
+    // 以 id 聯集合併本地與雲端（id 為時間戳，新的在前）
+    const mergeById=(a,b)=>{const m={};[...a,...b].forEach(x=>{if(x&&x.id!=null)m[x.id]=x;});return Object.values(m).sort((x,y)=>y.id-x.id).slice(0,60);};
+    const beforeR=S.readings.length;
+    const localFull=safeParse('tr_full','[]');
+    S.readings=sanitizeRecs(mergeById(S.readings, cloud.readings));
+    const mergedFull=sanitizeRecs(mergeById(localFull, cloud.full||[]));
+    localStorage.setItem('tr_readings',JSON.stringify(S.readings));
+    localStorage.setItem('tr_full',JSON.stringify(mergedFull));
+    // 專案同步合併：以專案 id 聯集；同 id 時名稱/顏色以本機為準，各自的占卜記錄以 id 聯集
+    const beforeP=S.projects.length;
+    S.projects=mergeProjects(S.projects, cloud.projects||[]);
+    saveProjects();
+    // 本地有、雲端還沒有的記錄 → 推回讓雲端收斂（另一台裝置下次才拉得到）
+    if(S.readings.length>cloud.readings.length || mergedFull.length>(cloud.full||[]).length || S.projects.length>(cloud.projects||[]).length) syncPush();
+    // 本地因雲端而新增 → 回報 true，供呼叫端重繪 / 提示（無新增則免重繪）
+    return S.readings.length>beforeR || mergedFull.length>localFull.length || S.projects.length>beforeP;
+  }catch(e){return false;}
+}
+// 手動同步：明確上傳 + 拉回合併，並回報結果（讓使用者看得到同步有在運作）
+async function manualSync(){
+  if(!isVerified()){ toast(L('請先驗證購買 / 訂閱 Email 才能同步','Verify your purchase/subscription email first to sync')); return; }
+  const btn=document.getElementById('sync-now-btn');
+  if(btn){ btn.disabled=true; }
+  toast(L('☁ 同步中...','☁ Syncing...'));
+  const before=S.readings.length;
+  try{
+    // 先確認雲端可連線（也驗證 email 仍有效）
+    const probe=await fetch(WORKER_URL+'/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:getVerifiedEmail(),action:'pull'})});
+    if(probe.status===403){ toast(L('此 Email 尚未驗證或訂閱已到期，無法同步','This email isn\'t verified or the subscription has lapsed — can\'t sync')); return; }
+    if(!probe.ok){ toast(L('雲端暫時無法連線，請稍後再試','Cloud sync unavailable, please try again later')); return; }
+    await syncPull();   // 拉回合併（內部會在本地有新東西時自動推回）
+    await syncPush();   // 再確保本地完整上傳一次
+    const gained=S.readings.length-before;
+    const cur=document.querySelector('.screen.on'); if(cur&&cur.id==='s-history') showHistory();
+    toast(gained>0
+      ? L(`☁ 同步完成，從雲端拉回 ${gained} 筆記錄（共 ${S.readings.length} 筆）`,`☁ Synced — pulled ${gained} record(s) from cloud (${S.readings.length} total)`)
+      : L(`☁ 同步完成，目前共 ${S.readings.length} 筆，已是最新`,`☁ Synced — ${S.readings.length} record(s), already up to date`));
+  }catch(e){
+    toast(L('同步失敗：','Sync failed: ')+(e.message||'').slice(0,60));
+  }finally{
+    if(btn){ btn.disabled=false; }
+  }
+}
+
+function getApiKey(){
+  return (localStorage.getItem('gemini_key')||'').replace(/[^\x20-\x7E]/g,'');
+}
+function saveApiKey(){
+  const k=document.getElementById('api-key-input').value.trim().replace(/[^\x20-\x7E]/g,'');
+  if(!k){toast(L('請輸入 API Key','Please enter an API key'));return;}
+  localStorage.setItem('gemini_key',k);
+  updateApiStatus();toast(L('✦ API Key 已儲存','✦ API key saved'));closeSettings();
+  maybeRunAIAfterUnlock(); // 設定 key 後立即解析當前這次抽牌
+}
+async function testApiKey(){
+  const k=(document.getElementById('api-key-input').value.trim()||getApiKey()).split('').filter(c=>c.charCodeAt(0)>=32&&c.charCodeAt(0)<=126).join('');
+  if(!k){toast(L('請先輸入 API Key','Please enter an API key first'));return;}
+  toast(L('測試中...','Testing...'));
+  try{
+    if(apiProvider(k)==='openai'){
+      await callOpenAI(k,'你是測試助手',[{role:'user',content:'hi'}]);
+      toast(L('✦ OpenAI Key 正常！','✦ OpenAI key works!'));
+      return;
+    }
+    const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent',
+      {method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':k},
+       body:JSON.stringify({contents:[{parts:[{text:'hi'}]}]})});
+    const d=await r.json();
+    if(r.ok){toast(L('✦ Gemini Key 正常！','✦ Gemini key works!'));}
+    else toast(L('失敗：','Failed: ')+r.status+' '+(d?.error?.message||'').slice(0,60));
+  }catch(e){toast(L('錯誤：','Error: ')+e.message.slice(0,80));}
+}
+function clearApiKey(){
+  localStorage.removeItem('gemini_key');
+  document.getElementById('api-key-input').value='';
+  updateApiStatus();toast(L('已清除 API Key','API key cleared'));
+}
+function updateApiStatus(){
+  const bar=document.getElementById('api-status-bar');
+  const ubar=document.getElementById('unlock-status-bar');
+  const syncBtn=document.getElementById('sync-now-btn');
+  if(syncBtn) syncBtn.style.display=isVerified()?'block':'none'; // 同步按鈕僅驗證後顯示
+  if(isVerified()){
+    if(AI_PAUSED){
+      bar.className='api-status api-none';bar.style.display='block';
+      bar.innerHTML=L('⚠ AI 深度解牌暫時停用（API 配額已滿），很快恢復；可改用自己的 API Key 立即使用','⚠ AI deep readings are temporarily paused (quota full); back soon. You can use your own API key to read right away');
+    } else {
+      bar.className='api-status api-ok';bar.textContent=L('✦ 已解鎖 AI 深度解牌（','✦ AI deep reading unlocked (')+getVerifiedEmail()+'）';bar.style.display='block';
+    }
+    if(ubar){ubar.style.display='block';ubar.className='api-status api-ok';ubar.textContent=L('✓ Email 驗證有效','✓ Email verified');}
+  } else if(getApiKey()){
+    bar.className='api-status api-ok';bar.textContent=L('✓ 自備 ','✓ Your own ')+(apiProvider(getApiKey())==='openai'?'OpenAI':'Gemini')+L(' Key（AI 解牌啟用）',' key (AI reading enabled)');bar.style.display='block';
+    if(ubar)ubar.style.display='none';
+  } else {
+    bar.className='api-status api-none';bar.textContent=L('尚未解鎖 · 使用內建牌義解讀','Not unlocked · using built-in card meanings');bar.style.display='block';
+    if(ubar)ubar.style.display='none';
+  }
+}
+function openSettings(){
+  document.getElementById('api-key-input').value=localStorage.getItem('gemini_key')||'';
+  document.getElementById('unlock-input').value=getVerifiedEmail();
+  updateApiStatus();
+  document.getElementById('settings-modal').classList.add('on');
+}
+function closeSettings(){document.getElementById('settings-modal').classList.remove('on');resetViewport();}
+// ── 字級大小（無障礙）：調整根字級，rem 文字隨之放大；記住選擇 ──
+const FONT_LEVELS=[16,18,20,22];
+function getFontLevel(){ let l=parseInt(localStorage.getItem('tr_fontlvl')||'0',10); return (isNaN(l)||l<0||l>=FONT_LEVELS.length)?0:l; }
+function applyFontScale(){
+  const lvl=getFontLevel();
+  document.documentElement.style.fontSize=FONT_LEVELS[lvl]+'px';
+  renderFontBtns(lvl);
+}
+function setFontLevel(lvl){ localStorage.setItem('tr_fontlvl',String(lvl)); applyFontScale(); }
+// 首頁快速放大鈕：每點一次大一級，到頂回到標準，並提示目前字級
+function cycleFontLevel(){
+  const next=(getFontLevel()+1)%FONT_LEVELS.length;
+  setFontLevel(next);
+  toast(L('字級大小：','Text size: ')+t('font.lv'+next));
+}
+function renderFontBtns(lvl){
+  const wrap=document.getElementById('fontsize-btns'); if(!wrap) return;
+  const sample=[13,15,17,19];
+  wrap.innerHTML=FONT_LEVELS.map((_,i)=>{
+    const on=i===lvl;
+    return `<button onclick="setFontLevel(${i})" style="padding:6px 13px;border-radius:8px;cursor:pointer;line-height:1.2;font-size:${sample[i]}px;border:1px solid ${on?'var(--gold)':'rgba(212,175,55,.3)'};background:${on?'rgba(212,175,55,.18)':'transparent'};color:${on?'var(--gold)':'var(--muted)'};transition:all .2s">${t('font.lv'+i)}</button>`;
+  }).join('');
+}
+// ── 說明與回報中心：FAQ + 問題回報 / 功能許願表單（送到後端，不露 email）──
+let reportCtx='', reportType='issue';
+const FAQ = [
+  {q:{zh:'如何解鎖 AI 深度解牌？',en:'How do I unlock AI deep readings?'}, a:{zh:'點右上角 ⚙ → 選「月訂閱 US$5／月」或限時「一次買斷」完成購買 → 用購買時填寫的 email 在同一處驗證即可解鎖。',en:'Tap ⚙ (top-right) → choose the US$5/month plan or the limited one-time unlock → then verify with your checkout email in the same place.'}},
+  {q:{zh:'解鎖要多少錢？可以自訂金額嗎？',en:'How much is it? Can I name my own price?'}, a:{zh:'解鎖約 US$5（依你所在地區會自動換算當地幣別，例如台幣約 NT$150 左右）。其中「一次買斷」採「自訂金額」—— 你可以照建議價，也非常歡迎多付一點當作抖內打賞、支持持續開發 😘😆（月訂閱則固定 US$5／月）。',en:'Unlocking is about US$5 (auto-shown in your local currency by region). The one-time unlock is "name your own price" — pay the suggested amount, or a little more as a tip to support ongoing development 😘😆 (the monthly plan is a fixed US$5/mo).'}},
+  {q:{zh:'AI 解牌跑不出來怎麼辦？',en:'My AI reading didn\'t come out — what now?'}, a:{zh:'若服務商額度滿或暫停，會自動改用免費內建解讀，並「自動保留這次抽牌」。等服務恢復後，到「占卜記錄」找到那一筆 → 點「用 AI 解析」即可補跑，不用重抽。',en:'If the provider is over quota or paused, you get the free built-in reading and your draw is auto-saved. Once service is back, open History, find it, and tap “Analyze with AI” — no redraw needed.'}},
+  {q:{zh:'如何取消訂閱？',en:'How do I cancel my subscription?'}, a:{zh:'訂閱透過 Gumroad，請到你的 Gumroad 帳號、或購買收據 email 裡的連結管理／取消，隨時可取消、不綁約。',en:'Subscriptions are via Gumroad — manage or cancel anytime from your Gumroad account or the link in your receipt email. No lock-in.'}},
+  {q:{zh:'占卜記錄會跨裝置同步嗎？',en:'Does my history sync across devices?'}, a:{zh:'付費解鎖後，用同一個 email 在不同裝置驗證即可同步；也可在「占卜記錄」上方按「☁ 立即同步」手動同步。',en:'After unlocking, verify the same email on each device to sync; you can also tap “☁ Sync now” at the top of History.'}},
+  {q:{zh:'一次買斷和月訂閱差在哪？',en:'One-time unlock vs monthly?'}, a:{zh:'月訂閱 US$5／月、每月自動續扣、可隨時取消；一次買斷為限時優惠（到 6/30），付一次含 2 年使用權、之後不再扣款。',en:'Monthly is US$5/mo, auto-renews, cancel anytime. The one-time unlock is a limited offer (until Jun 30): pay once for 2-year access, no further charges.'}},
+  {q:{zh:'為什麼顯示台幣不是美金？',en:'Why my local currency, not USD?'}, a:{zh:'全部以美金（USD）計價；Gumroad 會依你所在地區自動換算顯示，但信用卡實際以美金扣款。',en:'All prices are in USD; Gumroad shows your local-currency equivalent by region, but your card is charged in USD.'}},
+  {q:{zh:'字太小看不清楚？',en:'Text too small?'}, a:{zh:'點畫面左下角的「A⁺」按鈕可一鍵放大字級（或到 ⚙ 設定最上方選擇字級大小）。',en:'Tap the “A⁺” button at the bottom-left to enlarge text (or pick a size at the top of ⚙ Settings).'}},
+  {q:{zh:'追問次數有上限嗎？',en:'Is there a follow-up limit?'}, a:{zh:'每次占卜可追問 5 次，追問框下方會顯示剩餘次數；想再問可以重新抽牌。',en:'Each reading allows 5 follow-up questions; the remaining count shows under the chat. Draw again to ask more.'}},
+];
+function renderFaq(){
+  const el=document.getElementById('faq-list'); if(!el) return;
+  el.innerHTML=FAQ.map(f=>`<details style="border:1px solid rgba(212,175,55,.18);border-radius:8px;padding:9px 12px;margin-bottom:8px;background:rgba(42,22,96,.18)">
+    <summary style="cursor:pointer;font-size:.86rem;color:var(--gold);line-height:1.5">${f.q[LANG]||f.q.zh}</summary>
+    <div style="font-size:.82rem;color:var(--silver);line-height:1.75;margin-top:8px">${f.a[LANG]||f.a.zh}</div>
+  </details>`).join('');
+}
+function setReportType(tp){
+  reportType=tp;
+  const a=document.getElementById('rtype-issue'), b=document.getElementById('rtype-wish');
+  if(a) a.className='btn btn-sm'+(tp==='issue'?'':' btn-ghost');
+  if(b) b.className='btn btn-sm'+(tp==='wish'?'':' btn-ghost');
+}
+function reportProblem(ctx){
+  reportCtx=ctx||'';
+  closeSettings(); // 以獨立視窗呈現
+  renderFaq();
+  setReportType('issue');
+  const m1=document.getElementById('report-msg'); if(m1) m1.value='';
+  const m2=document.getElementById('report-contact'); if(m2) m2.value='';
+  document.getElementById('report-modal').classList.add('on');
+}
+function closeReport(){ document.getElementById('report-modal').classList.remove('on'); resetViewport(); }
+async function submitReport(){
+  const msgEl=document.getElementById('report-msg');
+  const msg=(msgEl.value||'').trim();
+  if(!msg){ toast(L('請先描述你的問題或想要的功能','Please describe your issue or wish first')); return; }
+  if(!WORKER_URL){ toast(L('暫時無法送出，請稍後再試','Can\'t send right now, please try later')); return; }
+  const contact=(document.getElementById('report-contact').value||'').trim();
+  const btn=document.getElementById('report-submit'); if(btn) btn.disabled=true;
+  try{
+    const r=await fetch(WORKER_URL+'/report',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({type:reportType, message:msg, contact, ctx:reportCtx, lang:LANG, ua:navigator.userAgent})});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    // 記住這筆回報的憑證（id+tok），之後站長回覆時可在站內收到通知
+    try{
+      const d=await r.json();
+      if(d&&d.id&&d.tok){
+        const mine=safeParse('tr_my_reports','[]');
+        mine.unshift({id:d.id,tok:d.tok,msg:msg.slice(0,80)});
+        localStorage.setItem('tr_my_reports',JSON.stringify(mine.slice(0,20)));
+      }
+    }catch(e){}
+    msgEl.value=''; document.getElementById('report-contact').value='';
+    closeReport();
+    toast(L('✦ 已送出，感謝你的回報！站長回覆時會顯示在這裡 🙏','✦ Sent — thank you! Replies from the site owner will appear here 🙏'));
+  }catch(e){
+    toast(L('送出失敗，請稍後再試','Couldn\'t send, please try again later'));
+  }finally{ if(btn) btn.disabled=false; }
+}
+// 一次性公告（沒看過的人會看到一次，關閉後不再跳；要發新公告換新的 ANNOUNCE_ID 即可）
+// 注意：App 內瀏覽器（LINE/FB）可能每次清除儲存，這類用戶每次開啟仍會視為「第一次」看到一次
+const ANNOUNCE_ID = '2026-08-14-sync';
+const ANNOUNCE_EXPIRES = new Date('2026-12-31T00:00:00'); // 到期日：讓第一次來的訪客持續看得到
+// 儲存三層備援：localStorage（跨次）→ sessionStorage（LINE/FB 等 App 內瀏覽器常清 localStorage）
+// → 記憶體（隱私模式下兩者都可能不可用），確保同一次瀏覽絕不重複跳出
+let announceSeen=false;
+function announceGet(k){ try{ if(localStorage.getItem(k)) return true; }catch(e){} try{ if(sessionStorage.getItem(k)) return true; }catch(e){} return announceSeen; }
+function announceSet(k){ announceSeen=true; try{ localStorage.setItem(k,'1'); }catch(e){} try{ sessionStorage.setItem(k,'1'); }catch(e){} }
+function showAnnounce(){
+  if(!ANNOUNCE_ID) return; // 沒有進行中的公告
+  if(new Date() >= ANNOUNCE_EXPIRES) return; // 公告已過期
+  if(announceGet('tr_announce_'+ANNOUNCE_ID)) return;
+  const m=document.getElementById('announce-modal'); if(m) m.classList.add('on');
+}
+function closeAnnounce(){
+  if(ANNOUNCE_ID) announceSet('tr_announce_'+ANNOUNCE_ID);
+  const m=document.getElementById('announce-modal'); if(m) m.classList.remove('on');
+  resetViewport();
+}
+
+// ══════════════════════════════════════════
+//  靜心音樂 — Web Audio 即時生成，零下載
+// ══════════════════════════════════════════
+let AC=null, musicOn=false, musicNodes=null;
+function toggleMusic(){ musicOn ? stopMusic() : startMusic(); }
+function startMusic(){
+  try{
+    if(!AC) AC=new (window.AudioContext||window.webkitAudioContext)();
+    AC.resume();
+    const master=AC.createGain();
+    master.gain.setValueAtTime(0,AC.currentTime);
+    master.gain.linearRampToValueAtTime(.38,AC.currentTime+3);
+    master.connect(AC.destination);
+
+    // ── 純海浪聲：迴圈棕色噪音 + 低通 + 緩慢起伏（三層交錯：近浪、遠浪、底層湧動） ──
+    const noiseLen=6*AC.sampleRate;
+    const noiseBuf=AC.createBuffer(1,noiseLen,AC.sampleRate);
+    const nd=noiseBuf.getChannelData(0);
+    let last=0;
+    for(let i=0;i<noiseLen;i++){ // brown noise（低頻為主，比白噪音更像海）
+      const w=Math.random()*2-1; last=(last+.02*w)/1.02; nd[i]=last*3.5;
+    }
+    // 三層浪：[起伏頻率, 低通頻率, 基礎音量, 起伏深度]
+    const waves=[[0.06,520,.05,.05],[0.038,300,.06,.04],[0.085,800,.025,.03]].map(([lfoHz,lpHz,vol,depth],i)=>{
+      const src=AC.createBufferSource(); src.buffer=noiseBuf; src.loop=true;
+      src.playbackRate.value=1-(i*.12); // 各層速度微差，避免同步感
+      const lp=AC.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=lpHz; lp.Q.value=.3;
+      const g=AC.createGain(); g.gain.value=vol;
+      const lfo=AC.createOscillator(); lfo.frequency.value=lfoHz;
+      const lg=AC.createGain(); lg.gain.value=depth;
+      lfo.connect(lg); lg.connect(g.gain);
+      src.connect(lp); lp.connect(g); g.connect(master);
+      src.start(); lfo.start();
+      return {src,lfo};
+    });
+
+    // ── 靜心 soundwave：theta 雙耳節拍（左 108Hz / 右 114Hz → 6Hz 腦波頻率），極輕地墊在海浪下 ──
+    const binaural=[[108,-1],[114,1]].map(([f,pan])=>{
+      const o=AC.createOscillator(); o.type='sine'; o.frequency.value=f;
+      const g=AC.createGain(); g.gain.value=.018;
+      const p=AC.createStereoPanner ? AC.createStereoPanner() : null;
+      if(p){p.pan.value=pan; o.connect(g); g.connect(p); p.connect(master);}
+      else {o.connect(g); g.connect(master);}
+      o.start();
+      return {src:o,lfo:null};
+    });
+
+    musicNodes={master,waves:[...waves,...binaural]};
+    musicOn=true;
+    document.getElementById('music-btn').classList.add('on');
+    localStorage.setItem('tr_music','1');
+  }catch(e){toast(L('此瀏覽器不支援音訊','Your browser does not support audio'));}
+}
+function stopMusic(){
+  musicOn=false;
+  if(musicNodes&&AC){
+    const nodes=musicNodes;
+    nodes.master.gain.linearRampToValueAtTime(0,AC.currentTime+1.5);
+    setTimeout(()=>{nodes.waves.forEach(({src,lfo})=>{try{src.stop();lfo.stop();}catch(e){}});},1700);
+    musicNodes=null;
+  }
+  document.getElementById('music-btn').classList.remove('on');
+  localStorage.setItem('tr_music','0');
+}
+
+// ══════════════════════════════════════════
+//  TOAST
+// ══════════════════════════════════════════
+// iOS Safari 經典 bug：在 fixed 定位視窗（設定/回報/公告）輸入文字時鍵盤把視覺視口推移，
+// 關閉視窗後視口沒復位 → 之後每一次點擊座標都錯位，看起來像「所有按鈕都不能按」。
+// 修法：關閉視窗/切換畫面時強制收鍵盤並重置捲動（iOS 收鍵盤動畫結束後再校正一次）。
+function resetViewport(){
+  try{ if(document.activeElement && document.activeElement.blur) document.activeElement.blur(); }catch(e){}
+  window.scrollTo(0,0);
+  setTimeout(()=>{ window.scrollTo(0,0); },350);
+}
+function toast(msg){
+  document.querySelectorAll('.toast').forEach(e=>e.remove());
+  const el=document.createElement('div');el.className='toast';el.textContent=msg;
+  document.body.appendChild(el);setTimeout(()=>el.remove(),3000);
+}
+
+// ── 加入書籤 / 手機桌面 ──
+let deferredInstall=null;
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredInstall=e;});
+function addToHome(){
+  // Android / 桌面 Chrome：直接跳出安裝提示
+  if(deferredInstall){deferredInstall.prompt();deferredInstall=null;return;}
+  const ua=navigator.userAgent;
+  const isIOS=/iPhone|iPad|iPod/.test(ua);
+  const isAndroid=/Android/.test(ua);
+  const isMac=/Macintosh/.test(ua);
+  let msg;
+  if(isIOS){
+    msg=`<strong style="color:var(--gold)">iPhone / iPad 加入主畫面：</strong><br>
+      1. 點 Safari 下方的 <strong style="color:var(--silver)">分享按鈕</strong>（□↑）<br>
+      2. 往下捲，點「<strong style="color:var(--silver)">加入主畫面</strong>」<br>
+      3. 點右上角「加入」——完成！主畫面就有塔羅神諭的圖示了`;
+  } else if(isAndroid){
+    msg=`<strong style="color:var(--gold)">Android 加入主畫面：</strong><br>
+      1. 點瀏覽器右上角 <strong style="color:var(--silver)">⋮ 選單</strong><br>
+      2. 點「<strong style="color:var(--silver)">加到主畫面</strong>」或「安裝應用程式」<br>
+      3. 確認——完成！`;
+  } else {
+    msg=`<strong style="color:var(--gold)">加入書籤：</strong><br>
+      按 <strong style="color:var(--silver)">${isMac?'⌘ Cmd + D':'Ctrl + D'}</strong> 即可將本站加入書籤<br><br>
+      <span style="color:var(--muted);font-size:.78rem">手機用戶：用手機瀏覽器開啟本站，再點此按鈕會有「加入主畫面」教學</span>`;
+  }
+  const overlay=document.createElement('div');
+  overlay.className='modal-overlay on';
+  overlay.onclick=e=>{if(e.target===overlay)overlay.remove();};
+  overlay.innerHTML=`<div class="modal" style="max-width:420px">
+    <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">✕</button>
+    <h3>⭐ 收藏塔羅神諭</h3>
+    <p style="font-size:.85rem;color:var(--muted);line-height:2.1;margin-top:14px;text-align:left">${msg}</p>
+  </div>`;
+  document.body.appendChild(overlay);
+}
+
+function toggleSoundInfo(){
+  const panel=document.getElementById('sound-info-panel');
+  const arr=document.getElementById('sound-info-arr');
+  const open=panel.style.display==='none';
+  panel.style.display=open?'block':'none';
+  arr.style.transform=open?'rotate(90deg)':'';
+}
+function toggleAiInfo(){
+  const panel=document.getElementById('ai-info-panel');
+  const arr=document.getElementById('ai-info-arr');
+  const open=panel.style.display==='none';
+  panel.style.display=open?'block':'none';
+  arr.style.transform=open?'rotate(90deg)':'';
+}
+
+// ══════════════════════════════════════════
+//  更新紀錄 CHANGELOG（新項目加在最上面；中英務必同步）
+// ══════════════════════════════════════════
+const CHANGELOG = [
+  { date:'2026-08-14',
+    zh:['專案雲端同步：訂閱用戶的專案（名稱、描述與專案內占卜記錄）自動跨裝置備份合併，清除資料或換裝置不再遺失','「專案占卜」的專案名稱可以編輯了：進入專案點名稱旁「✎ 編輯」','手機追問輸入框改為多行：按「換行」不再誤送出，輸入框會自動長高；訊息換行正常顯示','訂閱的 AI 解牌當日額度用完時，若有設定自備 API Key 會自動切換續用，不中斷','穩定性大修：網路不穩導致頁面載入不完整時自動偵測並重新載入（修正 Safari 按鈕全部失效的問題）；本機資料損壞自動隔離修復；關閉視窗後強制重置鍵盤視口','站內回覆：許願/回報後，站長的回覆會直接顯示在網站上（不需留 email）'],
+    en:['Project cloud sync: subscribers\' projects (names, descriptions and their readings) now back up and merge across devices — clearing data or switching devices no longer loses them','Project names are now editable — open a project and tap "✎ Edit" next to the name','The follow-up input is now multi-line on mobile: the return key inserts a line break instead of sending, and the box grows as you type','When your daily subscription limit is reached, readings automatically continue on your own API key (if set)','Major stability work: incomplete page loads (flaky networks) are now detected and auto-reloaded (fixes all-buttons-dead on Safari); corrupted local data auto-repairs; keyboard viewport resets after closing dialogs','In-app replies: after a wish/report, replies from the site owner appear right on the site (no email needed)'] },
+  { date:'2026-07-25',
+    zh:['「繼續追問」：追問次數未用完的占卜，可從「占卜記錄」接著提問，不必重抽；追問對話每次問答後即時保存，網頁重整不再遺失','AI 解讀完成自動存入記錄（含專案占卜），忘記按儲存也不會白占','修正：字體設定「大」以上時追問送出鈕被擠出畫面無法點擊','修正：專案占卜的解讀未同步到專案時間軸的問題','洗牌新增即時合成的擬真刷牌音效；公告視窗關閉後不再重複跳出'],
+    en:['"Continue asking": readings with follow-ups left can be resumed from History — no redraw needed; chats now save instantly after every question, so refreshes no longer lose them','Readings auto-save the moment the AI finishes (project readings included)','Fixed: the follow-up send button overflowed off-screen at large font sizes','Fixed: project readings not syncing their interpretation to the project timeline','Shuffling gained a realistic synthesized riffle sound; the announcement popup no longer re-appears after closing'] },
+  { date:'2026-07-05',
+    zh:['新增「四張牌 · 直指核心」牌陣：問題核心 → 障礙 → 對策 → 優勢，一次看清卡關的關鍵、你遇到的阻力、可行的作法，以及你手邊已有的資源，適合「老是卡關卻說不出問題在哪」的狀況','新增「五張牌 · 感情萬用」牌陣：我的狀態 → 我對對方的態度 → 對方的狀態 → 對方對我的態度 → 可能的結果，一次看見雙方現況與對彼此的感情，適合了解你和某個特定對象的關係走向（結果為大方向，會隨雙方心意改變）','新增「賽爾特十字」牌陣：塔羅最經典的 10 張綜合大牌陣，從現況、過去未來、內在外在到最終結果全面剖析，適合重要、複雜、想看得最深最完整的問題（並以傳統十字＋權杖造型呈現）','新增「⚡ 一鍵快速抽牌」：不想一張一張點，可在洗牌或抽牌畫面按一下，用加密隨機直接抽出整組牌並進入解讀，抽大牌陣（如賽爾特十字 10 張）更省時'],
+    en:['New "Four-Card · Core Insight" spread: Core → Obstacle → Move → Strengths — pinpoints the real crux of a stuck situation, the resistance you face, the concrete move you can make, and the resources you already have; ideal when you keep stalling but can\'t name the issue','New "Five-Card · Relationship" spread: My State → My Feelings → Their State → Their Feelings → Possible Outcome — see both people\'s current state and how each feels, for understanding where you and one specific person are heading (the outcome is a direction and can shift as either heart changes)','New "Celtic Cross" spread: the classic 10-card comprehensive layout — a full analysis from the present, past and future to inner and outer influences and the final outcome, for important, complex questions you want to see in full depth (shown in the traditional cross + staff shape)','New "⚡ Quick draw": don\'t want to tap cards one by one? Tap once on the shuffle or pick screen to draw the whole spread at once with crypto-random selection and go straight to the reading — a big time-saver for large spreads like the 10-card Celtic Cross'] },
+  { date:'2026-07-04',
+    zh:['不知道怎麼問？每個牌陣現在都附 1–2 個「範例問題」，點一下自動填入問題欄，沒有占卜經驗也能立刻開始','「說明與回報中心」正式啟用：內建常見問題 FAQ，並可直接送出「🐞 問題回報 / 💡 功能許願」給開發者（站內表單，不必寄信）','頁尾「聯繫我們」改為直接開啟站內回報表單，回覆更快也更保護雙方隱私','安全性全面強化：顯示內容加上防護、付款通知加上來源驗證，你的記錄與存取更安全'],
+    en:['Not sure what to ask? Every spread now offers 1–2 tappable example questions — tap one and it fills in your question so you can start right away','The Help & Feedback center is now live: a built-in FAQ plus an in-app form to send "🐞 Report a problem / 💡 Feature wish" to the developer (no email needed)','The footer "Contact Us" link now opens the in-app feedback form directly — faster replies and better privacy for everyone','Security hardening across the site: displayed content is now sanitized and payment notifications are origin-verified, keeping your records and access safer'] },
+  { date:'2026-06-15',
+    zh:['每個牌陣在提問畫面顯示專屬的「建議問法」，引導你針對該牌陣最適合的問題類型提問（單張／三張／聖三角／五張無視論／二擇一各有不同）','補解析升級：在「占卜記錄」用 AI 解析會重新開回完整解牌畫面、跑 AI 並給 5 次追問；未解鎖時先引導驗證、解鎖後自動接著解析（占卜也會自動保留，方便日後補解）','解鎖流程優化：抽完牌後才解鎖（驗證 Email 或貼上 API Key），會「立即」用 AI 解析當前這次抽牌，不必再儲存、等下次','二擇一牌陣可先填寫「選項 1（左）／選項 2（右）」各是什麼，牌陣與解讀都會用你的選項名稱，分析更精準清楚'],
+    en:['Each spread now shows its own "how to ask" tip on the question screen, guiding you toward the kind of question it suits best (Single / Three-card / Holy Triangle / Five-card Wuxi / Either-Or each differ)','Re-analysis upgrade: tapping "Analyze with AI" in History reopens the full reading, runs AI, and unlocks 5 follow-up questions; if you aren\'t unlocked it guides you to verify and then continues automatically (readings are auto-saved so you can analyze them later)','Smoother unlock: if you unlock (verify email or paste an API key) right after a reading, AI now analyzes that reading immediately — no need to save and re-run later','Either-Or spread now lets you name "Option 1 (left)" and "Option 2 (right)"; the spread and reading use your names for clearer, more precise analysis'] },
+  { date:'2026-06-14',
+    zh:['新增「字級大小」調整（標準／大／特大／超大）：畫面左下角「A⁺」鈕一鍵放大，或在設定裡選級距，全站文字隨之變大','占卜記錄即使當初沒跑出 AI 解析（例如遇到 API 當機），現在都能在記錄裡用 AI 補解析同一組牌（含先前存的舊紀錄）','追問對話新增「每次占卜可追問次數上限」（預設 5 次），並清楚顯示「本次可追問幾次、還剩幾次」，避免無止境聊天','AI 當機或暫停時自動保留這次抽牌結果，可在「占卜記錄」用 AI 重新解析同一組牌，不必重抽；解牌失敗也新增「重試 AI 解析」按鈕','三張／聖三角／二擇一的基本解讀也改為逐張分析每張牌；解讀文字與 AI 一律避免預設性別（不用「她／妳」），降低性別誤判','五張無視論的基本解讀改為「逐張」分析全部 5 張（標示重點/輔助），不再只講重點牌','設定頁新增「🐞 回報問題」聯絡連結，AI 連線失敗時也能一鍵回報','解牌頁的「解鎖方案」改為跳出設定小視窗（站內彈窗結帳），不再開新分頁','購買區改為兩個清楚並列的選項——「🎉 一次買斷（限時到 6/30）」與「月訂閱 US$5／月（每月自動續扣）」，各自標明時限與扣款方式，避免誤點','設定頁新增「☁ 立即同步歷史記錄」按鈕，可手動同步並顯示同步筆數，不再只是默默在背景跑','改為每月 US$5 訂閱制（新開張限時保留一次買斷優惠到 6/30）','訂閱到期會自動提示並引導續訂，不再卡在「看似解鎖卻無法解牌」','五張無視論牌陣也加上醒目的「關鍵結論」判讀','牌陣選擇版面優化：視窗變小時換行的卡片置中對齊','修正英文版部分按鈕文字過長破框'],
+    en:['Added a Text size control (Normal / Large / X-Large / XX-Large): tap the "A⁺" button at bottom-left, or pick a level in settings, to enlarge all text','Saved readings that never got an AI analysis (e.g. during an API outage) can now be analyzed with AI from History — including older saved records','Follow-up chat now has a per-reading limit (default 5 questions) with a clear "X per reading · N left" indicator, to avoid endless chats','If AI is down or paused, your draw is saved automatically — re-analyze the same cards later from "History", no need to redraw; failed readings also gain a "Retry AI" button','Three-Card / Holy Triangle / Either-Or basic readings now analyze each card too; readings and AI avoid assuming gender (no gendered pronouns) to prevent mis-gendering','Five-Card Wuxi basic reading now analyzes all five cards one by one (key/support marked), not just the key cards','Added a "🐞 Report a problem" contact link in settings (and on AI-connection errors)','Reading-page unlock now opens the in-page settings popup (on-site overlay checkout) instead of a new tab','Purchase area now shows two clearly-labeled options — "🎉 One-time unlock (until Jun 30)" and "Monthly US$5/mo (auto-renews)" — each stating its time limit and billing, so no one picks the wrong one','Added a "☁ Sync history now" button in settings — sync on demand and see how many records synced, instead of it only running silently','Switched to a US$5/month subscription (one-time launch deal kept until Jun 30)','Lapsed subscriptions now prompt you to resubscribe instead of silently failing to read','Added the prominent "Key Verdict" to the Five-Card Wuxi spread too','Spread picker layout: wrapped cards now center-align on smaller windows','Fixed a few English buttons whose text overflowed their frame'] },
+  { date:'2026-06-13',
+    zh:['解牌新增「關鍵結論」：針對現在→未來給出明確趨勢判讀（例如低谷會不會過去），結論更清楚','提問前加入「面向聚焦」提示，引導先鎖定感情／事業／財運／健康／學業，問得更準、解得更貼切','購買後解鎖更順：從購買連結回到網站會自動開啟解鎖視窗並引導輸入購買 Email','自訂牌陣張數上限提升至 12 張（適合占算一整年每月運勢）','強化跨裝置同步：開啟網站即自動雙向同步，另一台裝置的記錄更即時呈現','啟用專屬網址 tarot.angiehu.com','新增「更新紀錄」頁面，記錄每次更新','五張無視論牌陣標示為「最推薦」全方位解牌','追問區加入提示，引導如何向 AI 追問細節','付費會員新增跨裝置雲端同步歷史記錄','強化 SEO 與結構化資料，讓 Google 與 AI 更容易找到本站'],
+    en:['New "Key Verdict" in readings: a clear trend call from Present → Future (e.g. whether the low point will pass), so conclusions feel definite','Added a "focus your question" prompt before drawing — pick love / career / money / health / study first for sharper, more on-point readings','Smoother post-purchase unlock: returning from the purchase link auto-opens the unlock prompt and guides you to enter your email','Custom spread now supports up to 12 cards (great for a month-by-month year-ahead reading)','Stronger cross-device sync: two-way sync runs automatically on load, so another device\'s readings show up sooner','Launched the custom address tarot.angiehu.com','Added this Changelog page to track every update','Marked the Five-Card Wuxi spread as the recommended all-around reading','Added hints in the follow-up area on how to ask the AI for details','Paid members get cross-device cloud history sync','Improved SEO and structured data so Google and AI can find the site more easily'] },
+  { date:'2026-06-12',
+    zh:['推出完整英文版，瀏覽器語言自動偵測 + 右上角一鍵切換','78 張牌的英文牌義、關鍵字、圖像星象資料庫','首頁加入星雲、流星、牌扇動畫與書籤／加入主畫面功能','新增聖三角牌陣；每個牌陣加上「適合占卜什麼」說明'],
+    en:['Launched the full English version with browser-language auto-detect and a one-tap toggle','English database of all 78 cards: meanings, keywords, imagery & astrology','Home page nebula / shooting-star / card-fan animations, plus bookmark / add-to-home','Added the Holy Triangle spread; each spread now notes what it is best for'] },
+  { date:'2026-06-11',
+    zh:['導入靜心音場：海浪聲＋theta 腦波音','支援 OpenAI 金鑰（與 Gemini 自動辨識）；AI 連線失敗自動重試','解牌依問題主題（感情／事業／財務／健康／學業）聚焦回覆','歷史記錄加入關鍵字搜尋與主題分類'],
+    en:['Added the meditation soundscape: ocean waves + theta brainwave tone','OpenAI key support (auto-detected alongside Gemini); auto-retry on AI errors','Readings now focus on the question topic (love / career / money / health / study)','History gained keyword search and topic categories'] },
+  { date:'2026-06-10',
+    zh:['上線購買解鎖 AI 深度解牌：購買後以 email 驗證即可使用','無視論解牌邏輯校正：重點牌只用於五張牌陣，正逆位不等於吉凶','塔羅神諭正式上線，78 張偉特牌、加密隨機洗牌'],
+    en:['Launched purchase-to-unlock AI deep readings: verify with your email after buying','Refined Wuxi logic: key-card method only for the five-card spread; upright ≠ good','Tarot Oracle went live with all 78 Rider–Waite cards and crypto-random shuffling'] },
+];
+function showChangelog(){
+  const el=document.getElementById('changelog-list');
+  el.innerHTML=CHANGELOG.map(e=>{
+    const items=(LANG==='en'?e.en:e.zh).map(t=>`<li style="margin-bottom:6px;line-height:1.7">${t}</li>`).join('');
+    return `<div style="border-left:2px solid rgba(212,175,55,.35);padding:4px 0 4px 16px;margin-bottom:22px">
+      <div style="font-family:'Cinzel',serif;font-size:.82rem;color:var(--gold);letter-spacing:.08em;margin-bottom:8px">${e.date}</div>
+      <ul style="margin:0;padding-left:18px;font-size:.85rem;color:var(--silver)">${items}</ul>
+    </div>`;
+  }).join('');
+  go('s-changelog');
+}
+
+// ── INIT ──
+(()=>{
+  const k=localStorage.getItem('gemini_key');
+  if(k){const clean=k.split('').filter(c=>c.charCodeAt(0)>=32&&c.charCodeAt(0)<=126).join('');if(clean!==k)localStorage.setItem('gemini_key',clean);}
+  localStorage.removeItem('tr_unlock'); // migrate: old code-based unlock no longer used
+})();
+applyLang();
+applyFontScale(); // 套用使用者選的字級
+go('s-welcome');
+showAnnounce(); // 一次性服務公告
+// ── 站長回覆：查詢自己回報的站內回覆，未讀的以視窗顯示 ──
+async function checkOwnerReplies(){
+  try{
+    const mine=safeParse('tr_my_reports','[]');
+    if(!mine.length||!WORKER_URL) return;
+    const r=await fetch(WORKER_URL+'/my-replies',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({items:mine.map(m=>({id:m.id,tok:m.tok}))})});
+    if(!r.ok) return;
+    const data=await r.json();
+    const seen=safeParse('tr_replies_seen','[]');
+    // 同一筆回覆更新過也要再通知：以「id+回覆時間」當已讀鍵
+    const unseen=(data.replies||[]).filter(x=>!seen.includes(x.id+'|'+(x.repliedAt||'')));
+    if(!unseen.length) return;
+    const ov=document.createElement('div');
+    ov.className='modal-overlay on'; ov.style.zIndex='640';
+    ov.onclick=e=>{ if(e.target===ov) closeIt(); };
+    const items=unseen.map(x=>`
+      <div style="text-align:left;margin-top:14px;padding:12px 14px;background:rgba(212,175,55,.06);border:1px solid rgba(212,175,55,.2);border-radius:10px">
+        <div style="font-size:.74rem;color:var(--muted);margin-bottom:6px">${x.type==='wish'?L('💡 你的許願','💡 Your wish'):L('🐞 你的回報','🐞 Your report')}：「${escHtml(x.message)}」</div>
+        <div style="font-size:.9rem;color:var(--white);line-height:1.9;white-space:pre-wrap">💌 ${escHtml(x.reply)}</div>
+      </div>`).join('');
+    ov.innerHTML=`<div class="modal" style="max-width:460px;text-align:center">
+      <button class="modal-close">✕</button>
+      <h3>${L('✦ 站長回覆','✦ Reply from the Site Owner')}</h3>
+      ${items}
+      <button class="btn btn-sm" style="margin-top:16px">${L('我知道了','Got it')}</button>
+    </div>`;
+    const closeIt=()=>{
+      const s2=safeParse('tr_replies_seen','[]');
+      unseen.forEach(x=>s2.push(x.id+'|'+(x.repliedAt||'')));
+      try{ localStorage.setItem('tr_replies_seen',JSON.stringify(s2.slice(-40))); }catch(e){}
+      ov.remove();
+    };
+    ov.querySelector('.modal-close').onclick=closeIt;
+    ov.querySelector('.btn').onclick=closeIt;
+    document.body.appendChild(ov);
+  }catch(e){/* 靜默失敗，不影響網站 */}
+}
+checkOwnerReplies();
+// 專案救援：專案是空的但存在損壞備份（safeParse 隔離的）→ 嘗試解析救回；
+// 截斷型損壞（寫入到一半中斷）則裁到最後一個完整物件邊界修復
+(function restoreProjectsBackup(){
+  try{
+    if(S.projects.length) return;
+    const raw=localStorage.getItem('tr_projects_corrupt_bak');
+    if(!raw) return;
+    let arr=null;
+    try{ arr=JSON.parse(raw); }catch(e){
+      let tries=0;
+      for(let i=raw.length; i>1 && tries<60; i--){
+        if(raw[i-1]!=='}') continue;
+        tries++;
+        try{ arr=JSON.parse(raw.slice(0,i)+']'); break; }catch(_){}
+        try{ arr=JSON.parse(raw.slice(0,i)+']}]'); break; }catch(_){}
+      }
+    }
+    if(Array.isArray(arr) && arr.length){
+      S.projects=arr.filter(p=>p&&p.id!=null).map(p=>({...p, readings:sanitizeRecs(p.readings||[])}));
+      saveProjects();
+      localStorage.removeItem('tr_projects_corrupt_bak');
+      toast(L('✦ 已從備份救回你的專案','✦ Your projects were recovered from backup'));
+    }
+  }catch(e){/* 備份無法救回，保留原樣 */}
+})();
+// 新開張一次性買斷優惠：只在 6/30 前顯示，之後自動隱藏（毋須手動改站）
+(function(){ const el=document.getElementById('launch-offer'); if(el && inPromo()) el.style.display='block'; })();
+// 已驗證 email → 先確認訂閱仍有效（可能已到期），再靜默拉回雲端歷史
+if(isVerified()) revalidateAccess().then(ok=>{
+  if(!ok) return;
+  syncPull().then(merged=>{
+    if(!merged) return;
+    const cur=document.querySelector('.screen.on');
+    if(cur && cur.id==='s-history') showHistory(); // 正停在歷史頁才重繪
+  });
+});
+
+// ── Gumroad 購買後自動解鎖 ──
+// Gumroad「Redirect to a URL after purchase」會把買家資訊以 query 參數帶回
+// （email、sale_id…）。我們拿 email 去 /check 驗證（真正信任來源是 webhook 寫入的 KV，
+// 安全等級與手動貼信箱相同），確認後自動解鎖，免去使用者手動輸入。
+(function autoUnlockFromPurchase(){
+  if(!WORKER_URL) return;
+  const p=new URLSearchParams(location.search);
+  const email=(p.get('email')||'').trim().toLowerCase();
+  // 需同時帶 sale_id 才視為 Gumroad 購後轉址，避免誤觸
+  if(!email || !p.get('sale_id')) return;
+  // 立即把 email/sale_id 等參數從網址移除（隱私：別留在網址列或被分享）
+  history.replaceState(null,'',location.pathname);
+  const tryCheck=async(attempt)=>{
+    try{
+      const r=await fetch(WORKER_URL+'/check',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});
+      const d=await r.json();
+      if(d.verified){
+        localStorage.setItem('tr_verified_email',email);
+        updateApiStatus();
+        toast(L('✦ 付款成功，AI 解牌已自動解鎖！','✦ Payment confirmed — AI reading unlocked!'));
+        syncPull().then(merged=>{ if(!merged) return; const cur=document.querySelector('.screen.on'); if(cur&&cur.id==='s-history') showHistory(); });
+        return;
+      }
+    }catch(e){/* 連線失敗就重試 */}
+    // webhook 可能還沒處理完，遞增延遲重試幾次
+    if(attempt<4) setTimeout(()=>tryCheck(attempt+1), 1500*(attempt+1));
+  };
+  tryCheck(0);
+})();
+
+// ── 購買後引導解鎖（?unlock=1）──
+// 沒有 Gumroad 自動轉址帶 email 時的退路：在 Gumroad 收據/內容放一個指向
+// https://tarot.angiehu.com/?unlock=1 的連結。帶這個參數進站就自動打開解鎖視窗、
+// 聚焦 Email 欄並給提示，使用者只要打一次購買 email 即可解鎖。
+(function deepLinkUnlock(){
+  const p=new URLSearchParams(location.search);
+  if(p.get('unlock')!=='1') return;
+  if(p.get('email')) return; // 有 email+sale_id 的真轉址交給上面的自動解鎖
+  history.replaceState(null,'',location.pathname); // 清掉參數
+  if(isVerified()) return;   // 已解鎖就不用再開
+  setTimeout(()=>{
+    if(typeof openSettings!=='function') return;
+    openSettings();
+    const inp=document.getElementById('unlock-input');
+    if(inp){ inp.value=''; inp.focus(); }
+    const bar=document.getElementById('unlock-status-bar');
+    if(bar){ bar.style.display='block'; bar.className='api-status api-none';
+      bar.textContent=L('輸入你購買時填寫的 Email 即可解鎖 ✦','Enter the email you used at checkout to unlock ✦'); }
+  }, 300);
+})();
+
+// ── 管理後台（僅站主）：網址加 #admin 貼一次 STATS_TOKEN，鑰匙只存在
+//    這台裝置的 localStorage（不在原始碼、不上傳），設定頁就會出現管理區塊。
+const ADMIN_KEY_LS='tarot_admin_key';
+function adminKey(){ try{return localStorage.getItem(ADMIN_KEY_LS)||'';}catch(e){return '';} }
+function refreshAdminSec(){ const el=document.getElementById('admin-sec'); if(el) el.style.display=adminKey()?'block':'none'; }
+function openAdmin(p){ const k=adminKey(); if(!k)return; window.open(WORKER_URL+'/'+p+'?key='+encodeURIComponent(k),'_blank'); }
+function adminLogout(){ try{localStorage.removeItem(ADMIN_KEY_LS);}catch(e){} refreshAdminSec(); toast(L('已登出管理模式','Admin mode off')); }
+(function adminEntry(){
+  refreshAdminSec();
+  if(location.hash!=='#admin') return;
+  history.replaceState(null,'',location.pathname+location.search);
+  const k=(prompt(L('貼上管理金鑰（STATS_TOKEN）','Paste your admin key (STATS_TOKEN)'))||'').trim();
+  if(!k) return;
+  try{localStorage.setItem(ADMIN_KEY_LS,k);}catch(e){}
+  refreshAdminSec();
+  toast(L('🔑 管理模式已啟用，管理後台在「設定」頁最下方','🔑 Admin mode on — see the bottom of Settings'));
+})();
