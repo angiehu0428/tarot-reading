@@ -593,7 +593,7 @@ textarea.inp{resize:vertical;min-height:90px}
       <span style="color:rgba(212,175,55,.25);margin:0 8px">·</span>
       <a href="https://www.angiehu.com" target="_blank" rel="noopener" style="color:rgba(212,175,55,.7);text-decoration:none;transition:color .3s" onmouseover="this.style.color='var(--gold)'" onmouseout="this.style.color='rgba(212,175,55,.7)'" data-i18n="w.mysite">🌐 我的其他作品</a>
     </span><br>
-    <a href="javascript:void(0)" onclick="showChangelog()" style="color:rgba(212,175,55,.45);text-decoration:none;transition:color .3s" onmouseover="this.style.color='rgba(212,175,55,.8)'" onmouseout="this.style.color='rgba(212,175,55,.45)'" data-i18n="w.changelog">✦ 更新紀錄</a> <span style="color:rgba(154,141,181,.35);font-size:.68rem">v2026.8.15b</span><br>
+    <a href="javascript:void(0)" onclick="showChangelog()" style="color:rgba(212,175,55,.45);text-decoration:none;transition:color .3s" onmouseover="this.style.color='rgba(212,175,55,.8)'" onmouseout="this.style.color='rgba(212,175,55,.45)'" data-i18n="w.changelog">✦ 更新紀錄</a> <span style="color:rgba(154,141,181,.35);font-size:.68rem">v2026.8.15c</span><br>
     <span data-i18n="w.copyright">© 2026 塔羅神諭 · All Rights Reserved</span><br>
     <a href="javascript:void(0)" onclick="reportProblem('footer')" style="color:rgba(212,175,55,.35);text-decoration:none;transition:color .3s" onmouseover="this.style.color='rgba(212,175,55,.7)'" onmouseout="this.style.color='rgba(212,175,55,.35)'" data-i18n="w.contact">聯繫我們</a>
   </div>
@@ -840,10 +840,12 @@ textarea.inp{resize:vertical;min-height:90px}
 </div>
 
 <script>
-/* 主程式改為外部檔案載入：外部腳本有明確的成功/失敗事件（無計時器、不可能誤判慢速連線）。
-   下載失敗或內容損毀（旗標未設立＝解析失敗）→ 只重抓 app.js（繞過快取），自動重試 3 次。 */
+/* 主程式載入器 v2：先驗證、後執行。
+   下載完成後檢查（1）檔尾完整標記存在（防截斷）（2）標記唯一（防快取拼接出重複內容，
+   即 "Identifier has already been declared" 一類錯誤）→ 驗證通過才執行；
+   任何失敗（下載斷、驗證不過、執行時解析錯）都自動換網址重抓，最多 4 次。 */
 (function(){
-  var tries=0;
+  var tries=0, EOFM='/*__APP_'+'EOF__*/';
   function notice(msg,final){
     var d=document.getElementById('app-load-notice');
     if(!msg){ if(d&&d.parentNode) d.parentNode.removeChild(d); return; }
@@ -853,20 +855,23 @@ textarea.inp{resize:vertical;min-height:90px}
     d.textContent=msg;
   }
   function boot(){
-    var sc=document.createElement('script');
-    sc.src='app.js?v=2026.8.15b'+(tries?('&t='+new Date().getTime()):'');
-    sc.onload=function(){
-      if(window.__APP_LOADED__){ notice(null); return; }
-      retry(); // 檔案抓到了但內容損毀（解析失敗、旗標未設）
-    };
-    sc.onerror=function(){ retry(); };
-    document.body.appendChild(sc);
-  }
-  function retry(){
-    tries++;
-    if(tries>3){ notice('⚠ 網路不穩，程式載入失敗——請檢查連線後重新整理 / Failed to load — please check your connection and refresh',true); return; }
-    notice('✦ 連線不穩，自動重試中（'+tries+'/3）… / Retrying ('+tries+'/3)…');
-    setTimeout(boot, 700*tries);
+    if(window.__APP_LOADED__){ notice(null); return; }
+    var url='app.js?v=2026.8.15c'+(tries?('&t='+new Date().getTime()):'');
+    fetch(url,{cache:tries?'reload':'default'}).then(function(r){
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      return r.text();
+    }).then(function(src){
+      if(src.indexOf(EOFM)===-1) throw new Error('truncated');           // 截斷：檔尾標記不見
+      if(src.indexOf(EOFM)!==src.lastIndexOf(EOFM)) throw new Error('duplicated'); // 拼接：標記出現兩次
+      (0,eval)(src); // 驗證通過才執行；解析錯誤也會被下面 catch 接住
+      if(!window.__APP_LOADED__) throw new Error('not effective');
+      notice(null);
+    })['catch'](function(e){
+      tries++;
+      if(tries>4){ notice('⚠ 網路不穩，程式載入失敗（'+(e&&e.message||'')+'）——請檢查連線後重新整理 / Failed to load — please check your connection and refresh',true); return; }
+      notice('✦ 連線不穩，自動重試中（'+tries+'/4）… / Retrying ('+tries+'/4)…');
+      setTimeout(boot, 600*tries);
+    });
   }
   boot();
 })();

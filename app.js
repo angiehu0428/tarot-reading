@@ -3224,3 +3224,4 @@ function adminLogout(){ try{localStorage.removeItem(ADMIN_KEY_LS);}catch(e){} re
   refreshAdminSec();
   toast(L('🔑 管理模式已啟用，管理後台在「設定」頁最下方','🔑 Admin mode on — see the bottom of Settings'));
 })();
+/*__APP_EOF__*/
