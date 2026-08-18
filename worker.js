@@ -80,6 +80,14 @@ export default {
     if (url.pathname === '/report-del' && request.method === 'POST') {
       return handleReportDel(request, env);
     }
+    // Credit balance query — verified users
+    if (url.pathname === '/credits' && request.method === 'POST') {
+      return handleCredits(request, env);
+    }
+    // Credit manual adjust — private, key in query
+    if (url.pathname === '/credits-admin' && request.method === 'POST') {
+      return handleCreditsAdmin(request, env);
+    }
     // Reply to a report (in-app) — private, key in query
     if (url.pathname === '/report-reply' && request.method === 'POST') {
       return handleReportReply(request, env);
@@ -311,6 +319,35 @@ async function handleWebhook(request, env) {
 
   if (!email) return new Response('No email', { status: 400 });
 
+  // ── Credit 儲值商品分流 ──
+  // env.CREDIT_PRODUCTS 格式："<permalink或product_id>:<點數>,..."（如 "crdt100:100,crdt300:300"）
+  // 命中 → 入點數後直接返回，「不」寫入訂閱驗證記錄
+  const productKeys = [params.get('permalink'), params.get('product_id'), params.get('product_permalink')]
+    .filter(Boolean).map(x => x.toString().split('/').pop().toLowerCase());
+  const creditMap = {};
+  (env.CREDIT_PRODUCTS || '').split(',').forEach(pair => {
+    const [k, v] = pair.split(':').map(x => (x || '').trim());
+    if (k && v) creditMap[k.toLowerCase()] = parseInt(v, 10) || 0;
+  });
+  const packKey = productKeys.find(k => creditMap[k] > 0);
+  if (packKey) {
+    const pack = creditMap[packKey];
+    const ck = `credits:${email}`;
+    const bal = parseInt((await env.TAROT_KV.get(ck)) || '0', 10);
+    if (refunded) {
+      await env.TAROT_KV.put(ck, String(Math.max(0, bal - pack)));
+      return new Response('OK');
+    }
+    // 同一筆 sale 只入帳一次（Gumroad ping 可能重送）
+    if (saleId) {
+      const seen = await env.TAROT_KV.get(`csale:${saleId}`);
+      if (seen) return new Response('OK');
+      await env.TAROT_KV.put(`csale:${saleId}`, '1', { expirationTtl: 60 * 60 * 24 * 90 });
+    }
+    await env.TAROT_KV.put(ck, String(bal + pack));
+    return new Response('OK');
+  }
+
   if (refunded || ended) {
     // 退款 / 訂閱結束 → 移除存取
     await env.TAROT_KV.delete(`email:${email}`);
@@ -327,6 +364,33 @@ async function handleWebhook(request, env) {
   );
 
   return new Response('OK');
+}
+
+// ── Credit balance ───────────────────────────────────────────
+async function handleCredits(request, env) {
+  const { email } = await request.json().catch(() => ({}));
+  const e = (email || '').toLowerCase().trim();
+  if (!e) return json({ balance: 0 }, 200, request);
+  const record = await env.TAROT_KV.get(`email:${e}`);
+  if (!record) return json({ error: 'not verified', balance: 0 }, 403, request);
+  const bal = parseInt((await env.TAROT_KV.get(`credits:${e}`)) || '0', 10);
+  return json({ balance: bal }, 200, request);
+}
+
+// ── Credit manual adjust (private; for support/testing) ──────
+async function handleCreditsAdmin(request, env) {
+  const url = new URL(request.url);
+  if (!env.STATS_TOKEN || url.searchParams.get('key') !== env.STATS_TOKEN) {
+    return new Response('Forbidden', { status: 403 });
+  }
+  const { email, delta } = await request.json().catch(() => ({}));
+  const e = (email || '').toLowerCase().trim();
+  const d = parseInt(delta, 10);
+  if (!e || isNaN(d)) return json({ error: 'bad request' }, 400, request);
+  const ck = `credits:${e}`;
+  const bal = Math.max(0, parseInt((await env.TAROT_KV.get(ck)) || '0', 10) + d);
+  await env.TAROT_KV.put(ck, String(bal));
+  return json({ ok: true, balance: bal }, 200, request);
 }
 
 // ── Check if email is verified ───────────────────────────────
@@ -433,7 +497,7 @@ async function handleGemini(request, env) {
     return json({ error: 'AI 解牌暫停服務：API 配額已滿，請稍後再試 / AI readings are paused: quota reached, please try again later.', paused: true }, 503, request);
   }
 
-  const { email, body: geminiBody } = await request.json().catch(() => ({}));
+  const { email, body: geminiBody, spend } = await request.json().catch(() => ({}));
 
   if (!email) return json({ error: '請提供 email' }, 400, request);
 
@@ -445,17 +509,29 @@ async function handleGemini(request, env) {
 
   if (!geminiBody) return json({ error: '缺少請求內容' }, 400, request);
 
-  // 全站成本總閘
+  // Credit 扣點模式：超出免費額度的呼叫（追問超過每次上限 / 當日次數用完）。
+  // 有餘額 → 略過每日上限檢查，成功後才扣 1 點；無餘額 → 402。
+  const ck = `credits:${e}`;
+  let creditBalance = null;
+  if (spend) {
+    creditBalance = parseInt((await env.TAROT_KV.get(ck)) || '0', 10);
+    if (creditBalance < 1) {
+      return json({ error: 'Credit 點數不足 / Not enough credits', noCredits: true, balance: 0 }, 402, request);
+    }
+  }
+
+  // 全站成本總閘（扣點呼叫已付費，不受總閘限制）
   const dk = todayKey();
   const used = parseInt((await env.TAROT_KV.get(dk)) || '0', 10);
-  if (used >= DAILY_CAP) {
+  if (!spend && used >= DAILY_CAP) {
     return json({ error: '今日 AI 解牌已額滿，請明天再來 / Today\'s AI readings are full, please try again tomorrow.', capped: true }, 429, request);
   }
-  // 單一用戶每日上限（防狂刷）
+  // 單一用戶每日上限（防狂刷；扣點呼叫不受限）
   const uk = userDayKey(e);
   const uUsed = parseInt((await env.TAROT_KV.get(uk)) || '0', 10);
-  if (uUsed >= USER_DAILY_CAP) {
-    return json({ error: `你今天的 AI 解牌已達上限（${USER_DAILY_CAP} 次），明天會重置；想立即使用可在設定改用自己的 API Key。/ You've reached today's AI reading limit (${USER_DAILY_CAP}); it resets tomorrow. You can use your own API key to continue now.`, capped: true, userCapped: true }, 429, request);
+  if (!spend && uUsed >= USER_DAILY_CAP) {
+    const bal = parseInt((await env.TAROT_KV.get(ck)) || '0', 10);
+    return json({ error: `你今天的 AI 解牌已達上限（${USER_DAILY_CAP} 次），明天會重置；想立即使用可在設定改用自己的 API Key。/ You've reached today's AI reading limit (${USER_DAILY_CAP}); it resets tomorrow. You can use your own API key to continue now.`, capped: true, userCapped: true, balance: bal }, 429, request);
   }
 
   const resp = await fetch(
@@ -471,7 +547,12 @@ async function handleGemini(request, env) {
   );
 
   const data = await resp.json();
-  // 只在「成功」時才計入用量（失敗 / 重試不浪費額度，數字也更貼近真實成本）
+  // 只在「成功」時才計入用量與扣點（失敗 / 重試不浪費額度與點數）
+  if (resp.ok && !data.error && spend) {
+    const balNow = Math.max(0, parseInt((await env.TAROT_KV.get(ck)) || '0', 10) - 1);
+    await env.TAROT_KV.put(ck, String(balNow));
+    data.__creditBalance = balNow; // 讓前端即時更新餘額顯示
+  }
   if (resp.ok && !data.error) {
     await env.TAROT_KV.put(dk, String(used + 1), { expirationTtl: 60 * 60 * 24 * 3 });
     await env.TAROT_KV.put(uk, String(uUsed + 1), { expirationTtl: 60 * 60 * 24 * 2 });

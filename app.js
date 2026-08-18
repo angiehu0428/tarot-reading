@@ -16,6 +16,36 @@ const WORKER_URL = 'https://tarot-worker.angiehu.workers.dev';
 const AI_PAUSED = false;
 // 每次占卜可追問的次數上限（避免無止境聊天、控制成本）。想多/少就改這個數字。
 const CHAT_LIMIT = 5;
+// ── Credit 點數：免費額度用完後可用點數繼續（1 點 = 1 次超額 AI 呼叫）──
+// 站長在 Gumroad 建立「一次性」點數商品後填入下列清單（並在 Cloudflare 設定
+// CREDIT_PRODUCTS 環境變數，如 "tarotcredits100:100"），前台即顯示儲值按鈕。
+const CREDIT_PACKS = [
+  // {url:'https://huisangie.gumroad.com/l/tarotcredits100?wanted=true', label:'⚡ 100 點 · US$5'},
+];
+let CREDITS = null; // null=尚未載入；數字=剩餘點數
+async function fetchCredits(){
+  if(!isVerified()||!WORKER_URL) return;
+  try{
+    const r=await fetch(WORKER_URL+'/credits',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:getVerifiedEmail()})});
+    if(!r.ok) return;
+    const d=await r.json();
+    if(typeof d.balance==='number'){ CREDITS=d.balance; renderCreditUI(); }
+  }catch(e){}
+}
+function creditUpdateFrom(data){
+  if(data && typeof data.__creditBalance==='number'){ CREDITS=data.__creditBalance; renderCreditUI(); }
+}
+function renderCreditUI(){
+  const el=document.getElementById('credit-row'); if(!el) return;
+  if(!isVerified()||CREDITS===null){ el.style.display='none'; return; }
+  el.style.display='block';
+  el.innerHTML=`
+    <div style="font-family:'Cinzel',serif;font-size:.8rem;color:var(--gold);letter-spacing:.1em;margin:14px 0 6px">⚡ ${L('AI 點數','AI Credits')}</div>
+    <p class="hint" style="margin:0 0 8px">${L(`免費額度用完後（每次占卜追問 ${CHAT_LIMIT} 次／每日 30 次 AI 解牌），每次呼叫扣 1 點，額度重置前也能盡情問下去。`,`After the free quotas (${CHAT_LIMIT} follow-ups per reading / 30 AI calls per day), each extra call uses 1 credit.`)}
+      ${L('目前剩餘','Balance')}：<strong style="color:var(--gold)">${CREDITS}</strong> ${L('點','credits')}</p>
+    ${CREDIT_PACKS.map(pk=>`<a href="${pk.url}" data-gumroad-overlay-checkout="true" class="buy-opt" style="background:linear-gradient(135deg,#3a2c5e,#241043)">${pk.label}</a>`).join('')}
+    ${CREDIT_PACKS.length?`<div class="buy-cap">${L('以驗證的 email 購買，點數自動入帳（重新整理設定視窗更新餘額）','Buy with your verified email — credits are added automatically')}</div>`:''}`;
+}
 // 付費 AI 暫停時顯示的通知橫幅（付費用戶看到，內建解讀照常）
 function pauseNoticeHtml(){
   return `<div style="margin-bottom:14px;padding:13px 16px;background:rgba(224,85,85,.1);border:1px solid rgba(224,85,85,.4);border-radius:10px;font-size:.86rem;color:#f0b8b8;line-height:1.7">${L('⚠ AI 深度解牌暫時停用：目前 API 配額已滿，我們正在處理、很快會恢復，請稍後再試 🙏 以下先提供免費的內建牌義解讀。','⚠ AI deep readings are temporarily paused: the API quota is currently full. We\'re on it and will restore service shortly — please try again later 🙏 Here\'s the free built-in reading for now.')}</div>`;
@@ -1727,6 +1757,19 @@ ${refCtx}
       if(resp.status===429 && key){
         useOwnKey=true;
         toast(L('今日訂閱額度已滿，已自動改用你的 API Key 🔑','Daily subscription limit reached — switched to your own API key 🔑'));
+      } else if(resp.status===429 && ((data.balance||0)>0 || (CREDITS||0)>0)){
+        // 沒有自備 key 但有 AI 點數 → 扣 1 點繼續
+        toast(L('⚡ 本日免費次數已用完，改用 1 點繼續','⚡ Daily free limit reached — using 1 credit'));
+        resp=await fetchRetry(()=>fetch(WORKER_URL+'/gemini',{
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({email:proxyEmail,body:geminiBody,spend:true})
+        }));
+        data=await resp.json().catch(()=>({}));
+        if(!resp.ok){
+          if(resp.status===402){ CREDITS=0; renderCreditUI(); }
+          throw new Error(data.error||`Worker ${resp.status}`);
+        }
+        creditUpdateFrom(data);
       } else {
         throw new Error(data.error||`Worker ${resp.status}`);
       }
@@ -2320,10 +2363,17 @@ async function sendChat(){
   if(!key&&!proxyEmail){toast(L('請先設定 API Key 或驗證購買 Email','Set an API key or verify your purchase email first'));return;}
   // 每次占卜的追問次數上限（避免無止境聊天、控制成本）
   const usedTurns=(S.chatHistory||[]).filter(m=>m.role==='user').length;
+  let spendCredit=false;
   if(usedTurns>=CHAT_LIMIT){
-    toast(L(`本次占卜的追問次數已用完（${CHAT_LIMIT} 次），重新抽牌即可再次追問`,`You've used all ${CHAT_LIMIT} follow-ups for this reading — draw again to ask more`));
-    updateChatRemaining();
-    return;
+    if(proxyEmail && (CREDITS||0)>0){
+      spendCredit=true; // 免費次數用完，用 1 點繼續
+    } else {
+      toast(proxyEmail && CREDIT_PACKS.length
+        ? L('免費追問已用完——可到「設定」購買 AI 點數繼續追問 ⚡','Free follow-ups used up — buy AI credits in Settings to keep asking ⚡')
+        : L(`本次占卜的追問次數已用完（${CHAT_LIMIT} 次），重新抽牌即可再次追問`,`You've used all ${CHAT_LIMIT} follow-ups for this reading — draw again to ask more`));
+      updateChatRemaining();
+      return;
+    }
   }
   // 付費 AI 暫停中（且無自備 key）→ 不呼叫，回覆暫停訊息
   if(AI_PAUSED && proxyEmail && !key){
@@ -2358,13 +2408,22 @@ async function sendChat(){
     let ans;
     let ownK = !(proxyEmail&&WORKER_URL);
     if(!ownK){
-      const r=await fetchRetry(()=>fetch(WORKER_URL+'/gemini',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:proxyEmail,body:geminiBody})}));
-      const data=await r.json().catch(()=>({}));
+      let r=await fetchRetry(()=>fetch(WORKER_URL+'/gemini',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:proxyEmail,body:geminiBody,spend:spendCredit})}));
+      let data=await r.json().catch(()=>({}));
+      if(!r.ok && r.status===429 && !key && ((data.balance||0)>0 || (CREDITS||0)>0)){
+        // 當日免費次數用完但有點數 → 改扣點重試
+        toast(L('⚡ 本日免費次數已用完，改用 1 點繼續','⚡ Daily free limit reached — using 1 credit'));
+        r=await fetchRetry(()=>fetch(WORKER_URL+'/gemini',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:proxyEmail,body:geminiBody,spend:true})}));
+        data=await r.json().catch(()=>({}));
+      }
       if(!r.ok){
         if(r.status===403){ localStorage.removeItem('tr_verified_email'); if(typeof updateApiStatus==='function') updateApiStatus(); throw new Error(L('訂閱已到期或未生效，請續訂以繼續使用 AI 解牌','Your subscription has lapsed — please resubscribe to keep using AI readings')); }
+        if(r.status===402){ CREDITS=0; renderCreditUI(); updateChatRemaining(); throw new Error(L('AI 點數不足，可到「設定」儲值 ⚡','Not enough credits — top up in Settings ⚡')); }
         if(r.status===429 && key){ ownK=true; toast(L('今日訂閱額度已滿，已自動改用你的 API Key 🔑','Daily subscription limit reached — switched to your own API key 🔑')); }
         else throw new Error(data.error||`Worker ${r.status}`);
       } else {
+        creditUpdateFrom(data);
+        if(spendCredit) toast(L(`⚡ 已使用 1 點（剩 ${CREDITS} 點）`,`⚡ 1 credit used (${CREDITS} left)`));
         ans=data.candidates?.[0]?.content?.parts?.[0]?.text||'無法取得回應';
       }
     }
@@ -2406,9 +2465,17 @@ function updateChatRemaining(){
   const left=Math.max(0, CHAT_LIMIT-used);
   const input=document.getElementById('chat-input');
   const btn=document.getElementById('chat-send-btn');
-  if(left<=0){
+  if(left<=0 && isVerified() && (CREDITS||0)>0){
+    // 免費次數用完但有點數：保持可輸入，之後每問一次扣 1 點
+    el.style.color='rgba(212,175,55,.9)';
+    el.textContent=L(`⚡ 免費 ${CHAT_LIMIT} 次已用完 · 點數剩 ${CREDITS} 點（繼續追問每次扣 1 點）`,`⚡ Free ${CHAT_LIMIT} used up · ${CREDITS} credits left (1 per extra question)`);
+    if(input){input.disabled=false;input.placeholder=L('用點數繼續追問...','Ask on with credits...');}
+    if(btn){btn.disabled=false;btn.style.opacity='';}
+  } else if(left<=0){
     el.style.color='rgba(224,85,85,.85)';
-    el.textContent=L(`已達本次追問上限（${CHAT_LIMIT} 次）。重新抽牌即可再次追問。`,`Follow-up limit reached (${CHAT_LIMIT}). Draw again to ask more.`);
+    el.textContent=(isVerified() && CREDIT_PACKS.length)
+      ? L(`已達本次追問上限（${CHAT_LIMIT} 次）。想繼續問可到「設定」購買 AI 點數 ⚡，或重新抽牌。`,`Follow-up limit reached (${CHAT_LIMIT}). Buy AI credits in Settings ⚡ or draw again.`)
+      : L(`已達本次追問上限（${CHAT_LIMIT} 次）。重新抽牌即可再次追問。`,`Follow-up limit reached (${CHAT_LIMIT}). Draw again to ask more.`);
     if(input){input.disabled=true;input.placeholder=L('本次追問已達上限','Follow-up limit reached');}
     if(btn){btn.disabled=true;btn.style.opacity='.4';}
   } else {
@@ -2607,6 +2674,7 @@ async function verifyEmail(){
       ubar.className='api-status api-ok';ubar.textContent=L('✓ 驗證成功！已解鎖 AI 解牌','✓ Verified! AI reading unlocked');
       updateApiStatus();toast(L('✦ 驗證成功！AI 解牌已解鎖','✦ Verified! AI reading unlocked'));closeSettings();
       maybeRunAIAfterUnlock(); // 解鎖後立即解析當前這次抽牌
+      fetchCredits();
       // 驗證後拉回雲端歷史並合併，再推回（跨裝置同步）
       syncPull().then(merged=>{ if(merged) toast(L('☁ 已同步雲端歷史記錄','☁ Cloud history synced')); syncPush(); });
     } else {
@@ -2776,6 +2844,7 @@ function updateApiStatus(){
   }
 }
 function openSettings(){
+  fetchCredits(); renderCreditUI();
   document.getElementById('api-key-input').value=localStorage.getItem('gemini_key')||'';
   document.getElementById('unlock-input').value=getVerifiedEmail();
   updateApiStatus();
@@ -3119,6 +3188,7 @@ async function checkOwnerReplies(){
   }catch(e){/* 靜默失敗，不影響網站 */}
 }
 checkOwnerReplies();
+if(isVerified()) fetchCredits(); // 已驗證用戶載入 AI 點數餘額
 // 專案救援：專案是空的但存在損壞備份（safeParse 隔離的）→ 嘗試解析救回；
 // 截斷型損壞（寫入到一半中斷）則裁到最後一個完整物件邊界修復
 (function restoreProjectsBackup(){
