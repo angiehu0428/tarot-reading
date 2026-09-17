@@ -75,6 +75,14 @@ export default {
       return handleStats(request, env);
     }
 
+    // Gemini health check — private (key in query); also runs automatically every 6h via Cron Trigger
+    if (url.pathname === '/health' && request.method === 'GET') {
+      if (!env.STATS_TOKEN || url.searchParams.get('key') !== env.STATS_TOKEN) {
+        return new Response('Forbidden', { status: 403 });
+      }
+      return json(await checkGeminiHealth(env), 200, request);
+    }
+
     // Report / feature wish — store user feedback (no email exposed)
     if (url.pathname === '/report' && request.method === 'POST') {
       return handleReport(request, env);
@@ -106,7 +114,26 @@ export default {
 
     return new Response('Not found', { status: 404 });
   },
+
+  // Cloudflare Cron Trigger（見 wrangler.toml 的 [triggers] crons）每 6 小時呼叫一次，
+  // ctx.waitUntil 讓檢查在背景跑完，不受單次觸發的執行時間限制影響。
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(checkGeminiHealth(env));
+  },
 };
+
+// 共用 Telegram 發送（設定 TG_BOT_TOKEN + TG_CHAT_ID 兩個 secret 才會真的送出；
+// 失敗不拋錯，呼叫端不需要另外處理）
+async function sendTelegram(env, text) {
+  if (!env.TG_BOT_TOKEN || !env.TG_CHAT_ID) return;
+  try {
+    await fetch(`https://api.telegram.org/bot${env.TG_BOT_TOKEN}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: env.TG_CHAT_ID, text: text.slice(0, 3800) }),
+    });
+  } catch (e) {}
+}
 
 // ── Report / feature wish ────────────────────────────────────
 async function handleReport(request, env) {
@@ -130,18 +157,10 @@ async function handleReport(request, env) {
   await env.TAROT_KV.put('report:' + id, JSON.stringify(rec), { expirationTtl: 60 * 60 * 24 * 365 });
   // Telegram 即時通知：設定 TG_BOT_TOKEN + TG_CHAT_ID 兩個 secret 才啟用；
   // 通知失敗不影響回報本身（KV 已存檔，/reports 一樣看得到）。
-  if (env.TG_BOT_TOKEN && env.TG_CHAT_ID) {
-    const tgText = `${rec.type === 'wish' ? '💡 功能許願' : '🐞 問題回報'}（${rec.site}）\n\n${rec.message}` +
-      (rec.contact ? `\n\n↩ 聯絡方式：${rec.contact}` : '') +
-      `\n🌐 ${rec.lang || '?'}${rec.ctx ? ' · ' + rec.ctx : ''}`;
-    try {
-      await fetch(`https://api.telegram.org/bot${env.TG_BOT_TOKEN}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chat_id: env.TG_CHAT_ID, text: tgText.slice(0, 3800) }),
-      });
-    } catch (e) {}
-  }
+  const tgText = `${rec.type === 'wish' ? '💡 功能許願' : '🐞 問題回報'}（${rec.site}）\n\n${rec.message}` +
+    (rec.contact ? `\n\n↩ 聯絡方式：${rec.contact}` : '') +
+    `\n🌐 ${rec.lang || '?'}${rec.ctx ? ' · ' + rec.ctx : ''}`;
+  await sendTelegram(env, tgText);
   return json({ ok: true, id, tok }, 200, request);
 }
 
@@ -516,6 +535,41 @@ async function fetchGeminiWithFallback(apiKey, geminiBody) {
     data = await resp.json().catch(() => ({}));
   }
   return { resp, data }; // 全部模型都 404：回傳最後一次的結果，讓上層照常回報錯誤
+}
+
+// ── 定期健康檢查：主動偵測 Gemini API 是否還能正常呼叫 ──────────
+// 由 wrangler.toml 的 Cron Trigger 每 6 小時自動呼叫一次（見下方 scheduled()），
+// 也可透過 GET /health 手動立即檢查一次。這是這次「gemini-flash-latest 被下架
+// 導致全站中斷卻沒人發現」事故後加的：一旦 Google 又更新/棄用模型，
+// 不用等用戶回報才知道，會直接收到 Telegram 通知。
+// KV 記錄目前狀態，避免同一次中斷每 6 小時就再推播一次騷擾——只在「狀態改變」
+// （正常→異常、異常→恢復）時才通知。
+async function checkGeminiHealth(env) {
+  const HK = 'health:gemini';
+  let ok = false, errMsg = '';
+  try {
+    const { resp, data } = await fetchGeminiWithFallback(env.GEMINI_KEY, { contents: [{ parts: [{ text: 'ping' }] }] });
+    ok = resp.ok && !data.error && !!(data.candidates && data.candidates.length);
+    if (!ok) errMsg = (data && data.error && data.error.message) || `HTTP ${resp.status}`;
+  } catch (e) {
+    errMsg = (e && e.message) || String(e);
+  }
+
+  const prev = JSON.parse((await env.TAROT_KV.get(HK)) || '{"ok":true}');
+  const now = new Date().toISOString();
+
+  if (ok) {
+    if (prev.ok === false) { // 剛從異常恢復
+      await sendTelegram(env, `✅ AI 解牌已恢復正常\n中斷期間：${prev.since || '未知'} ～ ${now}\n（模型：${GEMINI_MODEL}）`);
+    }
+    await env.TAROT_KV.put(HK, JSON.stringify({ ok: true, lastOk: now }));
+  } else {
+    if (prev.ok !== false) { // 剛從正常變異常，第一次偵測到才通知（避免每 6 小時重複騷擾）
+      await sendTelegram(env, `🚨 AI 解牌可能已中斷！\n嘗試過的模型：${[GEMINI_MODEL, ...GEMINI_MODEL_FALLBACKS].join('、')}（全部失敗）\n錯誤：${errMsg}\n請到 https://ai.google.dev/gemini-api/docs/models 確認目前可用的模型名稱，更新 worker.js 的 GEMINI_MODEL 常數。`);
+    }
+    await env.TAROT_KV.put(HK, JSON.stringify({ ok: false, since: prev.ok === false ? prev.since : now, lastCheck: now, lastError: errMsg }));
+  }
+  return { ok, errMsg, checkedAt: now };
 }
 
 // ── Gemini proxy ─────────────────────────────────────────────

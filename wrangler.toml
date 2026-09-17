@@ -5,3 +5,8 @@ compatibility_date = "2026-06-01"
 [[kv_namespaces]]
 binding = "TAROT_KV"
 id = "d8831c1811f942b295fe670e3b9910c3"
+
+# 每 6 小時自動檢查一次 Gemini API 是否還能正常呼叫（防止 Google 又悄悄
+# 下架/改名模型導致 AI 解牌全站中斷卻沒人發現，見 worker.js 的 scheduled()）。
+[triggers]
+crons = ["0 */6 * * *"]
