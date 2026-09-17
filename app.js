@@ -14,6 +14,25 @@ function inPromo(){ return new Date() < PROMO_END; }
 const WORKER_URL = 'https://tarot-worker.angiehu.workers.dev';
 // 付費 AI 解牌暫停開關（API 配額已滿時設 true；恢復服務時改回 false）
 const AI_PAUSED = false;
+// Gemini 模型：Google 會定期棄用舊模型／別名（gemini-flash-latest 過去指向的
+// gemini-2.0-flash 已於 2026-06-01 下架，之後所有呼叫回傳 404）。這裡固定寫死
+// 目前的正式版模型（供「自備 API Key」用戶使用；訂閱/點數走 worker 端的同款邏輯），
+// Google 之後再棄用，只需改這一個常數；GEMINI_MODEL_FALLBACKS 是主模型 404 時的備援。
+const GEMINI_MODEL = 'gemini-3.8-flash';
+const GEMINI_MODEL_FALLBACKS = ['gemini-2.5-flash', 'gemini-flash-latest'];
+// 依序嘗試 GEMINI_MODEL 與備援模型，直到取得非 404（模型不存在/已下架）的回應
+async function fetchGeminiOwnKey(cleanKey, geminiBody){
+  const models=[GEMINI_MODEL, ...GEMINI_MODEL_FALLBACKS];
+  let resp;
+  for(const model of models){
+    resp=await fetchRetry(()=>fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+      {method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':cleanKey},body:JSON.stringify(geminiBody)}
+    ));
+    if(resp.status!==404) return resp;
+  }
+  return resp;
+}
 // 每次占卜可追問的次數上限（避免無止境聊天、控制成本）。想多/少就改這個數字。
 const CHAT_LIMIT = 5;
 // ── Credit 點數：免費額度用完後可用點數繼續（1 點 = 1 次超額 AI 呼叫）──
@@ -1780,11 +1799,7 @@ ${refCtx}
     if(apiProvider(cleanKey)==='openai'){
       return callOpenAI(cleanKey, AI_SYS_TEXT(), [{role:'user',content:prompt}]);
     }
-    resp=await fetchRetry(()=>fetch(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent',
-      {method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':cleanKey},
-       body:JSON.stringify(geminiBody)}
-    ));
+    resp=await fetchGeminiOwnKey(cleanKey, geminiBody);
     if(!resp.ok){const e=await resp.json().catch(()=>({}));throw new Error(`API ${resp.status}: ${e?.error?.message||resp.statusText}`);}
     data=await resp.json();
   }
@@ -2433,8 +2448,7 @@ async function sendChat(){
         const oaMsgs=S.chatHistory.slice(0,-1).map(m=>({role:m.role==='user'?'user':'assistant',content:m.text}));
         ans=await callOpenAI(cleanKey, context, [...oaMsgs,{role:'user',content:q}]);
       } else {
-        const r=await fetchRetry(()=>fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent',
-          {method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':cleanKey},body:JSON.stringify(geminiBody)}));
+        const r=await fetchGeminiOwnKey(cleanKey, geminiBody);
         const data=await r.json();
         ans=data.candidates?.[0]?.content?.parts?.[0]?.text||L('無法取得回應','No response received');
       }
@@ -2809,9 +2823,7 @@ async function testApiKey(){
       toast(L('✦ OpenAI Key 正常！','✦ OpenAI key works!'));
       return;
     }
-    const r=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent',
-      {method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':k},
-       body:JSON.stringify({contents:[{parts:[{text:'hi'}]}]})});
+    const r=await fetchGeminiOwnKey(k, {contents:[{parts:[{text:'hi'}]}]});
     const d=await r.json();
     if(r.ok){toast(L('✦ Gemini Key 正常！','✦ Gemini key works!'));}
     else toast(L('失敗：','Failed: ')+r.status+' '+(d?.error?.message||'').slice(0,60));
@@ -3096,6 +3108,9 @@ function toggleAiInfo(){
 //  更新紀錄 CHANGELOG（新項目加在最上面；中英務必同步）
 // ══════════════════════════════════════════
 const CHANGELOG = [
+  { date:'2026-09-17',
+    zh:['修正：AI 解牌暫時無法使用的問題（Google 更新了 AI 模型版本，已同步更新並加上自動備援，未來若再更新不會影響服務）'],
+    en:['Fixed: AI readings were temporarily unavailable (Google updated its AI model version — updated our end and added automatic fallback so future updates won\'t affect service)'] },
   { date:'2026-08-14',
     zh:['專案雲端同步：訂閱用戶的專案（名稱、描述與專案內占卜記錄）自動跨裝置備份合併，清除資料或換裝置不再遺失','「專案占卜」的專案名稱可以編輯了：進入專案點名稱旁「✎ 編輯」','手機追問輸入框改為多行：按「換行」不再誤送出，輸入框會自動長高；訊息換行正常顯示','訂閱的 AI 解牌當日額度用完時，若有設定自備 API Key 會自動切換續用，不中斷','穩定性大修：網路不穩導致頁面載入不完整時自動偵測並重新載入（修正 Safari 按鈕全部失效的問題）；本機資料損壞自動隔離修復；關閉視窗後強制重置鍵盤視口','站內回覆：許願/回報後，站長的回覆會直接顯示在網站上（不需留 email）'],
     en:['Project cloud sync: subscribers\' projects (names, descriptions and their readings) now back up and merge across devices — clearing data or switching devices no longer loses them','Project names are now editable — open a project and tap "✎ Edit" next to the name','The follow-up input is now multi-line on mobile: the return key inserts a line break instead of sending, and the box grows as you type','When your daily subscription limit is reached, readings automatically continue on your own API key (if set)','Major stability work: incomplete page loads (flaky networks) are now detected and auto-reloaded (fixes all-buttons-dead on Safari); corrupted local data auto-repairs; keyboard viewport resets after closing dialogs','In-app replies: after a wish/report, replies from the site owner appear right on the site (no email needed)'] },

@@ -11,6 +11,13 @@ function userDayKey(email) { return 'ucount:' + email + ':' + new Date().toISOSt
 const AI_PAUSED = false;
 function todayKey() { return 'count:' + new Date().toISOString().slice(0, 10); }
 
+// Gemini 模型：Google 會定期棄用舊模型／別名（例如 gemini-flash-latest 過去指向的
+// gemini-2.0-flash 已於 2026-06-01 下架，導致所有呼叫回傳 404，AI 解牌全面中斷）。
+// 別名不可靠，這裡固定寫死目前的正式版模型；之後 Google 再棄用，只需改這一個常數。
+// 備援清單：主模型 404（已下架/改名）時依序嘗試，避免單一模型異動就整站中斷。
+const GEMINI_MODEL = 'gemini-3.8-flash';
+const GEMINI_MODEL_FALLBACKS = ['gemini-2.5-flash', 'gemini-flash-latest'];
+
 const ALLOWED_ORIGINS = [
   'https://angiehu0428.github.io',
   'https://tarot.angiehu.com',
@@ -490,6 +497,27 @@ async function handleStats(request, env) {
   return new Response(html, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
 }
 
+// 依序嘗試 GEMINI_MODEL 與其備援模型，直到取得非 404（模型不存在/已下架）的回應。
+// 只在「模型不存在」時才換下一個；其他錯誤（配額、參數錯誤等）維持原樣直接回傳，
+// 不浪費重試次數也不掩蓋真正的問題。
+async function fetchGeminiWithFallback(apiKey, geminiBody) {
+  const models = [GEMINI_MODEL, ...GEMINI_MODEL_FALLBACKS];
+  let resp, data;
+  for (const model of models) {
+    resp = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+        body: JSON.stringify(geminiBody),
+      }
+    );
+    if (resp.status !== 404) return { resp, data: await resp.json().catch(() => ({})) };
+    data = await resp.json().catch(() => ({}));
+  }
+  return { resp, data }; // 全部模型都 404：回傳最後一次的結果，讓上層照常回報錯誤
+}
+
 // ── Gemini proxy ─────────────────────────────────────────────
 async function handleGemini(request, env) {
   // 暫停付費 AI 解牌（配額已滿）：直接回覆暫停訊息，不呼叫 Gemini，停止消耗配額
@@ -534,19 +562,7 @@ async function handleGemini(request, env) {
     return json({ error: `你今天的 AI 解牌已達上限（${USER_DAILY_CAP} 次），明天會重置；想立即使用可在設定改用自己的 API Key。/ You've reached today's AI reading limit (${USER_DAILY_CAP}); it resets tomorrow. You can use your own API key to continue now.`, capped: true, userCapped: true, balance: bal }, 429, request);
   }
 
-  const resp = await fetch(
-    'https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent',
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': env.GEMINI_KEY,
-      },
-      body: JSON.stringify(geminiBody),
-    }
-  );
-
-  const data = await resp.json();
+  const { resp, data } = await fetchGeminiWithFallback(env.GEMINI_KEY, geminiBody);
   // 只在「成功」時才計入用量與扣點（失敗 / 重試不浪費額度與點數）
   if (resp.ok && !data.error && spend) {
     const balNow = Math.max(0, parseInt((await env.TAROT_KV.get(ck)) || '0', 10) - 1);
