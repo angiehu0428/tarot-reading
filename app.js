@@ -178,8 +178,8 @@ Object.assign(T, {
   'set.font.head':{zh:'✦ 字級大小（看不清楚可調大）',en:'✦ Text size (make it bigger if hard to read)'},
   'font.lv0':{zh:'標準',en:'Normal'},'font.lv1':{zh:'大',en:'Large'},'font.lv2':{zh:'特大',en:'X-Large'},'font.lv3':{zh:'超大',en:'XX-Large'},
   'font.btn.title':{zh:'字級大小（點我放大）',en:'Text size (tap to enlarge)'},
-  'ann.title':{zh:'✦ AI 解牌已修復 🔮',en:'✦ AI Readings Are Back 🔮'},
-  'ann.body':{zh:'🙏 <strong style="color:var(--gold)">AI 深度解牌一度無法使用，已經修好了！</strong><br><br>原因是 AI 服務商更新了模型版本，導致所有 AI 解牌（訂閱、點數、自備 API Key）暫時中斷。我們已經修復，並加上了自動備援機制，之後即使服務商再更新，也不會再影響到大家使用 ✦<br><br>造成不便真的很抱歉，感謝大家的耐心與回報 🙏 現在可以放心繼續占卜追問了 ✨',en:'🙏 <strong style="color:var(--gold)">AI deep readings were temporarily down — now fixed!</strong><br><br>Our AI provider updated their model version, which briefly broke all AI readings (subscription, credits, and your own API key). It\'s fixed now, and we\'ve added an automatic fallback so future provider updates won\'t interrupt service again ✦<br><br>Sorry for the inconvenience, and thank you for your patience and reports 🙏 AI readings and follow-ups are back to normal ✨'},
+  'ann.title':{zh:'✦ AI 解牌確認已恢復 🔮',en:'✦ AI Readings Confirmed Working 🔮'},
+  'ann.body':{zh:'🙏 <strong style="color:var(--gold)">AI 深度解牌現在真的恢復正常了！</strong><br><br>昨晚的第一次修復其實還沒完全生效，讓部分朋友仍然遇到無法解牌的狀況，真的很抱歉。我們今天再次確認、徹底排查後，AI 解牌（訂閱、點數、自備 API Key）已經恢復正常運作 ✦<br><br>造成不便與困擾很抱歉，感謝大家的耐心等待與持續回報 🙏 現在可以放心繼續占卜追問了 ✨',en:'🙏 <strong style="color:var(--gold)">AI deep readings are genuinely working again now!</strong><br><br>Last night\'s first fix didn\'t fully take effect, and some of you still couldn\'t get AI readings — we\'re sorry about that. After a thorough re-check today, AI readings (subscription, credits, and your own API key) are now confirmed working normally ✦<br><br>Sorry for the inconvenience, and thank you for your patience and continued reports 🙏 Readings and follow-ups are back to normal ✨'},
   'ann.feedback':{zh:'有問題或想許願新功能？點此回報 →',en:'Found a bug or have a feature wish? Tell us →'},
   'ann.ok':{zh:'我知道了',en:'Got it'},
   'report.title':{zh:'🐞 回報問題',en:'🐞 Report a Problem'},
@@ -2951,7 +2951,7 @@ async function submitReport(){
 }
 // 一次性公告（沒看過的人會看到一次，關閉後不再跳；要發新公告換新的 ANNOUNCE_ID 即可）
 // 注意：App 內瀏覽器（LINE/FB）可能每次清除儲存，這類用戶每次開啟仍會視為「第一次」看到一次
-const ANNOUNCE_ID = '2026-09-17-ai-fixed';
+const ANNOUNCE_ID = '2026-09-18-ai-fixed-confirmed';
 const ANNOUNCE_EXPIRES = new Date('2026-12-31T00:00:00'); // 到期日：讓第一次來的訪客持續看得到
 // 儲存三層備援：localStorage（跨次）→ sessionStorage（LINE/FB 等 App 內瀏覽器常清 localStorage）
 // → 記憶體（隱私模式下兩者都可能不可用），確保同一次瀏覽絕不重複跳出
