@@ -33,6 +33,17 @@ async function fetchGeminiOwnKey(cleanKey, geminiBody){
   }
   return resp;
 }
+// 統一從 Gemini／worker 回應中取出「可讀」的錯誤訊息。data.error 可能是本站自訂的
+// 純文字訊息，也可能是 worker 直接轉發的 Gemini 原始錯誤物件（{code,message,status}）——
+// 物件直接丟進 new Error() 只會變成沒意義的「[object Object]」（曾造成用戶誤以為是
+// 額度用完，其實可能是別的原因）。這裡統一拆開，所有呼叫 Gemini 的地方都要用這個，
+// 不要再各自寫 data.error||... 或 data.error.message||data.error。
+function extractErrMsg(err, fallback){
+  if(!err) return fallback;
+  if(typeof err==='string') return err;
+  if(err.message) return String(err.message);
+  try{ return JSON.stringify(err).slice(0,200); }catch(e){ return fallback; }
+}
 // 每次占卜可追問的次數上限（避免無止境聊天、控制成本）。想多/少就改這個數字。
 const CHAT_LIMIT = 5;
 // ── Credit 點數：免費額度用完後可用點數繼續（1 點 = 1 次超額 AI 呼叫）──
@@ -1786,11 +1797,11 @@ ${refCtx}
         data=await resp.json().catch(()=>({}));
         if(!resp.ok){
           if(resp.status===402){ CREDITS=0; renderCreditUI(); }
-          throw new Error(data.error||`Worker ${resp.status}`);
+          throw new Error(extractErrMsg(data.error, `Worker ${resp.status}`));
         }
         creditUpdateFrom(data);
       } else {
-        throw new Error(data.error||`Worker ${resp.status}`);
+        throw new Error(extractErrMsg(data.error, `Worker ${resp.status}`));
       }
     }
   }
@@ -1803,7 +1814,7 @@ ${refCtx}
     if(!resp.ok){const e=await resp.json().catch(()=>({}));throw new Error(`API ${resp.status}: ${e?.error?.message||resp.statusText}`);}
     data=await resp.json();
   }
-  if(data.error)throw new Error(data.error.message||data.error);
+  if(data.error)throw new Error(extractErrMsg(data.error, 'Gemini error'));
   return data.candidates?.[0]?.content?.parts?.[0]?.text||L('無法取得回應','No response received');
 }
 
@@ -2435,7 +2446,7 @@ async function sendChat(){
         if(r.status===403){ localStorage.removeItem('tr_verified_email'); if(typeof updateApiStatus==='function') updateApiStatus(); throw new Error(L('訂閱已到期或未生效，請續訂以繼續使用 AI 解牌','Your subscription has lapsed — please resubscribe to keep using AI readings')); }
         if(r.status===402){ CREDITS=0; renderCreditUI(); updateChatRemaining(); throw new Error(L('AI 點數不足，可到「設定」儲值 ⚡','Not enough credits — top up in Settings ⚡')); }
         if(r.status===429 && key){ ownK=true; toast(L('今日訂閱額度已滿，已自動改用你的 API Key 🔑','Daily subscription limit reached — switched to your own API key 🔑')); }
-        else throw new Error(data.error||`Worker ${r.status}`);
+        else throw new Error(extractErrMsg(data.error, `Worker ${r.status}`));
       } else {
         creditUpdateFrom(data);
         if(spendCredit) toast(L(`⚡ 已使用 1 點（剩 ${CREDITS} 點）`,`⚡ 1 credit used (${CREDITS} left)`));
@@ -3108,6 +3119,9 @@ function toggleAiInfo(){
 //  更新紀錄 CHANGELOG（新項目加在最上面；中英務必同步）
 // ══════════════════════════════════════════
 const CHANGELOG = [
+  { date:'2026-09-22',
+    zh:['修正：追問失敗時可能顯示看不懂的「[object Object]」錯誤訊息，現在會顯示實際的錯誤原因（例如額度、連線等問題），方便判斷狀況'],
+    en:['Fixed: follow-up failures could show an unreadable "[object Object]" error — now shows the actual reason (e.g. quota, connection) so it\'s easier to tell what went wrong'] },
   { date:'2026-09-17',
     zh:['修正：AI 解牌暫時無法使用的問題（Google 更新了 AI 模型版本，已同步更新並加上自動備援，未來若再更新不會影響服務）'],
     en:['Fixed: AI readings were temporarily unavailable (Google updated its AI model version — updated our end and added automatic fallback so future updates won\'t affect service)'] },
