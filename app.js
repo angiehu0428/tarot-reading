@@ -46,6 +46,12 @@ function extractErrMsg(err, fallback){
 }
 // 每次占卜可追問的次數上限（避免無止境聊天、控制成本）。想多/少就改這個數字。
 const CHAT_LIMIT = 5;
+// 計算已用掉的追問次數：失敗的追問（AI 連線/服務錯誤、暫停服務）標記為 failed，
+// 不算進次數——問題沒被回答卻扣額度對用戶不公平。所有需要算次數的地方都用這個，
+// 不要各自寫 filter(m=>m.role==='user')，以免日後漏改其中一處而算錯。
+function usedChatTurns(chat){
+  return (chat||[]).filter(m=>m.role==='user' && !m.failed).length;
+}
 // ── Credit 點數：免費額度用完後可用點數繼續（1 點 = 1 次超額 AI 呼叫）──
 // 站長在 Gumroad 建立「一次性」點數商品後填入下列清單（並在 Cloudflare 設定
 // CREDIT_PRODUCTS 環境變數，如 "tarotcredits100:100"），前台即顯示儲值按鈕。
@@ -2388,7 +2394,7 @@ async function sendChat(){
   const proxyEmail=isVerified()?getVerifiedEmail():null;
   if(!key&&!proxyEmail){toast(L('請先設定 API Key 或驗證購買 Email','Set an API key or verify your purchase email first'));return;}
   // 每次占卜的追問次數上限（避免無止境聊天、控制成本）
-  const usedTurns=(S.chatHistory||[]).filter(m=>m.role==='user').length;
+  const usedTurns=usedChatTurns(S.chatHistory);
   let spendCredit=false;
   if(usedTurns>=CHAT_LIMIT){
     if(proxyEmail && (CREDITS||0)>0){
@@ -2405,15 +2411,16 @@ async function sendChat(){
   if(AI_PAUSED && proxyEmail && !key){
     input.value=''; input.style.height='auto';
     if(!S.chatHistory) S.chatHistory=[];
-    S.chatHistory.push({role:'user',text:q});
-    S.chatHistory.push({role:'ai',text:L('AI 解牌目前暫停服務中（API 配額已滿），很快會恢復，請稍後再試 🙏','AI readings are paused right now (quota full). Service will be back soon — please try again later 🙏')});
+    S.chatHistory.push({role:'user',text:q,failed:true});
+    S.chatHistory.push({role:'ai',failed:true,text:L('AI 解牌目前暫停服務中（API 配額已滿），很快會恢復，請稍後再試 🙏（這次不計入追問次數）','AI readings are paused right now (quota full). Service will be back soon — please try again later 🙏 (this attempt doesn\'t count toward your limit)')});
     renderChat();
     if(S.currentReadingId) saveReading(true, true); // 追問也即時入檔，網頁重整不遺失
     return;
   }
   input.value=''; input.style.height='auto';
   if(!S.chatHistory) S.chatHistory=[];
-  S.chatHistory.push({role:'user',text:q});
+  const userMsg={role:'user',text:q};
+  S.chatHistory.push(userMsg);
   renderChat();
   const msgsEl=document.getElementById('chat-msgs');
   const loadingEl=document.createElement('div');
@@ -2425,7 +2432,7 @@ async function sendChat(){
     const context=LANG==='en'
       ? `You are a tarot reader. Here is the reading just given:\nQuestion: "${S.q}"\nReading: ${S.lastInterpText}\n\nAnswer the querent's follow-up based on this reading. Your answer must be complete and not cut off. Respond entirely in English, no markdown symbols, plain text paragraphs only. Do not assume anyone's gender; avoid gendered pronouns — use "they/them" or "this person".`
       : `你是一位精通塔羅的占卜師。以下是剛才的占卜結果：\n問題：「${S.q}」\n解讀：${S.lastInterpText}\n\n請根據以上解讀回答問卜者的追問。回答必須完整，不能中途停止。全程用繁體中文，禁止使用 markdown 符號，輸出純文字段落。不要預設任何人的性別，避免使用「她」「妳」等帶性別代名詞，一律改用中性的「他」，或視情況用「對方」「這個人」。請不要使用「TA」這種寫法。`;
-    const history=S.chatHistory.slice(0,-1).map(m=>({role:m.role==='user'?'user':'model',parts:[{text:m.text}]}));
+    const history=S.chatHistory.slice(0,-1).filter(m=>!m.failed).map(m=>({role:m.role==='user'?'user':'model',parts:[{text:m.text}]}));
     const geminiBody={
       systemInstruction:{parts:[{text:context}]},
       contents:[...history,{role:'user',parts:[{text:q}]}],
@@ -2456,7 +2463,7 @@ async function sendChat(){
     if(ownK){
       const cleanKey=key.split('').filter(c=>c.charCodeAt(0)>=32&&c.charCodeAt(0)<=126).join('');
       if(apiProvider(cleanKey)==='openai'){
-        const oaMsgs=S.chatHistory.slice(0,-1).map(m=>({role:m.role==='user'?'user':'assistant',content:m.text}));
+        const oaMsgs=S.chatHistory.slice(0,-1).filter(m=>!m.failed).map(m=>({role:m.role==='user'?'user':'assistant',content:m.text}));
         ans=await callOpenAI(cleanKey, context, [...oaMsgs,{role:'user',content:q}]);
       } else {
         const r=await fetchGeminiOwnKey(cleanKey, geminiBody);
@@ -2466,7 +2473,11 @@ async function sendChat(){
     }
     S.chatHistory.push({role:'ai',text:ans.replace(/\*\*(.+?)\*\*/g,'$1').replace(/\*(.+?)\*/g,'$1').replace(/[*#`_~]/g,'')});
   }catch(e){
-    S.chatHistory.push({role:'ai',text:L('抱歉，發生錯誤：','Sorry, an error occurred: ')+e.message});
+    // 這次追問沒有成功取得回答 → 標記為 failed，不計入追問次數
+    userMsg.failed=true;
+    S.chatHistory.push({role:'ai',failed:true,
+      text:L('抱歉，發生錯誤：','Sorry, an error occurred: ')+e.message
+        +L('（這次不計入追問次數，可以再試一次）',' (this attempt doesn\'t count toward your limit — feel free to retry)')});
   }
   renderChat();
   if(S.currentReadingId) saveReading(true, true); // 追問後即時入檔：網頁重整/自動刷新也不會遺失對話與剩餘額度
@@ -2486,7 +2497,7 @@ function renderChat(){
 // 顯示本次占卜剩餘追問次數；用完即鎖住輸入
 function updateChatRemaining(){
   const el=document.getElementById('chat-remaining'); if(!el) return;
-  const used=(S.chatHistory||[]).filter(m=>m.role==='user').length;
+  const used=usedChatTurns(S.chatHistory);
   const left=Math.max(0, CHAT_LIMIT-used);
   const input=document.getElementById('chat-input');
   const btn=document.getElementById('chat-send-btn');
@@ -2624,7 +2635,7 @@ function renderHistList(){
     ?list.map(r=>{
         const full=fullMap[r.id]||{};
         const canAI = full.cards && full.cards.length; // 有牌面資料即可（type 缺漏會自動反推）
-        const usedT=(full.chat||[]).filter(m=>m.role==='user').length;
+        const usedT=usedChatTurns(full.chat);
         const chatBtn=(canAI && full.interp && usedT<CHAT_LIMIT)
           ? `<button class="btn btn-sm" style="margin:0" onclick="resumeChat(${r.id})">${L(`💬 繼續追問（還剩 ${CHAT_LIMIT-usedT} 次）`,`💬 Continue asking (${CHAT_LIMIT-usedT} left)`)}</button>` : '';
         const aiBtn = canAI ? `<button class="btn btn-sm btn-ghost" style="margin:0" onclick="analyzeWithAI(${r.id})">${full.interp?L('🔄 用 AI 重新解析','🔄 Re-analyze with AI'):L('✦ 用 AI 解析這次占卜','✦ Analyze with AI')}</button>` : '';
@@ -3120,8 +3131,8 @@ function toggleAiInfo(){
 // ══════════════════════════════════════════
 const CHANGELOG = [
   { date:'2026-09-22',
-    zh:['修正：追問失敗時可能顯示看不懂的「[object Object]」錯誤訊息，現在會顯示實際的錯誤原因（例如額度、連線等問題），方便判斷狀況'],
-    en:['Fixed: follow-up failures could show an unreadable "[object Object]" error — now shows the actual reason (e.g. quota, connection) so it\'s easier to tell what went wrong'] },
+    zh:['修正：追問失敗時可能顯示看不懂的「[object Object]」錯誤訊息，現在會顯示實際的錯誤原因（例如額度、連線等問題），方便判斷狀況','修正：追問失敗（連線錯誤、服務暫停等）不再佔用追問次數，可以直接重試；失敗的問答也不會被帶進後續對話的脈絡裡'],
+    en:['Fixed: follow-up failures could show an unreadable "[object Object]" error — now shows the actual reason (e.g. quota, connection) so it\'s easier to tell what went wrong','Fixed: failed follow-ups (connection errors, paused service) no longer use up one of your follow-up allowance — just retry; failed exchanges also no longer pollute the conversation context'] },
   { date:'2026-09-17',
     zh:['修正：AI 解牌暫時無法使用的問題（Google 更新了 AI 模型版本，已同步更新並加上自動備援，未來若再更新不會影響服務）'],
     en:['Fixed: AI readings were temporarily unavailable (Google updated its AI model version — updated our end and added automatic fallback so future updates won\'t affect service)'] },
