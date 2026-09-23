@@ -17,6 +17,8 @@ function todayKey() { return 'count:' + new Date().toISOString().slice(0, 10); }
 // 備援清單：主模型 404（已下架/改名）時依序嘗試，避免單一模型異動就整站中斷。
 const GEMINI_MODEL = 'gemini-3.8-flash';
 const GEMINI_MODEL_FALLBACKS = ['gemini-2.5-flash', 'gemini-flash-latest'];
+// 改 worker 時一起改，才能從 /version 確認 Cloudflare 真的部署了新版本
+const WORKER_VERSION = '2026.9.23a';
 
 const ALLOWED_ORIGINS = [
   'https://angiehu0428.github.io',
@@ -58,6 +60,15 @@ export default {
     // Gemini proxy — called by frontend after email verification
     if (url.pathname === '/gemini' && request.method === 'POST') {
       return handleGemini(request, env);
+    }
+    // 自備 API Key 被地區擋下時的代轉（用戶自己的 key，不消耗本站額度）
+    if (url.pathname === '/gemini-relay' && request.method === 'POST') {
+      return handleGeminiRelay(request, env);
+    }
+    // 版本與執行位置（公開，不含任何機密）：確認 wrangler.toml 的 [placement] 真的生效，
+    // 也確認 Cloudflare 已部署新版 worker。colo 應該是美國節點（例如 SJC/LAX/PDX）。
+    if (url.pathname === '/version') {
+      return handleVersion(request, env);
     }
 
     // Email check — lets frontend show "already purchased" state on load
@@ -608,6 +619,39 @@ async function checkGeminiHealth(env) {
 }
 
 // ── Gemini proxy ─────────────────────────────────────────────
+// ── 版本 / 執行位置 ────────────────────────────────────────────
+// cdn-cgi/trace 由「實際執行這段程式的節點」回應，所以拿到的 colo 就是 Gemini 看到的
+// 出口位置（request.cf.colo 是用戶進來的節點，兩者在 [placement] 生效後會不一樣）。
+async function handleVersion(request, env) {
+  let egressColo = '?';
+  try {
+    const t = await fetch('https://cloudflare.com/cdn-cgi/trace');
+    const m = (await t.text()).match(/^colo=(.+)$/m);
+    if (m) egressColo = m[1];
+  } catch (e) {}
+  return json({
+    version: WORKER_VERSION,
+    egressColo,                                        // 送到 Google 的請求從這裡出去
+    ingressColo: (request.cf && request.cf.colo) || '?', // 用戶連進來的節點
+    country: (request.cf && request.cf.country) || '?',
+    model: GEMINI_MODEL,
+  }, 200, request);
+}
+
+// ── 自備 API Key 的代轉 ────────────────────────────────────────
+// 自備 key 的用戶是瀏覽器直連 Google，出口就是他自己的網路位置；若他開了 VPN／
+// iCloud 私密轉送、或當地出口不被 Gemini 接受，就會被擋，前端無計可施。
+// 這支 Worker 固定在支援地區執行（見 wrangler.toml 的 [placement]），所以改由它代轉
+// 就能繞過。用的是用戶自己的 key、不碰本站額度與點數；限本站來源，避免變成公開代理。
+async function handleGeminiRelay(request, env) {
+  const origin = request.headers.get('Origin');
+  if (!ALLOWED_ORIGINS.includes(origin)) return json({ error: 'forbidden' }, 403, request);
+  const { key, body: geminiBody } = await request.json().catch(() => ({}));
+  if (!key || !geminiBody) return json({ error: '缺少 API Key 或請求內容' }, 400, request);
+  const { resp, data } = await fetchGeminiWithFallback(String(key).slice(0, 200), geminiBody);
+  return json(data, resp.status, request);
+}
+
 async function handleGemini(request, env) {
   // 暫停付費 AI 解牌（配額已滿）：直接回覆暫停訊息，不呼叫 Gemini，停止消耗配額
   if (AI_PAUSED) {

@@ -10,3 +10,13 @@ id = "d8831c1811f942b295fe670e3b9910c3"
 # 下架/改名模型導致 AI 解牌全站中斷卻沒人發現，見 worker.js 的 scheduled()）。
 [triggers]
 crons = ["0 */6 * * *"]
+
+# Gemini API 是依「請求最後從哪個網路位置送出」判斷地區的。Worker 預設在「離用戶最近
+# 的節點」執行，請求也從該節點送出——台灣是 Gemini 的支援地區，但台灣用戶偶爾會被路由
+# 到香港等不支援地區的節點，Google 就回 400「User location is not supported for the
+# API use.」，用戶完全不知道發生什麼事（還會誤以為是自己額度用完）。
+# 這裡把 Worker 固定在美西執行，送到 Google 的請求永遠來自支援地區，這個錯誤不會再發生。
+# 代價：驗證/同步等小 API 對台灣用戶多約 100-150ms（AI 解牌本來就要數秒，感覺不出來）。
+# 驗證方式：開 https://tarot-worker.angiehu.workers.dev/version 看 colo 是不是美國節點。
+[placement]
+region = "gcp:us-west1"
