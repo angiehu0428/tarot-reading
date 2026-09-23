@@ -29,7 +29,21 @@ async function fetchGeminiOwnKey(cleanKey, geminiBody){
       `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
       {method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':cleanKey},body:JSON.stringify(geminiBody)}
     ));
-    if(resp.status!==404) return resp;
+    if(resp.status!==404) break;
+  }
+  // 自備 key 是瀏覽器直連 Google，出口就是用戶自己的網路位置；若他開著 VPN／iCloud
+  // 私密轉送、或當地出口不被 Gemini 接受，就會被擋（User location is not supported）。
+  // 這種情況前端自己沒救，改由 worker 代轉（worker 固定在支援地區執行），用戶無感。
+  // 代轉失敗就回原本的回應，錯誤訊息照常顯示。
+  if(resp && !resp.ok && WORKER_URL){
+    const peek=await resp.clone().json().catch(()=>({}));
+    if(/location is not supported/i.test(String((peek&&peek.error&&peek.error.message)||''))){
+      try{
+        const relay=await fetchRetry(()=>fetch(WORKER_URL+'/gemini-relay',{method:'POST',
+          headers:{'Content-Type':'application/json'},body:JSON.stringify({key:cleanKey,body:geminiBody})}));
+        if(relay.ok) return relay;
+      }catch(e){}
+    }
   }
   return resp;
 }
@@ -3154,8 +3168,8 @@ function toggleAiInfo(){
 // ══════════════════════════════════════════
 const CHANGELOG = [
   { date:'2026-09-23',
-    zh:['修正：AI 解牌／追問偶爾出現「User location is not supported for the API use.」的英文錯誤——這是 Google 依「請求送出來的網路位置」擋下，與你的額度無關。現在會直接說明原因並提示解法（關掉 VPN／iCloud 私密轉送，或 Wi-Fi 與行動網路互換再試）','其他常見的英文錯誤（服務忙線、用量已滿、金鑰無效）也一併改成看得懂的中文說明'],
-    en:['Fixed: AI readings/follow-ups sometimes showed a raw "User location is not supported for the API use." error — that\'s Google blocking based on the network location the request came from, not your quota. It now explains the cause and what to do (turn off VPN / iCloud Private Relay, or switch between Wi-Fi and mobile data)','Other common raw API errors (service busy, quota full, invalid key) are now shown in plain language too'] },
+    zh:['修正：AI 解牌／追問偶爾出現「User location is not supported for the API use.」而失敗——這是 Google 依「請求送出來的網路位置」擋下，與你的額度無關。已把伺服器固定在支援地區，這個錯誤不會再發生','自備 API Key 的用戶若因為 VPN／iCloud 私密轉送被擋，現在會自動改由本站伺服器代轉（用的仍是你自己的 Key），不用自己排除網路問題','其他常見的英文錯誤（服務忙線、用量已滿、金鑰無效）也一併改成看得懂的中文說明，萬一再發生也知道是什麼狀況'],
+    en:['Fixed: AI readings/follow-ups sometimes failed with "User location is not supported for the API use." — that\'s Google blocking based on the network location the request came from, not your quota. Our server is now pinned to a supported region, so this no longer happens','If you use your own API key and get blocked (VPN / iCloud Private Relay), requests now automatically route through our server instead — still using your own key','Other common raw API errors (service busy, quota full, invalid key) are now shown in plain language too'] },
   { date:'2026-09-22',
     zh:['修正：追問失敗時可能顯示看不懂的「[object Object]」錯誤訊息，現在會顯示實際的錯誤原因（例如額度、連線等問題），方便判斷狀況','修正：追問失敗（連線錯誤、服務暫停等）不再佔用追問次數，可以直接重試；失敗的問答也不會被帶進後續對話的脈絡裡'],
     en:['Fixed: follow-up failures could show an unreadable "[object Object]" error — now shows the actual reason (e.g. quota, connection) so it\'s easier to tell what went wrong','Fixed: failed follow-ups (connection errors, paused service) no longer use up one of your follow-up allowance — just retry; failed exchanges also no longer pollute the conversation context'] },
