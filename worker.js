@@ -18,7 +18,7 @@ function todayKey() { return 'count:' + new Date().toISOString().slice(0, 10); }
 const GEMINI_MODEL = 'gemini-3.8-flash';
 const GEMINI_MODEL_FALLBACKS = ['gemini-2.5-flash', 'gemini-flash-latest'];
 // 改 worker 時一起改，才能從 /version 確認 Cloudflare 真的部署了新版本
-const WORKER_VERSION = '2026.9.23a';
+const WORKER_VERSION = '2026.9.23b';
 
 const ALLOWED_ORIGINS = [
   'https://angiehu0428.github.io',
@@ -130,6 +130,7 @@ export default {
   // ctx.waitUntil 讓檢查在背景跑完，不受單次觸發的執行時間限制影響。
   async scheduled(event, env, ctx) {
     ctx.waitUntil(checkGeminiHealth(env));
+    ctx.waitUntil(checkEgressRegion(env)); // 確認用戶路徑的出口仍在 Gemini 支援地區
   },
 };
 
@@ -558,6 +559,13 @@ async function fetchGeminiWithFallback(apiKey, geminiBody) {
   return { resp, data }; // 全部模型都 404：回傳最後一次的結果，讓上層照常回報錯誤
 }
 
+// Gemini API 不支援的地區（台灣用戶最可能被路由到的是香港）。這是「出口國家」的黑名單，
+// 不是用戶所在地——用戶在哪都沒關係，重點是請求從哪裡送出去。
+const UNSUPPORTED_REGIONS = ['HK', 'MO', 'CN'];
+// 用戶實際走的路徑（fetch handler）受 wrangler.toml 的 [placement] 固定在美西；
+// 定期檢查自己打這個網址，就能確認 placement 還活著、出口仍在支援地區。
+const WORKER_PUBLIC_URL = 'https://tarot-worker.angiehu.workers.dev';
+
 // ── 地區限制（Google 依「請求送出來的網路位置」擋下）────────────────
 // 台灣是 Gemini API 的支援地區，但這支 Worker 是在「離用戶最近的 Cloudflare 節點」
 // 執行，請求也從那個節點送出——台灣用戶若被路由到香港等不支援地區的節點，Google 就會
@@ -577,6 +585,36 @@ async function alertGeoBlock(env, colo, country) {
     `🌏 AI 解牌被 Google 依地區擋下\n節點：${colo}（用戶所在地：${country}）\n` +
     `這台節點送出的請求不被 Gemini API 接受，該節點的用戶會解不了牌。\n` +
     `用戶端已顯示「換個網路再試」的說明。若持續發生，需要把 Worker 固定在支援地區出口。`);
+}
+
+// ── 定期驗證：用戶路徑的出口是否仍在支援地區 ────────────────────
+// [placement] 只作用於 fetch handler，Cron 自己跑在哪個節點不受控——所以不能用「這次
+// Cron 的出口」來判斷用戶有沒有問題，要去打自己的 /version（那是 fetch handler，受
+// placement 控制），拿到的才是用戶請求真正的出口。
+// 只在「狀態改變」時通知，平常完全安靜。
+async function checkEgressRegion(env) {
+  const EK = 'health:egress';
+  let country = '?', colo = '?';
+  try {
+    const r = await fetch(WORKER_PUBLIC_URL + '/version', { headers: { 'Origin': ALLOWED_ORIGINS[0] } });
+    const d = await r.json();
+    country = d.egressCountry || '?';
+    colo = d.egressColo || '?';
+  } catch (e) {
+    return; // 連自己都打不到就別亂報，下一輪再說
+  }
+  const bad = UNSUPPORTED_REGIONS.includes(country);
+  const prev = JSON.parse((await env.TAROT_KV.get(EK)) || '{}');
+  if (prev.country === country) return; // 沒變就不吵
+  await env.TAROT_KV.put(EK, JSON.stringify({ country, colo, at: new Date().toISOString() }));
+  if (bad) {
+    await sendTelegram(env,
+      `🚨 AI 解牌的出口落在不支援地區：${country}（節點 ${colo}）\n` +
+      `用戶會開始遇到「User location is not supported」。\n` +
+      `請確認 wrangler.toml 的 [placement] region 還在，以及最後一次部署是否成功。`);
+  } else if (prev.country && UNSUPPORTED_REGIONS.includes(prev.country)) {
+    await sendTelegram(env, `✅ AI 解牌的出口已回到支援地區：${country}（節點 ${colo}）`);
+  }
 }
 
 // ── 定期健康檢查：主動偵測 Gemini API 是否還能正常呼叫 ──────────
@@ -606,12 +644,12 @@ async function checkGeminiHealth(env) {
     }
     await env.TAROT_KV.put(HK, JSON.stringify({ ok: true, lastOk: now }));
   } else {
+    // Cron 跑在哪個節點不受 [placement] 控制，所以「這次檢查被地區擋下」只代表 Cron 自己
+    // 的節點被擋，用戶走的 fetch 路徑仍固定在美西、完全不受影響——不能當成服務中斷，
+    // 否則每次 Cron 落在香港就誤報一次。用戶路徑的出口由 checkEgressRegion() 另外盯。
+    if (/location is not supported/i.test(errMsg)) return { ok, errMsg, checkedAt: now, skipped: 'geo' };
     if (prev.ok !== false) { // 剛從正常變異常，第一次偵測到才通知（避免每 6 小時重複騷擾）
-      // 地區被擋跟「模型被下架」是完全不同的問題，處理方式也不同，訊息要分開講
-      const geo = /location is not supported/i.test(errMsg);
-      await sendTelegram(env, geo
-        ? `🌏 定期檢查：AI 解牌被 Google 依地區擋下\n錯誤：${errMsg}\n這次檢查所在的節點不被 Gemini API 接受。若只是偶發，代表部分用戶會遇到；若持續，需要把 Worker 固定在支援地區出口。`
-        : `🚨 AI 解牌可能已中斷！\n嘗試過的模型：${[GEMINI_MODEL, ...GEMINI_MODEL_FALLBACKS].join('、')}（全部失敗）\n錯誤：${errMsg}\n請到 https://ai.google.dev/gemini-api/docs/models 確認目前可用的模型名稱，更新 worker.js 的 GEMINI_MODEL 常數。`);
+      await sendTelegram(env, `🚨 AI 解牌可能已中斷！\n嘗試過的模型：${[GEMINI_MODEL, ...GEMINI_MODEL_FALLBACKS].join('、')}（全部失敗）\n錯誤：${errMsg}\n請到 https://ai.google.dev/gemini-api/docs/models 確認目前可用的模型名稱，更新 worker.js 的 GEMINI_MODEL 常數。`);
     }
     await env.TAROT_KV.put(HK, JSON.stringify({ ok: false, since: prev.ok === false ? prev.since : now, lastCheck: now, lastError: errMsg }));
   }
@@ -622,16 +660,25 @@ async function checkGeminiHealth(env) {
 // ── 版本 / 執行位置 ────────────────────────────────────────────
 // cdn-cgi/trace 由「實際執行這段程式的節點」回應，所以拿到的 colo 就是 Gemini 看到的
 // 出口位置（request.cf.colo 是用戶進來的節點，兩者在 [placement] 生效後會不一樣）。
-async function handleVersion(request, env) {
-  let egressColo = '?';
+async function egressInfo() {
+  const out = { colo: '?', country: '?' };
   try {
     const t = await fetch('https://cloudflare.com/cdn-cgi/trace');
-    const m = (await t.text()).match(/^colo=(.+)$/m);
-    if (m) egressColo = m[1];
+    const txt = await t.text();
+    const c = txt.match(/^colo=(.+)$/m); if (c) out.colo = c[1].trim();
+    const l = txt.match(/^loc=(.+)$/m); if (l) out.country = l[1].trim();
   } catch (e) {}
+  return out;
+}
+
+async function handleVersion(request, env) {
+  const eg = await egressInfo();
+  const egressColo = eg.colo;
   return json({
     version: WORKER_VERSION,
     egressColo,                                        // 送到 Google 的請求從這裡出去
+    egressCountry: eg.country,                         // 這個國家必須是 Gemini 的支援地區
+    egressOk: !UNSUPPORTED_REGIONS.includes(eg.country),
     ingressColo: (request.cf && request.cf.colo) || '?', // 用戶連進來的節點
     country: (request.cf && request.cf.country) || '?',
     model: GEMINI_MODEL,
