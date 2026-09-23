@@ -44,6 +44,27 @@ function extractErrMsg(err, fallback){
   if(err.message) return String(err.message);
   try{ return JSON.stringify(err).slice(0,200); }catch(e){ return fallback; }
 }
+// 把 API 回傳的英文原文錯誤，翻成用戶看得懂、而且知道下一步該做什麼的說明。
+// extractErrMsg 負責「取出」錯誤（保持原文，方便回報與除錯），這裡負責「顯示」，
+// 兩者分開：所有要秀給用戶看的地方都套這個，回報後台則收原文。
+// 其中「User location is not supported」是 Google 依「請求送出來的網路位置」擋下，
+// 跟用戶的額度完全無關（台灣是支援地區，但走到香港等不支援地區的節點就會被擋），
+// 曾讓用戶誤以為是自己額度用完，所以要明確講清楚並給可行的解法。
+let LAST_AI_ERR='';
+function friendlyApiErr(msg){
+  const s=String(msg||'');
+  LAST_AI_ERR=s.slice(0,300); // 用戶按「回報問題」時一併送出原文，站長才查得到真正原因
+  if(/location is not supported/i.test(s))
+    return L('AI 服務不接受這次連線的網路位置（跟你的額度無關）。通常換個網路就好了：關掉 VPN／iCloud 私密轉送，或 Wi-Fi 與行動網路互換後再試一次 🌏',
+             'The AI service refused this request because of the network location it came from (nothing to do with your quota). Switching networks usually fixes it: turn off any VPN / iCloud Private Relay, or switch between Wi-Fi and mobile data, then try again 🌏');
+  if(/Resource has been exhausted|RESOURCE_EXHAUSTED/i.test(s))
+    return L('AI 服務目前的用量已滿，請過幾分鐘再試一次 🙏','The AI service is at capacity right now — please try again in a few minutes 🙏');
+  if(/overloaded|UNAVAILABLE/i.test(s))
+    return L('AI 服務目前忙線中，請稍後再試一次 🙏','The AI service is busy right now — please try again shortly 🙏');
+  if(/API key not valid|API_KEY_INVALID/i.test(s))
+    return L('你的 API Key 無效，請到「設定」重新確認 🔑','Your API key isn\'t valid — please re-check it in Settings 🔑');
+  return s;
+}
 // 每次占卜可追問的次數上限（避免無止境聊天、控制成本）。想多/少就改這個數字。
 const CHAT_LIMIT = 5;
 // 計算已用掉的追問次數：失敗的追問（AI 連線/服務錯誤、暫停服務）標記為 failed，
@@ -1294,7 +1315,7 @@ function runAIReading(){
     console.error(err);
     const fb=fbRender();
     document.getElementById('interp-main').innerHTML=`${fb}${unlockCtaHtml()}${retryBarHtml()}
-      <div style="font-size:.72rem;color:var(--red);margin-top:10px;opacity:.7">${L('（AI 暫時無法連線：','(AI temporarily unavailable: ')}${err.message}）
+      <div style="font-size:.72rem;color:var(--red);margin-top:10px;opacity:.7">${L('（AI 暫時無法連線：','(AI temporarily unavailable: ')}${friendlyApiErr(err.message)}）
         <a href="javascript:void(0)" onclick="reportProblem('ai-fail')" style="color:rgba(212,175,55,.7);margin-left:6px">${L('回報問題','Report')}</a></div>`;
     autoSaveDraw();
   });
@@ -1817,7 +1838,7 @@ ${refCtx}
       return callOpenAI(cleanKey, AI_SYS_TEXT(), [{role:'user',content:prompt}]);
     }
     resp=await fetchGeminiOwnKey(cleanKey, geminiBody);
-    if(!resp.ok){const e=await resp.json().catch(()=>({}));throw new Error(`API ${resp.status}: ${e?.error?.message||resp.statusText}`);}
+    if(!resp.ok){const e=await resp.json().catch(()=>({}));throw new Error(extractErrMsg(e&&e.error, `API ${resp.status}: ${resp.statusText}`));}
     data=await resp.json();
   }
   if(data.error)throw new Error(extractErrMsg(data.error, 'Gemini error'));
@@ -2467,7 +2488,9 @@ async function sendChat(){
         ans=await callOpenAI(cleanKey, context, [...oaMsgs,{role:'user',content:q}]);
       } else {
         const r=await fetchGeminiOwnKey(cleanKey, geminiBody);
-        const data=await r.json();
+        const data=await r.json().catch(()=>({}));
+        // 自備 key 也要把錯誤攤開來講（以前這裡沒檢查，任何失敗都只顯示「無法取得回應」）
+        if(!r.ok||data.error) throw new Error(extractErrMsg(data.error, `API ${r.status}`));
         ans=data.candidates?.[0]?.content?.parts?.[0]?.text||L('無法取得回應','No response received');
       }
     }
@@ -2476,7 +2499,7 @@ async function sendChat(){
     // 這次追問沒有成功取得回答 → 標記為 failed，不計入追問次數
     userMsg.failed=true;
     S.chatHistory.push({role:'ai',failed:true,
-      text:L('抱歉，發生錯誤：','Sorry, an error occurred: ')+e.message
+      text:L('抱歉，發生錯誤：','Sorry, an error occurred: ')+friendlyApiErr(e.message)
         +L('（這次不計入追問次數，可以再試一次）',' (this attempt doesn\'t count toward your limit — feel free to retry)')});
   }
   renderChat();
@@ -2953,7 +2976,7 @@ async function submitReport(){
   const btn=document.getElementById('report-submit'); if(btn) btn.disabled=true;
   try{
     const r=await fetch(WORKER_URL+'/report',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({type:reportType, message:msg, contact, ctx:reportCtx, lang:LANG, ua:navigator.userAgent})});
+      body:JSON.stringify({type:reportType, message:msg, contact, ctx:reportCtx, lang:LANG, ua:navigator.userAgent, err:LAST_AI_ERR})});
     if(!r.ok) throw new Error('HTTP '+r.status);
     // 記住這筆回報的憑證（id+tok），之後站長回覆時可在站內收到通知
     try{
@@ -3130,6 +3153,9 @@ function toggleAiInfo(){
 //  更新紀錄 CHANGELOG（新項目加在最上面；中英務必同步）
 // ══════════════════════════════════════════
 const CHANGELOG = [
+  { date:'2026-09-23',
+    zh:['修正：AI 解牌／追問偶爾出現「User location is not supported for the API use.」的英文錯誤——這是 Google 依「請求送出來的網路位置」擋下，與你的額度無關。現在會直接說明原因並提示解法（關掉 VPN／iCloud 私密轉送，或 Wi-Fi 與行動網路互換再試）','其他常見的英文錯誤（服務忙線、用量已滿、金鑰無效）也一併改成看得懂的中文說明'],
+    en:['Fixed: AI readings/follow-ups sometimes showed a raw "User location is not supported for the API use." error — that\'s Google blocking based on the network location the request came from, not your quota. It now explains the cause and what to do (turn off VPN / iCloud Private Relay, or switch between Wi-Fi and mobile data)','Other common raw API errors (service busy, quota full, invalid key) are now shown in plain language too'] },
   { date:'2026-09-22',
     zh:['修正：追問失敗時可能顯示看不懂的「[object Object]」錯誤訊息，現在會顯示實際的錯誤原因（例如額度、連線等問題），方便判斷狀況','修正：追問失敗（連線錯誤、服務暫停等）不再佔用追問次數，可以直接重試；失敗的問答也不會被帶進後續對話的脈絡裡'],
     en:['Fixed: follow-up failures could show an unreadable "[object Object]" error — now shows the actual reason (e.g. quota, connection) so it\'s easier to tell what went wrong','Fixed: failed follow-ups (connection errors, paused service) no longer use up one of your follow-up allowance — just retry; failed exchanges also no longer pollute the conversation context'] },

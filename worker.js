@@ -137,7 +137,7 @@ async function sendTelegram(env, text) {
 
 // ── Report / feature wish ────────────────────────────────────
 async function handleReport(request, env) {
-  const { type, message, contact, ctx, lang, ua, site } = await request.json().catch(() => ({}));
+  const { type, message, contact, ctx, lang, ua, site, err } = await request.json().catch(() => ({}));
   const msg = (message || '').toString().trim().slice(0, 2000);
   if (!msg) return json({ error: 'empty' }, 400, request);
   const id = Date.now();
@@ -153,13 +153,21 @@ async function handleReport(request, env) {
     lang: (lang || '').toString().slice(0, 8),
     ua: (ua || '').toString().slice(0, 200),
     site: (site || 'tarot').toString().slice(0, 20), // which site the report came from
+    // 診斷用：用戶實際所在國家、處理這個請求的 Cloudflare 節點、以及最近一次 AI 錯誤原文。
+    // 「User location is not supported」這類問題光看文字敘述完全查不出原因，
+    // 有國家＋節點才分得出是用戶端（VPN／私密轉送）還是我們的節點被擋。
+    country: ((request.cf && request.cf.country) || '').toString().slice(0, 8),
+    colo: ((request.cf && request.cf.colo) || '').toString().slice(0, 8),
+    err: (err || '').toString().slice(0, 300),
   };
   await env.TAROT_KV.put('report:' + id, JSON.stringify(rec), { expirationTtl: 60 * 60 * 24 * 365 });
   // Telegram 即時通知：設定 TG_BOT_TOKEN + TG_CHAT_ID 兩個 secret 才啟用；
   // 通知失敗不影響回報本身（KV 已存檔，/reports 一樣看得到）。
   const tgText = `${rec.type === 'wish' ? '💡 功能許願' : '🐞 問題回報'}（${rec.site}）\n\n${rec.message}` +
     (rec.contact ? `\n\n↩ 聯絡方式：${rec.contact}` : '') +
-    `\n🌐 ${rec.lang || '?'}${rec.ctx ? ' · ' + rec.ctx : ''}`;
+    (rec.err ? `\n⚠ 最近一次 AI 錯誤：${rec.err}` : '') +
+    `\n🌐 ${rec.lang || '?'}${rec.ctx ? ' · ' + rec.ctx : ''}` +
+    `${rec.country ? ' · ' + rec.country : ''}${rec.colo ? ' · ' + rec.colo : ''}`;
   await sendTelegram(env, tgText);
   return json({ ok: true, id, tok }, 200, request);
 }
@@ -185,8 +193,9 @@ async function handleReports(request, env) {
     const replyBtn = isEmail ? `<a class="reply" href="mailto:${esc(contact)}?subject=${mailSubject}&body=${mailBody}">✉ 回覆</a>` : '';
     return `<div class="card ${isWish ? 'wish' : 'issue'}" data-id="${r.id}">
       <button class="del" onclick="delReport(this)" title="刪除這筆回報">✕</button>
-      <div class="meta"><span class="tag">${isWish ? '💡 許願' : '🐞 問題'}</span><span class="site">${esc(r.site || 'tarot')}</span><span class="date">${new Date(r.date).toLocaleString('zh-TW')}</span>${r.ctx ? `<span class="ctx">${esc(r.ctx)}</span>` : ''}<span class="lang">${esc(r.lang)}</span></div>
+      <div class="meta"><span class="tag">${isWish ? '💡 許願' : '🐞 問題'}</span><span class="site">${esc(r.site || 'tarot')}</span><span class="date">${new Date(r.date).toLocaleString('zh-TW')}</span>${r.ctx ? `<span class="ctx">${esc(r.ctx)}</span>` : ''}<span class="lang">${esc(r.lang)}</span>${r.country ? `<span class="ctx">${esc(r.country)}${r.colo ? ' · ' + esc(r.colo) : ''}</span>` : ''}</div>
       <div class="msg">${esc(r.message)}</div>
+      ${r.err ? `<div class="err">⚠ ${esc(r.err)}</div>` : ''}
       ${contact ? `<div class="contact">↩ ${esc(contact)} ${replyBtn}</div>` : ''}
       <div class="inreply">
         ${r.reply ? `<div class="replied">💌 已回覆（${r.repliedAt ? new Date(r.repliedAt).toLocaleString('zh-TW') : ''}）：${esc(r.reply)}</div>` : ''}
@@ -210,6 +219,7 @@ async function handleReports(request, env) {
   .del{position:absolute;top:10px;right:10px;background:none;border:1px solid rgba(224,85,85,.3);color:rgba(224,85,85,.7);width:26px;height:26px;border-radius:50%;cursor:pointer;font-size:.8rem;line-height:1;transition:all .2s}
   .del:hover{background:rgba(224,85,85,.15);color:#e05555}
   .card.wish{border-color:rgba(120,180,255,.3)}
+  .err{font-size:.75rem;color:#e0a055;background:rgba(224,160,85,.08);border-radius:8px;padding:7px 10px;margin-top:8px;word-break:break-word}
   .meta{display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:.74rem;color:#9a8db5;margin-bottom:8px}
   .tag{color:#f0d878;font-weight:700}
   .card.wish .tag{color:#9ec5ff}
@@ -537,6 +547,27 @@ async function fetchGeminiWithFallback(apiKey, geminiBody) {
   return { resp, data }; // 全部模型都 404：回傳最後一次的結果，讓上層照常回報錯誤
 }
 
+// ── 地區限制（Google 依「請求送出來的網路位置」擋下）────────────────
+// 台灣是 Gemini API 的支援地區，但這支 Worker 是在「離用戶最近的 Cloudflare 節點」
+// 執行，請求也從那個節點送出——台灣用戶若被路由到香港等不支援地區的節點，Google 就會
+// 回 400 FAILED_PRECONDITION「User location is not supported for the API use.」。
+// 用戶完全無從得知，只會以為是自己額度用完。這裡負責：(1) 標記給前端翻成人話、
+// (2) 通知站長並附上實際節點，才有辦法判斷要不要改用固定地區的出口。
+function isGeoBlocked(data) {
+  const m = (data && data.error && data.error.message) || '';
+  return /location is not supported/i.test(String(m));
+}
+// 同一個節點被擋時每小時最多通知一次，避免洗版（KV 的 TTL 最小值為 60 秒）
+async function alertGeoBlock(env, colo, country) {
+  const k = 'alert:geo:' + colo;
+  if (await env.TAROT_KV.get(k)) return;
+  await env.TAROT_KV.put(k, '1', { expirationTtl: 60 * 60 });
+  await sendTelegram(env,
+    `🌏 AI 解牌被 Google 依地區擋下\n節點：${colo}（用戶所在地：${country}）\n` +
+    `這台節點送出的請求不被 Gemini API 接受，該節點的用戶會解不了牌。\n` +
+    `用戶端已顯示「換個網路再試」的說明。若持續發生，需要把 Worker 固定在支援地區出口。`);
+}
+
 // ── 定期健康檢查：主動偵測 Gemini API 是否還能正常呼叫 ──────────
 // 由 wrangler.toml 的 Cron Trigger 每 6 小時自動呼叫一次（見下方 scheduled()），
 // 也可透過 GET /health 手動立即檢查一次。這是這次「gemini-flash-latest 被下架
@@ -565,7 +596,11 @@ async function checkGeminiHealth(env) {
     await env.TAROT_KV.put(HK, JSON.stringify({ ok: true, lastOk: now }));
   } else {
     if (prev.ok !== false) { // 剛從正常變異常，第一次偵測到才通知（避免每 6 小時重複騷擾）
-      await sendTelegram(env, `🚨 AI 解牌可能已中斷！\n嘗試過的模型：${[GEMINI_MODEL, ...GEMINI_MODEL_FALLBACKS].join('、')}（全部失敗）\n錯誤：${errMsg}\n請到 https://ai.google.dev/gemini-api/docs/models 確認目前可用的模型名稱，更新 worker.js 的 GEMINI_MODEL 常數。`);
+      // 地區被擋跟「模型被下架」是完全不同的問題，處理方式也不同，訊息要分開講
+      const geo = /location is not supported/i.test(errMsg);
+      await sendTelegram(env, geo
+        ? `🌏 定期檢查：AI 解牌被 Google 依地區擋下\n錯誤：${errMsg}\n這次檢查所在的節點不被 Gemini API 接受。若只是偶發，代表部分用戶會遇到；若持續，需要把 Worker 固定在支援地區出口。`
+        : `🚨 AI 解牌可能已中斷！\n嘗試過的模型：${[GEMINI_MODEL, ...GEMINI_MODEL_FALLBACKS].join('、')}（全部失敗）\n錯誤：${errMsg}\n請到 https://ai.google.dev/gemini-api/docs/models 確認目前可用的模型名稱，更新 worker.js 的 GEMINI_MODEL 常數。`);
     }
     await env.TAROT_KV.put(HK, JSON.stringify({ ok: false, since: prev.ok === false ? prev.since : now, lastCheck: now, lastError: errMsg }));
   }
@@ -617,6 +652,14 @@ async function handleGemini(request, env) {
   }
 
   const { resp, data } = await fetchGeminiWithFallback(env.GEMINI_KEY, geminiBody);
+  // 被 Google 依地區擋下：不扣額度也不扣點（下面的 resp.ok 判斷已涵蓋），
+  // 另外通知站長並標記，讓前端能翻成「跟你的額度無關，換個網路再試」
+  if (isGeoBlocked(data)) {
+    const colo = (request.cf && request.cf.colo) || '?';
+    const country = (request.cf && request.cf.country) || '?';
+    await alertGeoBlock(env, colo, country);
+    return json({ ...data, __geoBlocked: true, __colo: colo }, resp.status, request);
+  }
   // 只在「成功」時才計入用量與扣點（失敗 / 重試不浪費額度與點數）
   if (resp.ok && !data.error && spend) {
     const balNow = Math.max(0, parseInt((await env.TAROT_KV.get(ck)) || '0', 10) - 1);
