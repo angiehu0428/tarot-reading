@@ -230,8 +230,8 @@ Object.assign(T, {
   'set.font.head':{zh:'✦ 字級大小（看不清楚可調大）',en:'✦ Text size (make it bigger if hard to read)'},
   'font.lv0':{zh:'標準',en:'Normal'},'font.lv1':{zh:'大',en:'Large'},'font.lv2':{zh:'特大',en:'X-Large'},'font.lv3':{zh:'超大',en:'XX-Large'},
   'font.btn.title':{zh:'字級大小（點我放大）',en:'Text size (tap to enlarge)'},
-  'ann.title':{zh:'✦ AI 解牌確認已恢復 🔮',en:'✦ AI Readings Confirmed Working 🔮'},
-  'ann.body':{zh:'🙏 <strong style="color:var(--gold)">AI 深度解牌現在真的恢復正常了！</strong><br><br>昨晚的第一次修復其實還沒完全生效，讓部分朋友仍然遇到無法解牌的狀況，真的很抱歉。我們今天再次確認、徹底排查後，AI 解牌（訂閱、點數、自備 API Key）已經恢復正常運作 ✦<br><br>造成不便與困擾很抱歉，感謝大家的耐心等待與持續回報 🙏 現在可以放心繼續占卜追問了 ✨',en:'🙏 <strong style="color:var(--gold)">AI deep readings are genuinely working again now!</strong><br><br>Last night\'s first fix didn\'t fully take effect, and some of you still couldn\'t get AI readings — we\'re sorry about that. After a thorough re-check today, AI readings (subscription, credits, and your own API key) are now confirmed working normally ✦<br><br>Sorry for the inconvenience, and thank you for your patience and continued reports 🙏 Readings and follow-ups are back to normal ✨'},
+  'ann.title':{zh:'✦ 追問的三個問題已修好 🔮',en:'✦ Three Follow-up Issues Fixed 🔮'},
+  'ann.body':{zh:'🙏 <strong style="color:var(--gold)">感謝大家持續回報，這幾天修好了三件事：</strong><br><br><strong>① 追問失敗不再扣次數</strong><br>以前只要 AI 出錯或連線有問題，那次失敗仍然會佔掉一次追問機會。現在失敗不計入次數，可以直接再試一次 ✦<br><br><strong>② 偶爾解不了牌的問題已根治</strong><br>有些朋友會看到「User location is not supported」這串英文——那是伺服器連線位置造成的，<strong>跟你的額度完全無關</strong>，已經從根本修掉，不會再發生 ✦<br><br><strong>③ 錯誤訊息看得懂了</strong><br>萬一再遇到狀況，會直接說明是什麼原因、可以怎麼處理，不再顯示英文原文或「[object Object]」✦<br><br>💬 另外提醒：<strong>舊的占卜在「占卜記錄」裡還可以繼續追問</strong>，只要次數還沒用完。有任何問題都歡迎隨時回報 🙏',en:'🙏 <strong style="color:var(--gold)">Thanks to your reports, three things were fixed this week:</strong><br><br><strong>1. Failed follow-ups no longer use up your allowance</strong><br>Previously, if the AI errored or the connection dropped, that attempt still counted against your follow-ups. Now it doesn\'t — just try again ✦<br><br><strong>2. The occasional "no reading" problem is fixed for good</strong><br>Some of you saw a raw "User location is not supported" error — that came from the server\'s network location and had <strong>nothing to do with your quota</strong>. It is fixed at the root and won\'t happen again ✦<br><br><strong>3. Error messages make sense now</strong><br>If something does go wrong, you will see what happened and what to do — no more raw English errors or "[object Object]" ✦<br><br>💬 A reminder: <strong>past readings in History can still be continued</strong> as long as you have follow-ups left. Reports are always welcome 🙏'},
   'ann.feedback':{zh:'有問題或想許願新功能？點此回報 →',en:'Found a bug or have a feature wish? Tell us →'},
   'ann.ok':{zh:'我知道了',en:'Got it'},
   'report.title':{zh:'🐞 回報問題',en:'🐞 Report a Problem'},
@@ -3010,7 +3010,7 @@ async function submitReport(){
 }
 // 一次性公告（沒看過的人會看到一次，關閉後不再跳；要發新公告換新的 ANNOUNCE_ID 即可）
 // 注意：App 內瀏覽器（LINE/FB）可能每次清除儲存，這類用戶每次開啟仍會視為「第一次」看到一次
-const ANNOUNCE_ID = '2026-09-18-ai-fixed-confirmed';
+const ANNOUNCE_ID = '2026-09-24-followup-fixes';
 const ANNOUNCE_EXPIRES = new Date('2026-12-31T00:00:00'); // 到期日：讓第一次來的訪客持續看得到
 // 儲存三層備援：localStorage（跨次）→ sessionStorage（LINE/FB 等 App 內瀏覽器常清 localStorage）
 // → 記憶體（隱私模式下兩者都可能不可用），確保同一次瀏覽絕不重複跳出
