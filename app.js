@@ -20,16 +20,32 @@ const AI_PAUSED = false;
 // Google 之後再棄用，只需改這一個常數；GEMINI_MODEL_FALLBACKS 是主模型 404 時的備援。
 const GEMINI_MODEL = 'gemini-3.8-flash';
 const GEMINI_MODEL_FALLBACKS = ['gemini-2.5-flash', 'gemini-flash-latest'];
-// 依序嘗試 GEMINI_MODEL 與備援模型，直到取得非 404（模型不存在/已下架）的回應
+// 要不要改用下一個備援模型：
+// ① 404 → 這個模型不存在/已下架（Google 定期棄用）。
+// ② 模型忙線（503 / overloaded / high demand）→ 是「這個模型」當下沒容量，換一個通常就過了；
+//    光在同一個模型上重試只會一直撞牆（用戶看到的就是 This model is currently
+//    experiencing high demand）。配額不足（429 RESOURCE_EXHAUSTED）則不換——那是金鑰層級
+//    的限制，換模型沒用，只是多打一次。
+function shouldTryNextModel(status, data){
+  if(status===404) return true;
+  const m=String((data&&data.error&&data.error.message)||'');
+  if(/RESOURCE_EXHAUSTED|check quota/i.test(m)) return false;
+  return status===503 || /overloaded|high demand|Spikes in demand|UNAVAILABLE/i.test(m);
+}
+// 依序嘗試 GEMINI_MODEL 與備援模型，直到取得可用的回應
 async function fetchGeminiOwnKey(cleanKey, geminiBody){
   const models=[GEMINI_MODEL, ...GEMINI_MODEL_FALLBACKS];
   let resp;
   for(const model of models){
+    // 這裡只重試 2 次（而非預設 3 次）：忙線時與其在同一個模型上反覆等待，不如早點換
+    // 備援模型——實測換模型幾乎都會過，拖長的等待對用戶沒有意義。
     resp=await fetchRetry(()=>fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
       {method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':cleanKey},body:JSON.stringify(geminiBody)}
-    ));
-    if(resp.status!==404) break;
+    ), 2);
+    if(resp.ok) break;
+    const peek=await resp.clone().json().catch(()=>({}));
+    if(!shouldTryNextModel(resp.status, peek)) break;
   }
   // 自備 key 是瀏覽器直連 Google，出口就是用戶自己的網路位置；若他開著 VPN／iCloud
   // 私密轉送、或當地出口不被 Gemini 接受，就會被擋（User location is not supported）。
@@ -73,8 +89,8 @@ function friendlyApiErr(msg){
              'The AI service refused this request because of the network location it came from (nothing to do with your quota). Switching networks usually fixes it: turn off any VPN / iCloud Private Relay, or switch between Wi-Fi and mobile data, then try again 🌏');
   if(/Resource has been exhausted|RESOURCE_EXHAUSTED/i.test(s))
     return L('AI 服務目前的用量已滿，請過幾分鐘再試一次 🙏','The AI service is at capacity right now — please try again in a few minutes 🙏');
-  if(/overloaded|UNAVAILABLE/i.test(s))
-    return L('AI 服務目前忙線中，請稍後再試一次 🙏','The AI service is busy right now — please try again shortly 🙏');
+  if(/overloaded|UNAVAILABLE|high demand|Spikes in demand/i.test(s))
+    return L('AI 服務目前使用的人太多（Google 那邊忙線），已自動換備援模型重試過了。請等一兩分鐘再試一次 🙏','The AI service is under heavy load on Google\'s side — we already retried on a backup model. Please try again in a minute or two 🙏');
   if(/API key not valid|API_KEY_INVALID/i.test(s))
     return L('你的 API Key 無效，請到「設定」重新確認 🔑','Your API key isn\'t valid — please re-check it in Settings 🔑');
   return s;
@@ -3167,6 +3183,9 @@ function toggleAiInfo(){
 //  更新紀錄 CHANGELOG（新項目加在最上面；中英務必同步）
 // ══════════════════════════════════════════
 const CHANGELOG = [
+  { date:'2026-10-01',
+    zh:['AI 解牌／追問遇到「模型忙線」（Google 那邊使用量暴增）時，會自動改用備援模型完成解讀，不再直接顯示錯誤要你重試','真的三個模型都忙線時，訊息也改成中文說明，並告訴你已經自動重試過了'],
+    en:['When the AI model is overloaded on Google\'s side, readings and follow-ups now automatically switch to a backup model instead of failing with an error','If every backup is busy too, the message is now in plain language and tells you we already retried'] },
   { date:'2026-09-23',
     zh:['修正：AI 解牌／追問偶爾出現「User location is not supported for the API use.」而失敗——這是 Google 依「請求送出來的網路位置」擋下，與你的額度無關。已把伺服器固定在支援地區，這個錯誤不會再發生','自備 API Key 的用戶若因為 VPN／iCloud 私密轉送被擋，現在會自動改由本站伺服器代轉（用的仍是你自己的 Key），不用自己排除網路問題','其他常見的英文錯誤（服務忙線、用量已滿、金鑰無效）也一併改成看得懂的中文說明，萬一再發生也知道是什麼狀況','另外加上自動監測：萬一伺服器位置哪天又跑到不支援的地區，站長會立刻收到通知，不必等大家回報'],
     en:['Fixed: AI readings/follow-ups sometimes failed with "User location is not supported for the API use." — that\'s Google blocking based on the network location the request came from, not your quota. Our server is now pinned to a supported region, so this no longer happens','If you use your own API key and get blocked (VPN / iCloud Private Relay), requests now automatically route through our server instead — still using your own key','Other common raw API errors (service busy, quota full, invalid key) are now shown in plain language too','Added automatic monitoring: if our server ever ends up in an unsupported region again, the site owner is alerted right away instead of waiting for reports'] },
