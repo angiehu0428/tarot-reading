@@ -18,7 +18,7 @@ function todayKey() { return 'count:' + new Date().toISOString().slice(0, 10); }
 const GEMINI_MODEL = 'gemini-3.8-flash';
 const GEMINI_MODEL_FALLBACKS = ['gemini-2.5-flash', 'gemini-flash-latest'];
 // 改 worker 時一起改，才能從 /version 確認 Cloudflare 真的部署了新版本
-const WORKER_VERSION = '2026.9.23b';
+const WORKER_VERSION = '2026.10.1a';
 
 const ALLOWED_ORIGINS = [
   'https://angiehu0428.github.io',
@@ -538,9 +538,19 @@ async function handleStats(request, env) {
   return new Response(html, { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8' } });
 }
 
-// 依序嘗試 GEMINI_MODEL 與其備援模型，直到取得非 404（模型不存在/已下架）的回應。
-// 只在「模型不存在」時才換下一個；其他錯誤（配額、參數錯誤等）維持原樣直接回傳，
-// 不浪費重試次數也不掩蓋真正的問題。
+// 要不要改用下一個備援模型：
+// ① 404 → 這個模型不存在/已下架（Google 會定期棄用）。
+// ② 模型忙線（503 / overloaded / high demand）→ 是「這個模型」當下沒容量，換一個通常就過了。
+// 配額不足（429 RESOURCE_EXHAUSTED）不換——那是金鑰層級的限制，換模型沒用。
+// 其他錯誤（參數錯誤、地區被擋等）也不換，直接回傳，不掩蓋真正的問題。
+function shouldTryNextModel(status, data) {
+  if (status === 404) return true;
+  const m = String((data && data.error && data.error.message) || '');
+  if (/RESOURCE_EXHAUSTED|check quota/i.test(m)) return false;
+  return status === 503 || /overloaded|high demand|Spikes in demand|UNAVAILABLE/i.test(m);
+}
+
+// 依序嘗試 GEMINI_MODEL 與其備援模型，直到取得可用的回應
 async function fetchGeminiWithFallback(apiKey, geminiBody) {
   const models = [GEMINI_MODEL, ...GEMINI_MODEL_FALLBACKS];
   let resp, data;
@@ -553,10 +563,10 @@ async function fetchGeminiWithFallback(apiKey, geminiBody) {
         body: JSON.stringify(geminiBody),
       }
     );
-    if (resp.status !== 404) return { resp, data: await resp.json().catch(() => ({})) };
     data = await resp.json().catch(() => ({}));
+    if (!shouldTryNextModel(resp.status, data)) return { resp, data };
   }
-  return { resp, data }; // 全部模型都 404：回傳最後一次的結果，讓上層照常回報錯誤
+  return { resp, data }; // 全部模型都不行：回傳最後一次的結果，讓上層照常回報錯誤
 }
 
 // Gemini API 不支援的地區（台灣用戶最可能被路由到的是香港）。這是「出口國家」的黑名單，
