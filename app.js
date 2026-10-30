@@ -1930,8 +1930,27 @@ function detectTopic(q){
     ['career',/工作|事業|職場|職涯|老闆|同事|面試|轉職|創業|升遷|專案|案子|生意|客戶|合作|career|job|work|boss|colleague|interview|business|promotion|project|client|startup/i],
     ['love',/感情|愛情|戀愛|喜歡|曖昧|關係|對方|復合|結婚|脫單|告白|分手|桃花|他|她|love|relationship|dating|crush|romance|partner|marriage|breakup|ex\b|him|her|boyfriend|girlfriend|spouse/i]
   ];
-  for(const [k,re] of rules) if(re.test(q)) return k;
-  return 'general';
+  // 問題裡直接寫出主題名稱（感情、事業…）就以它為準；寫了好幾個，取最先出現的。
+  // 只放主題名稱本身：「工作、考試」這類字常只是背景（例如夢到在工作場合），交給下面數字數
+  const explicit=[
+    ['love',/感情|愛情|戀愛|姻緣|romance/i],
+    ['career',/事業|職涯|career/i],
+    ['money',/財務|財運|finances/i],
+    ['health',/健康/i],
+    ['study',/學業/i]
+  ];
+  let best=null;
+  for(const [k,re] of explicit){ const m=re.exec(q); if(m&&(!best||m.index<best.at)) best={k,at:m.index}; }
+  if(best) return best.k;
+  // 沒寫主題字：數哪一類的字最多；一樣多取最先出現的
+  // （舊寫法比到第一個中的就停，感情問題只要帶到「合作、案子」就被判成事業）
+  let top=null;
+  for(const [k,re] of rules){
+    const g=new RegExp(re.source,'gi'); let n=0, at=Infinity, m;
+    while((m=g.exec(q))){ n++; if(m.index<at) at=m.index; if(!m[0]) g.lastIndex++; }
+    if(n&&(!top||n>top.n||(n===top.n&&at<top.at))) top={k,n,at};
+  }
+  return top?top.k:'general';
 }
 function topicLabel(topic){ return t('h.topic.'+topic); }
 
@@ -3183,6 +3202,9 @@ function toggleAiInfo(){
 //  更新紀錄 CHANGELOG（新項目加在最上面；中英務必同步）
 // ══════════════════════════════════════════
 const CHANGELOG = [
+  { date:'2026-10-30',
+    zh:['修正問題主題判斷：感情問題裡只要帶到「合作、案子、工作」等字，牌面解析會被誤判成事業。現在問題裡直接寫「感情、事業、財運…」就以它為準，沒寫時看哪一類的字最多'],
+    en:['Fixed question-topic detection: a love question mentioning words like "work" or "project" was read as a career question. Now an explicit topic word (love, career, money…) wins, otherwise the topic with the most matching words is used'] },
   { date:'2026-10-01',
     zh:['AI 解牌／追問遇到「模型忙線」（Google 那邊使用量暴增）時，會自動改用備援模型完成解讀，不再直接顯示錯誤要你重試','真的三個模型都忙線時，訊息也改成中文說明，並告訴你已經自動重試過了'],
     en:['When the AI model is overloaded on Google\'s side, readings and follow-ups now automatically switch to a backup model instead of failing with an error','If every backup is busy too, the message is now in plain language and tells you we already retried'] },
