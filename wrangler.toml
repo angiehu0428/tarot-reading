@@ -15,8 +15,17 @@ crons = ["0 */6 * * *"]
 # 的節點」執行，請求也從該節點送出——台灣是 Gemini 的支援地區，但台灣用戶偶爾會被路由
 # 到香港等不支援地區的節點，Google 就回 400「User location is not supported for the
 # API use.」，用戶完全不知道發生什麼事（還會誤以為是自己額度用完）。
-# 這裡把 Worker 固定在美西執行，送到 Google 的請求永遠來自支援地區，這個錯誤不會再發生。
+# 這裡請 Worker 盡量在美西執行（region 只是建議，2026-11 起 Gemini 另外改走下方的美國中繼 DO 才算真的保證）。
 # 代價：驗證/同步等小 API 對台灣用戶多約 100-150ms（AI 解牌本來就要數秒，感覺不出來）。
-# 驗證方式：開 https://tarot-worker.angiehu.workers.dev/version 看 colo 是不是美國節點。
+# 驗證方式：開 https://tarot-worker.angiehu.workers.dev/version 看 geminiViaUS 是不是 true。
 [placement]
 region = "gcp:us-west1"
+
+# Gemini 美國中繼（見 worker.js GeminiProxy）：[placement] region 只是建議，香港機房照樣會被 Google 擋
+[[durable_objects.bindings]]
+name = "GEMINI_PROXY"
+class_name = "GeminiProxy"
+
+[[migrations]]
+tag = "v1-gemini-proxy"
+new_sqlite_classes = ["GeminiProxy"]

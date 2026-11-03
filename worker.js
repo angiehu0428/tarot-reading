@@ -16,9 +16,34 @@ function todayKey() { return 'count:' + new Date().toISOString().slice(0, 10); }
 // 別名不可靠，這裡固定寫死目前的正式版模型；之後 Google 再棄用，只需改這一個常數。
 // 備援清單：主模型 404（已下架/改名）時依序嘗試，避免單一模型異動就整站中斷。
 const GEMINI_MODEL = 'gemini-3.8-flash';
-const GEMINI_MODEL_FALLBACKS = ['gemini-2.5-flash', 'gemini-flash-latest'];
+const GEMINI_MODEL_FALLBACKS = ['gemini-flash-latest', 'gemini-flash-lite-latest']; // gemini-2.5-* 已下架（2026-08）
+// Gemini 一律從美國出去：Worker 被排到香港機房時 Google 回 400「User location is not supported」，
+// [placement] 只是建議擋不住。打 Gemini 的請求交給建在 us jurisdiction 的 Durable Object 轉送（硬限制只在美國跑）。
+// 只轉 generativelanguage 的網址，不當任意代理；沒綁定（測試／本機）就直接 fetch。
+const GEMINI_HOST = 'https://generativelanguage.googleapis.com/';
+export class GeminiProxy {
+  constructor(state, env) {}
+  async fetch(req) {
+    const target = req.headers.get('x-gp-target') || '';
+    if (!target.startsWith(GEMINI_HOST)) return new Response('only Gemini', { status: 400 });
+    const headers = new Headers(req.headers);
+    for (const h of ['x-gp-target', 'host']) headers.delete(h);
+    return fetch(target, { method: req.method, headers, body: req.body, signal: AbortSignal.timeout(120000) });
+  }
+}
+let geminiNs; // 每個請求／排程開頭設一次（同一個部署的綁定都一樣）
+async function geminiFetch(url, init = {}) {
+  if (!geminiNs || !String(url).startsWith(GEMINI_HOST)) return fetch(url, init);
+  const us = geminiNs.jurisdiction('us');
+  const stub = us.get(us.idFromName('gemini-us'), { locationHint: 'wnam' });
+  const headers = new Headers(init.headers);
+  headers.set('x-gp-target', String(url));
+  const res = await stub.fetch('https://gemini-proxy/', { method: init.method || 'GET', headers, body: init.body });
+  return new Response(await res.arrayBuffer(), { status: res.status, statusText: res.statusText, headers: res.headers });
+}
+
 // 改 worker 時一起改，才能從 /version 確認 Cloudflare 真的部署了新版本
-const WORKER_VERSION = '2026.10.1a';
+const WORKER_VERSION = '2026.11.3a';
 
 const ALLOWED_ORIGINS = [
   'https://angiehu0428.github.io',
@@ -46,6 +71,7 @@ function json(data, status = 200, request) {
 
 export default {
   async fetch(request, env) {
+    geminiNs = env.GEMINI_PROXY;
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: corsHeaders(request) });
     }
@@ -65,8 +91,8 @@ export default {
     if (url.pathname === '/gemini-relay' && request.method === 'POST') {
       return handleGeminiRelay(request, env);
     }
-    // 版本與執行位置（公開，不含任何機密）：確認 wrangler.toml 的 [placement] 真的生效，
-    // 也確認 Cloudflare 已部署新版 worker。colo 應該是美國節點（例如 SJC/LAX/PDX）。
+    // 版本與執行位置（公開，不含任何機密）：確認新版本已部署、Gemini 走美國中繼（geminiViaUS），
+    // egress* 是 Worker 自己的出口，僅供參考。
     if (url.pathname === '/version') {
       return handleVersion(request, env);
     }
@@ -129,8 +155,10 @@ export default {
   // Cloudflare Cron Trigger（見 wrangler.toml 的 [triggers] crons）每 6 小時呼叫一次，
   // ctx.waitUntil 讓檢查在背景跑完，不受單次觸發的執行時間限制影響。
   async scheduled(event, env, ctx) {
+    geminiNs = env.GEMINI_PROXY;
+    // Gemini 改走美國中繼後，Cron 自己的檢查跟用戶走同一條路，被擋就是真的被擋；
+    // 原本量 Worker 出口國家的 checkEgressRegion 已不代表 Gemini 會不會被擋，不再跑
     ctx.waitUntil(checkGeminiHealth(env));
-    ctx.waitUntil(checkEgressRegion(env)); // 確認用戶路徑的出口仍在 Gemini 支援地區
   },
 };
 
@@ -555,7 +583,7 @@ async function fetchGeminiWithFallback(apiKey, geminiBody) {
   const models = [GEMINI_MODEL, ...GEMINI_MODEL_FALLBACKS];
   let resp, data;
   for (const model of models) {
-    resp = await fetch(
+    resp = await geminiFetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
       {
         method: 'POST',
@@ -654,10 +682,8 @@ async function checkGeminiHealth(env) {
     }
     await env.TAROT_KV.put(HK, JSON.stringify({ ok: true, lastOk: now }));
   } else {
-    // Cron 跑在哪個節點不受 [placement] 控制，所以「這次檢查被地區擋下」只代表 Cron 自己
-    // 的節點被擋，用戶走的 fetch 路徑仍固定在美西、完全不受影響——不能當成服務中斷，
-    // 否則每次 Cron 落在香港就誤報一次。用戶路徑的出口由 checkEgressRegion() 另外盯。
-    if (/location is not supported/i.test(errMsg)) return { ok, errMsg, checkedAt: now, skipped: 'geo' };
+    // 沒有中繼（本機／綁定遺失）時 Cron 跑在哪不受控，被地區擋不代表用戶被擋；有中繼就是真的異常、照常通知
+    if (!geminiNs && /location is not supported/i.test(errMsg)) return { ok, errMsg, checkedAt: now, skipped: 'geo' };
     if (prev.ok !== false) { // 剛從正常變異常，第一次偵測到才通知（避免每 6 小時重複騷擾）
       await sendTelegram(env, `🚨 AI 解牌可能已中斷！\n嘗試過的模型：${[GEMINI_MODEL, ...GEMINI_MODEL_FALLBACKS].join('、')}（全部失敗）\n錯誤：${errMsg}\n請到 https://ai.google.dev/gemini-api/docs/models 確認目前可用的模型名稱，更新 worker.js 的 GEMINI_MODEL 常數。`);
     }
@@ -668,8 +694,8 @@ async function checkGeminiHealth(env) {
 
 // ── Gemini proxy ─────────────────────────────────────────────
 // ── 版本 / 執行位置 ────────────────────────────────────────────
-// cdn-cgi/trace 由「實際執行這段程式的節點」回應，所以拿到的 colo 就是 Gemini 看到的
-// 出口位置（request.cf.colo 是用戶進來的節點，兩者在 [placement] 生效後會不一樣）。
+// cdn-cgi/trace 由「實際執行這段程式的節點」回應，拿到的是這支 Worker 的出口
+// （request.cf.colo 是用戶進來的節點）。Gemini 改走美國中繼後，這不再是 Google 看到的出口。
 async function egressInfo() {
   const out = { colo: '?', country: '?' };
   try {
@@ -686,9 +712,13 @@ async function handleVersion(request, env) {
   const egressColo = eg.colo;
   return json({
     version: WORKER_VERSION,
-    egressColo,                                        // 送到 Google 的請求從這裡出去
-    egressCountry: eg.country,                         // 這個國家必須是 Gemini 的支援地區
+    // 以下 egress* 是「這支 Worker 自己」的出口；Gemini 走美國中繼後，Google 看到的是 DO 的美國出口，
+    // 所以 Gemini 會不會被擋請看 geminiViaUS／geminiEgressOk，egressOk 只當參考
+    egressColo,
+    egressCountry: eg.country,
     egressOk: !UNSUPPORTED_REGIONS.includes(eg.country),
+    geminiViaUS: !!geminiNs,                           // Gemini 走美國中繼（DO, us jurisdiction 硬限制）
+    geminiEgressOk: !!geminiNs || !UNSUPPORTED_REGIONS.includes(eg.country),
     ingressColo: (request.cf && request.cf.colo) || '?', // 用戶連進來的節點
     country: (request.cf && request.cf.country) || '?',
     model: GEMINI_MODEL,
@@ -698,7 +728,7 @@ async function handleVersion(request, env) {
 // ── 自備 API Key 的代轉 ────────────────────────────────────────
 // 自備 key 的用戶是瀏覽器直連 Google，出口就是他自己的網路位置；若他開了 VPN／
 // iCloud 私密轉送、或當地出口不被 Gemini 接受，就會被擋，前端無計可施。
-// 這支 Worker 固定在支援地區執行（見 wrangler.toml 的 [placement]），所以改由它代轉
+// Gemini 請求一律經美國中繼（GeminiProxy，us jurisdiction）送出，所以改由它代轉
 // 就能繞過。用的是用戶自己的 key、不碰本站額度與點數；限本站來源，避免變成公開代理。
 async function handleGeminiRelay(request, env) {
   const origin = request.headers.get('Origin');
