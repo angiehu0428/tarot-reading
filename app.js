@@ -3207,8 +3207,8 @@ function toggleAiInfo(){
 // ══════════════════════════════════════════
 const CHANGELOG = [
   { date:'2026-11-03',
-    zh:['AI 解牌／追問改成一律從美國的伺服器送給 Google，不會再因為被分到香港等地區的機房而出現「User location is not supported」','備援模型換成目前還在服務的版本（舊的 2.5 系列 Google 已經下架），主模型忙線時能順利接手'],
-    en:['AI readings and follow-ups are now always sent to Google from a US server, so "User location is not supported" errors caused by being routed through Hong Kong and similar regions should no longer happen','Backup models updated to versions Google still serves (the old 2.5 series was retired), so busy periods hand over smoothly'] },
+    zh:['用本站額度的 AI 解牌／追問，以及自備金鑰被地區擋下時的代轉，改成一律從美國的伺服器送給 Google，不會再因為被分到香港等地區的機房而出現「User location is not supported」','備援模型換成目前還在服務的版本（舊的 2.5 系列 Google 已經下架），主模型忙線時能順利接手'],
+    en:['Readings and follow-ups that use the site\'s quota, and the fallback relay for your own API key when your region is blocked, now always reach Google from a US server, so "User location is not supported" errors caused by Hong Kong routing should no longer happen','Backup models updated to versions Google still serves (the old 2.5 series was retired), so busy periods hand over smoothly'] },
   { date:'2026-10-30',
     zh:['修正問題主題判斷：感情問題裡只要帶到「合作、案子、工作」等字，牌面解析會被誤判成事業。現在問題裡直接寫「感情、事業、財運…」就以它為準，沒寫時看哪一類的字最多'],
     en:['Fixed question-topic detection: a love question mentioning words like "work" or "project" was read as a career question. Now naming the topic directly (e.g. "romance", "career", "finances") wins; otherwise the topic with the most matching words is used, and pronouns like him/her no longer pull a health or study question into love'] },

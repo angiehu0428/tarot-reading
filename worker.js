@@ -91,8 +91,8 @@ export default {
     if (url.pathname === '/gemini-relay' && request.method === 'POST') {
       return handleGeminiRelay(request, env);
     }
-    // 版本與執行位置（公開，不含任何機密）：確認 wrangler.toml 的 [placement] 真的生效，
-    // 也確認 Cloudflare 已部署新版 worker。colo 應該是美國節點（例如 SJC/LAX/PDX）。
+    // 版本與執行位置（公開，不含任何機密）：確認新版本已部署、Gemini 走美國中繼（geminiViaUS），
+    // egress* 是 Worker 自己的出口，僅供參考。
     if (url.pathname === '/version') {
       return handleVersion(request, env);
     }
@@ -697,8 +697,8 @@ async function checkGeminiHealth(env) {
 
 // ── Gemini proxy ─────────────────────────────────────────────
 // ── 版本 / 執行位置 ────────────────────────────────────────────
-// cdn-cgi/trace 由「實際執行這段程式的節點」回應，所以拿到的 colo 就是 Gemini 看到的
-// 出口位置（request.cf.colo 是用戶進來的節點，兩者在 [placement] 生效後會不一樣）。
+// cdn-cgi/trace 由「實際執行這段程式的節點」回應，拿到的是這支 Worker 的出口
+// （request.cf.colo 是用戶進來的節點）。Gemini 改走美國中繼後，這不再是 Google 看到的出口。
 async function egressInfo() {
   const out = { colo: '?', country: '?' };
   try {
@@ -715,10 +715,13 @@ async function handleVersion(request, env) {
   const egressColo = eg.colo;
   return json({
     version: WORKER_VERSION,
-    egressColo,                                        // 送到 Google 的請求從這裡出去
-    egressCountry: eg.country,                         // 這個國家必須是 Gemini 的支援地區
+    // 以下 egress* 是「這支 Worker 自己」的出口；Gemini 走美國中繼後，Google 看到的是 DO 的美國出口，
+    // 所以 Gemini 會不會被擋請看 geminiViaUS／geminiEgressOk，egressOk 只當參考
+    egressColo,
+    egressCountry: eg.country,
     egressOk: !UNSUPPORTED_REGIONS.includes(eg.country),
-    geminiViaUS: !!geminiNs,                           // Gemini 走美國中繼（DO, us jurisdiction）
+    geminiViaUS: !!geminiNs,                           // Gemini 走美國中繼（DO, us jurisdiction 硬限制）
+    geminiEgressOk: !!geminiNs || !UNSUPPORTED_REGIONS.includes(eg.country),
     ingressColo: (request.cf && request.cf.colo) || '?', // 用戶連進來的節點
     country: (request.cf && request.cf.country) || '?',
     model: GEMINI_MODEL,
@@ -728,7 +731,7 @@ async function handleVersion(request, env) {
 // ── 自備 API Key 的代轉 ────────────────────────────────────────
 // 自備 key 的用戶是瀏覽器直連 Google，出口就是他自己的網路位置；若他開了 VPN／
 // iCloud 私密轉送、或當地出口不被 Gemini 接受，就會被擋，前端無計可施。
-// 這支 Worker 固定在支援地區執行（見 wrangler.toml 的 [placement]），所以改由它代轉
+// Gemini 請求一律經美國中繼（GeminiProxy，us jurisdiction）送出，所以改由它代轉
 // 就能繞過。用的是用戶自己的 key、不碰本站額度與點數；限本站來源，避免變成公開代理。
 async function handleGeminiRelay(request, env) {
   const origin = request.headers.get('Origin');
