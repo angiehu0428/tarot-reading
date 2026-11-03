@@ -20,3 +20,12 @@ crons = ["0 */6 * * *"]
 # 驗證方式：開 https://tarot-worker.angiehu.workers.dev/version 看 colo 是不是美國節點。
 [placement]
 region = "gcp:us-west1"
+
+# Gemini 美國中繼（見 worker.js GeminiProxy）：[placement] region 只是建議，香港機房照樣會被 Google 擋
+[[durable_objects.bindings]]
+name = "GEMINI_PROXY"
+class_name = "GeminiProxy"
+
+[[migrations]]
+tag = "v1-gemini-proxy"
+new_sqlite_classes = ["GeminiProxy"]

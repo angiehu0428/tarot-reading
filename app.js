@@ -19,7 +19,7 @@ const AI_PAUSED = false;
 // 目前的正式版模型（供「自備 API Key」用戶使用；訂閱/點數走 worker 端的同款邏輯），
 // Google 之後再棄用，只需改這一個常數；GEMINI_MODEL_FALLBACKS 是主模型 404 時的備援。
 const GEMINI_MODEL = 'gemini-3.8-flash';
-const GEMINI_MODEL_FALLBACKS = ['gemini-2.5-flash', 'gemini-flash-latest'];
+const GEMINI_MODEL_FALLBACKS = ['gemini-flash-latest', 'gemini-flash-lite-latest']; // gemini-2.5-* 已下架（2026-08）
 // 要不要改用下一個備援模型：
 // ① 404 → 這個模型不存在/已下架（Google 定期棄用）。
 // ② 模型忙線（503 / overloaded / high demand）→ 是「這個模型」當下沒容量，換一個通常就過了；
@@ -3206,6 +3206,9 @@ function toggleAiInfo(){
 //  更新紀錄 CHANGELOG（新項目加在最上面；中英務必同步）
 // ══════════════════════════════════════════
 const CHANGELOG = [
+  { date:'2026-11-03',
+    zh:['AI 解牌／追問改成一律從美國的伺服器送給 Google，不會再因為被分到香港等地區的機房而出現「User location is not supported」','備援模型換成目前還在服務的版本（舊的 2.5 系列 Google 已經下架），主模型忙線時能順利接手'],
+    en:['AI readings and follow-ups are now always sent to Google from a US server, so "User location is not supported" errors caused by being routed through Hong Kong and similar regions should no longer happen','Backup models updated to versions Google still serves (the old 2.5 series was retired), so busy periods hand over smoothly'] },
   { date:'2026-10-30',
     zh:['修正問題主題判斷：感情問題裡只要帶到「合作、案子、工作」等字，牌面解析會被誤判成事業。現在問題裡直接寫「感情、事業、財運…」就以它為準，沒寫時看哪一類的字最多'],
     en:['Fixed question-topic detection: a love question mentioning words like "work" or "project" was read as a career question. Now naming the topic directly (e.g. "romance", "career", "finances") wins; otherwise the topic with the most matching words is used, and pronouns like him/her no longer pull a health or study question into love'] },
