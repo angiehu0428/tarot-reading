@@ -682,9 +682,6 @@ async function checkGeminiHealth(env) {
     }
     await env.TAROT_KV.put(HK, JSON.stringify({ ok: true, lastOk: now }));
   } else {
-    // Cron 跑在哪個節點不受 [placement] 控制，所以「這次檢查被地區擋下」只代表 Cron 自己
-    // 的節點被擋，用戶走的 fetch 路徑仍固定在美西、完全不受影響——不能當成服務中斷，
-    // 否則每次 Cron 落在香港就誤報一次。用戶路徑的出口由 checkEgressRegion() 另外盯。
     // 沒有中繼（本機／綁定遺失）時 Cron 跑在哪不受控，被地區擋不代表用戶被擋；有中繼就是真的異常、照常通知
     if (!geminiNs && /location is not supported/i.test(errMsg)) return { ok, errMsg, checkedAt: now, skipped: 'geo' };
     if (prev.ok !== false) { // 剛從正常變異常，第一次偵測到才通知（避免每 6 小時重複騷擾）
