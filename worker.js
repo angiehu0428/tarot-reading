@@ -1,6 +1,6 @@
 // Tarot Reading — Cloudflare Worker
 // KV namespace: TAROT_KV
-// Env vars: GEMINI_KEY, GUMROAD_SELLER_ID, STATS_TOKEN
+// Env vars: GEMINI_KEY, GUMROAD_SELLER_ID, STATS_TOKEN, RESEND_API_KEY + EMAIL_FROM（登入驗證碼寄信）
 
 // 全站每日 AI 解牌上限（成本總閘）。想再高/再低就改這個數字。
 const DAILY_CAP = 2000;
@@ -43,7 +43,7 @@ async function geminiFetch(url, init = {}) {
 }
 
 // 改 worker 時一起改，才能從 /version 確認 Cloudflare 真的部署了新版本
-const WORKER_VERSION = '2026.11.3a';
+const WORKER_VERSION = '2026.11.11a';
 
 const ALLOWED_ORIGINS = [
   'https://angiehu0428.github.io',
@@ -57,7 +57,7 @@ function corsHeaders(request) {
   return {
     'Access-Control-Allow-Origin': allow,
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Vary': 'Origin',
   };
 }
@@ -97,9 +97,20 @@ export default {
       return handleVersion(request, env);
     }
 
-    // Email check — lets frontend show "already purchased" state on load
+    // Email check — with a session token: is this login still paid? With email+sale_id
+    // (Gumroad post-purchase redirect): proof of purchase → issues a session token
     if (url.pathname === '/check' && request.method === 'POST') {
       return handleCheck(request, env);
+    }
+    // Login: email one-time code → session token（付費端點都要帶這個 token，光知道 email 不夠）
+    if (url.pathname === '/auth/start' && request.method === 'POST') {
+      return handleAuthStart(request, env);
+    }
+    if (url.pathname === '/auth/verify' && request.method === 'POST') {
+      return handleAuthVerify(request, env);
+    }
+    if (url.pathname === '/auth/logout' && request.method === 'POST') {
+      return handleAuthLogout(request, env);
     }
 
     // History sync — paid users sync reading history across devices
@@ -444,12 +455,9 @@ async function handleWebhook(request, env) {
 
 // ── Credit balance ───────────────────────────────────────────
 async function handleCredits(request, env) {
-  const { email } = await request.json().catch(() => ({}));
-  const e = (email || '').toLowerCase().trim();
-  if (!e) return json({ balance: 0 }, 200, request);
-  const record = await env.TAROT_KV.get(`email:${e}`);
-  if (!record) return json({ error: 'not verified', balance: 0 }, 403, request);
-  const bal = parseInt((await env.TAROT_KV.get(`credits:${e}`)) || '0', 10);
+  const s = await requirePaidSession(request, env);
+  if (s.error) return s.error;
+  const bal = parseInt((await env.TAROT_KV.get(`credits:${s.email}`)) || '0', 10);
   return json({ balance: bal }, 200, request);
 }
 
@@ -469,24 +477,173 @@ async function handleCreditsAdmin(request, env) {
   return json({ ok: true, balance: bal }, 200, request);
 }
 
-// ── Check if email is verified ───────────────────────────────
-async function handleCheck(request, env) {
-  const { email } = await request.json().catch(() => ({}));
-  if (!email) return json({ verified: false }, 200, request);
+// ── Login / session ──────────────────────────────────────────
+// 2026-11 以前 /gemini、/sync、/credits 只看 body 裡的 email 有沒有付費記錄，知道別人的
+// email 就能讀他的占卜記錄、清空它、燒他的點數。現在改成：
+//   /auth/start  {email}        → 有付費記錄才寄 6 位數驗證碼（Resend；10 分鐘有效）
+//   /auth/verify {email, code}  → 對了就發隨機 session token（KV `sess:<token>` → email）
+//   付費端點一律要 `Authorization: Bearer <token>`，email 以 token 對出來的為準
+//   /check {email, sale_id}     → Gumroad 購後轉址帶的 sale_id 對得上 webhook 寫的記錄，
+//                                 等於購買證明，直接發 token（新買家不用再收一封信）
+const SESSION_TTL = 60 * 60 * 24 * 180; // 半年；到期就再收一次驗證碼
+const OTP_TTL = 60 * 10;
+const OTP_MAX_TRIES = 5;
+const OTP_RESEND_COOLDOWN = 60;
+const AUTH_IP_HOURLY_CAP = 20; // 每個 IP 每小時最多幾次「寄碼」（防拿 /auth/start 掃信箱）
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-  const record = await env.TAROT_KV.get(`email:${email.toLowerCase().trim()}`);
-  return json({ verified: !!record }, 200, request);
+function normEmail(v) { return String(v || '').toLowerCase().trim().slice(0, 254); }
+function safeJson(raw) { try { return JSON.parse(raw); } catch (e) { return null; } }
+function randomHex(bytes) {
+  const a = new Uint8Array(bytes); crypto.getRandomValues(a);
+  return Array.from(a, b => b.toString(16).padStart(2, '0')).join('');
+}
+async function sha256Hex(s) {
+  const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
+  return Array.from(new Uint8Array(d), b => b.toString(16).padStart(2, '0')).join('');
+}
+function bearerToken(request) {
+  const m = /^Bearer\s+([a-f0-9]{64})$/i.exec(request.headers.get('Authorization') || '');
+  return m ? m[1].toLowerCase() : '';
+}
+async function issueSession(env, email) {
+  const token = randomHex(32);
+  await env.TAROT_KV.put(`sess:${token}`, JSON.stringify({ email, iat: new Date().toISOString() }), { expirationTtl: SESSION_TTL });
+  return token;
+}
+// token → { email, record }（record = 付費記錄，null 表示訂閱已到期/退款）；沒 token 或 token 無效 → null
+async function readSession(request, env) {
+  const token = bearerToken(request);
+  if (!token) return null;
+  const sess = safeJson((await env.TAROT_KV.get(`sess:${token}`)) || '');
+  const email = sess && normEmail(sess.email);
+  if (!email) return null;
+  const record = await env.TAROT_KV.get(`email:${email}`);
+  return { email, record, token };
+}
+// 付費端點共用：回 { email } 或 { error: Response }
+async function requirePaidSession(request, env) {
+  const s = await readSession(request, env);
+  if (!s) return { error: json({ error: '請先驗證 Email 登入 / Please verify your email to sign in', needLogin: true }, 401, request) };
+  if (!s.record) return { error: json({ error: '此 email 尚未驗證付款。請確認使用 Gumroad 購買時的 email。', notPaid: true }, 403, request) };
+  return s;
+}
+// 每個 IP 每小時的簡單計數（KV 非原子，擋掃描夠用）
+async function ipAllow(env, request, bucket, cap) {
+  const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+  const k = `ipc:${bucket}:${ip}:${new Date().toISOString().slice(0, 13)}`;
+  const n = parseInt((await env.TAROT_KV.get(k)) || '0', 10);
+  if (n >= cap) return false;
+  await env.TAROT_KV.put(k, String(n + 1), { expirationTtl: 60 * 60 });
+  return true;
+}
+// 寄驗證碼。Resend（RESEND_API_KEY + EMAIL_FROM，跟 Angie 其他專案同一套）；
+// 兩個都沒設時退而求其次丟到站長 Telegram，讓站長手動轉給用戶（過渡期用，不是長久之計）
+async function sendLoginCode(env, email, code) {
+  const subject = `塔羅占卜驗證碼 ${code} / Your Tarot verification code`;
+  const text = `你的塔羅占卜登入驗證碼：${code}\n10 分鐘內有效。不是你本人操作的話，直接忽略這封信就好。\n\nYour Tarot Reading sign-in code: ${code}\nIt expires in 10 minutes. If this wasn't you, just ignore this email.`;
+  const html = `<p>你的塔羅占卜登入驗證碼：</p><p style="font-size:28px;letter-spacing:6px;font-weight:bold">${code}</p><p>10 分鐘內有效。不是你本人操作的話，直接忽略這封信就好。</p><hr><p>Your Tarot Reading sign-in code:</p><p style="font-size:28px;letter-spacing:6px;font-weight:bold">${code}</p><p>It expires in 10 minutes. If this wasn't you, just ignore this email.</p>`;
+  if (env.RESEND_API_KEY && env.EMAIL_FROM) {
+    try {
+      const res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ from: env.EMAIL_FROM, to: [email], subject, text, html }),
+      });
+      if (res.ok) return { ok: true, via: 'email' };
+      const detail = (await res.text().catch(() => '')).slice(0, 300);
+      await sendTelegram(env, `⚠️ 塔羅登入驗證碼寄信失敗（Resend ${res.status}）：${detail}`);
+      return { ok: false };
+    } catch (e) {
+      await sendTelegram(env, `⚠️ 塔羅登入驗證碼寄信失敗：${String(e && e.message || e).slice(0, 200)}`);
+      return { ok: false };
+    }
+  }
+  if (env.TG_BOT_TOKEN && env.TG_CHAT_ID) {
+    await sendTelegram(env, `🔑 塔羅登入（寄信尚未設定 RESEND_API_KEY／EMAIL_FROM，請手動轉給用戶）\n${email} 的驗證碼：${code}（10 分鐘內有效）`);
+    return { ok: true, via: 'manual' };
+  }
+  return { ok: false };
+}
+
+async function handleAuthStart(request, env) {
+  const { email } = await request.json().catch(() => ({}));
+  const e = normEmail(email);
+  if (!e || !EMAIL_RE.test(e)) return json({ error: '請輸入正確的 Email / Please enter a valid email' }, 400, request);
+  if (!(await ipAllow(env, request, 'auth', AUTH_IP_HOURLY_CAP))) {
+    return json({ error: '嘗試太多次，請一小時後再試 / Too many attempts, please try again in an hour', rateLimited: true }, 429, request);
+  }
+  const record = await env.TAROT_KV.get(`email:${e}`);
+  if (!record) return json({ error: 'no purchase', verified: false }, 404, request);
+  if (await env.TAROT_KV.get(`otpr:${e}`)) return json({ sent: true, cooldown: true }, 200, request);
+  const code = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1000000).padStart(6, '0');
+  await env.TAROT_KV.put(`otp:${e}`, JSON.stringify({ h: await sha256Hex(`${e}:${code}`), tries: 0, exp: Date.now() + OTP_TTL * 1000 }), { expirationTtl: OTP_TTL });
+  await env.TAROT_KV.put(`otpr:${e}`, '1', { expirationTtl: OTP_RESEND_COOLDOWN });
+  const sent = await sendLoginCode(env, e, code);
+  if (!sent.ok) return json({ error: '驗證碼寄不出去，請稍後再試 / Could not send the code, please try again later', mailFailed: true }, 503, request);
+  return json({ sent: true, via: sent.via }, 200, request);
+}
+
+async function handleAuthVerify(request, env) {
+  const { email, code } = await request.json().catch(() => ({}));
+  const e = normEmail(email);
+  const c = String(code || '').replace(/\D/g, '');
+  if (!e || c.length !== 6) return json({ error: '請輸入 6 位數驗證碼 / Enter the 6-digit code' }, 400, request);
+  const k = `otp:${e}`;
+  const otp = safeJson((await env.TAROT_KV.get(k)) || '');
+  if (!otp || !otp.h || otp.exp < Date.now()) {
+    return json({ error: '驗證碼已過期，請重新寄一次 / Code expired, please request a new one', expired: true }, 401, request);
+  }
+  if (otp.h !== await sha256Hex(`${e}:${c}`)) {
+    otp.tries = (otp.tries || 0) + 1;
+    if (otp.tries >= OTP_MAX_TRIES) {
+      await env.TAROT_KV.delete(k);
+      return json({ error: '錯太多次，請重新寄驗證碼 / Too many wrong tries, please request a new code', expired: true }, 401, request);
+    }
+    await env.TAROT_KV.put(k, JSON.stringify(otp), { expirationTtl: Math.max(60, Math.ceil((otp.exp - Date.now()) / 1000)) });
+    return json({ error: '驗證碼不對 / Wrong code', wrong: true, left: OTP_MAX_TRIES - otp.tries }, 401, request);
+  }
+  await env.TAROT_KV.delete(k);
+  const record = await env.TAROT_KV.get(`email:${e}`);
+  if (!record) return json({ error: 'no purchase', verified: false }, 403, request);
+  const token = await issueSession(env, e);
+  return json({ ok: true, verified: true, token, email: e }, 200, request);
+}
+
+async function handleAuthLogout(request, env) {
+  const token = bearerToken(request);
+  if (token) await env.TAROT_KV.delete(`sess:${token}`);
+  return json({ ok: true }, 200, request);
+}
+
+// ── Check if the login is (still) paid ────────────────────────
+async function handleCheck(request, env) {
+  const { email, sale_id } = await request.json().catch(() => ({}));
+  const s = await readSession(request, env);
+  if (s) return json({ verified: !!s.record, email: s.email }, 200, request);
+
+  // Gumroad 購後轉址（?email=&sale_id=）：sale_id 只有買家和 Gumroad 知道，
+  // 跟 webhook 寫進付費記錄的 saleId 對得上就當購買證明，直接發 session
+  const e = normEmail(email);
+  const sid = String(sale_id || '').trim().slice(0, 100);
+  if (e && sid) {
+    if (!(await ipAllow(env, request, 'check', AUTH_IP_HOURLY_CAP))) return json({ verified: false, rateLimited: true }, 429, request);
+    const rec = safeJson((await env.TAROT_KV.get(`email:${e}`)) || '');
+    if (rec && rec.saleId && rec.saleId === sid) {
+      const token = await issueSession(env, e);
+      return json({ verified: true, token, email: e }, 200, request);
+    }
+  }
+  // 沒 token 就不回答「這個 email 有沒有付費」（以前是個查詢機）
+  return json({ verified: false, needLogin: true }, 200, request);
 }
 
 // ── History sync (paid users only) ───────────────────────────
 async function handleSync(request, env) {
-  const { email, action, readings, full, projects } = await request.json().catch(() => ({}));
-  const e = email && email.toLowerCase().trim();
-  if (!e) return json({ error: 'no email' }, 400, request);
-
-  // Only verified (paid) emails may sync
-  const record = await env.TAROT_KV.get(`email:${e}`);
-  if (!record) return json({ error: 'email not verified' }, 403, request);
+  const { action, readings, full, projects } = await request.json().catch(() => ({}));
+  const s = await requirePaidSession(request, env);
+  if (s.error) return s.error;
+  const e = s.email;
 
   const key = `hist:${e}`;
   if (action === 'pull') {
@@ -745,15 +902,12 @@ async function handleGemini(request, env) {
     return json({ error: 'AI 解牌暫停服務：API 配額已滿，請稍後再試 / AI readings are paused: quota reached, please try again later.', paused: true }, 503, request);
   }
 
-  const { email, body: geminiBody, spend } = await request.json().catch(() => ({}));
+  const { body: geminiBody, spend } = await request.json().catch(() => ({}));
 
-  if (!email) return json({ error: '請提供 email' }, 400, request);
-
-  const e = email.toLowerCase().trim();
-  const record = await env.TAROT_KV.get(`email:${e}`);
-  if (!record) {
-    return json({ error: '此 email 尚未驗證付款。請確認使用 Gumroad 購買時的 email。' }, 403, request);
-  }
+  // 身分看 session token（/auth/verify 發的），body 裡的 email 不再採信
+  const s = await requirePaidSession(request, env);
+  if (s.error) return s.error;
+  const e = s.email;
 
   if (!geminiBody) return json({ error: '缺少請求內容' }, 400, request);
 
