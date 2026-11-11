@@ -2808,14 +2808,10 @@ async function verifyEmail(){
     const r=await fetch(WORKER_URL+'/auth/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});
     const d=await r.json().catch(()=>({}));
     if(r.ok && d.sent){
+      // worker 不會說這個 email 有沒有購買記錄（防掃描），所以提示要同時講到兩種情況
       localStorage.setItem('tr_pending_email',email);
       showUnlockCodeStep(true);
-      if(d.via==='manual') ubar.textContent=L('寄信功能設定中：站長會手動把驗證碼寄給你，收到後貼在下面','Email delivery is being set up — the site owner will send your code by hand; paste it below once it arrives');
-      else if(d.cooldown) ubar.textContent=L('剛剛已寄過驗證碼，請到信箱找（沒看到可翻垃圾郵件），1 分鐘後才能重寄','A code was just sent — check your inbox (and spam); you can resend in a minute');
-      else ubar.textContent=L('✉ 驗證碼已寄到 '+email+'，請貼到下面（10 分鐘內有效，沒看到可翻垃圾郵件）','✉ Code sent to '+email+' — paste it below (valid 10 min; check spam if missing)');
-    } else if(r.status===404){
-      showUnlockCodeStep(false);
-      ubar.textContent=L('✗ 此 Email 尚未有購買記錄，請確認使用 Gumroad 購買時填寫的 Email','✗ No purchase found for this email. Please use the email from your Gumroad checkout.');
+      ubar.textContent=L('✉ 如果 '+email+' 有購買記錄，驗證碼已寄出，請貼到下面（10 分鐘內有效）。沒收到：翻翻垃圾郵件、確認是 Gumroad 購買時填的 Email，1 分鐘後可再寄','✉ If '+email+' has a purchase, a code is on its way — paste it below (valid 10 min). Nothing arrived? Check spam, make sure it\'s your Gumroad checkout email, and resend after a minute');
     } else {
       showUnlockCodeStep(false);
       ubar.textContent='✗ '+extractErrMsg(d.error, L('寄不出驗證碼，請稍後再試','Could not send the code, please try later'));
@@ -3416,7 +3412,6 @@ async function checkOwnerReplies(){
 }
 checkOwnerReplies();
 if(isVerified()) fetchCredits(); // 已驗證用戶載入 AI 點數餘額
-promptRelogin(); // 舊版驗證過但還沒 token 的用戶 → 請他重新驗證一次 Email
 // 專案救援：專案是空的但存在損壞備份（safeParse 隔離的）→ 嘗試解析救回；
 // 截斷型損壞（寫入到一半中斷）則裁到最後一個完整物件邊界修復
 (function restoreProjectsBackup(){
@@ -3445,14 +3440,20 @@ promptRelogin(); // 舊版驗證過但還沒 token 的用戶 → 請他重新驗
 // 新開張一次性買斷優惠：只在 6/30 前顯示，之後自動隱藏（毋須手動改站）
 (function(){ const el=document.getElementById('launch-offer'); if(el && inPromo()) el.style.display='block'; })();
 // 已驗證 email → 先確認訂閱仍有效（可能已到期），再靜默拉回雲端歷史
-if(isVerified()) revalidateAccess().then(ok=>{
-  if(!ok) return;
-  syncPull().then(merged=>{
-    if(!merged) return;
-    const cur=document.querySelector('.screen.on');
-    if(cur && cur.id==='s-history') showHistory(); // 正停在歷史頁才重繪
+// 舊版驗證過但還沒 token 的用戶（或 token 剛被 revalidate 判定失效）→ 請他重新驗證一次 Email。
+// 一定要等 revalidateAccess 回來才判斷，不然 token 被清掉時提示已經跳過了
+if(isVerified()){
+  revalidateAccess().then(ok=>{
+    if(!ok){ promptRelogin(); return; }
+    syncPull().then(merged=>{
+      if(!merged) return;
+      const cur=document.querySelector('.screen.on');
+      if(cur && cur.id==='s-history') showHistory(); // 正停在歷史頁才重繪
+    });
   });
-});
+} else {
+  promptRelogin();
+}
 
 // ── Gumroad 購買後自動解鎖 ──
 // Gumroad「Redirect to a URL after purchase」會把買家資訊以 query 參數帶回
@@ -3460,16 +3461,24 @@ if(isVerified()) revalidateAccess().then(ok=>{
 // 安全等級與手動貼信箱相同），確認後自動解鎖，免去使用者手動輸入。
 (function autoUnlockFromPurchase(){
   if(!WORKER_URL) return;
-  const p=new URLSearchParams(location.search);
-  const email=(p.get('email')||'').trim().toLowerCase();
+  // index.html <head> 的小腳本在 gumroad.js 載入前就把 email/sale_id 收進 window.__trPurchase／sessionStorage
+  // 並從網址清掉；這裡只是接手。萬一那段沒跑到（舊快取），才退回看網址
+  let email='', saleId='';
+  try{
+    let stash=window.__trPurchase; if(!stash){ const raw=sessionStorage.getItem('tr_purchase'); if(raw) stash=JSON.parse(raw); }
+    if(stash){ email=String(stash.email||'').trim().toLowerCase(); saleId=String(stash.sale_id||'').trim(); }
+    try{ sessionStorage.removeItem('tr_purchase'); }catch(e){} window.__trPurchase=null;
+  }catch(e){}
+  if(!email || !saleId){
+    const p=new URLSearchParams(location.search);
+    email=(p.get('email')||'').trim().toLowerCase(); saleId=(p.get('sale_id')||'').trim();
+    if(email && saleId) history.replaceState(null,'',location.pathname);
+  }
   // 需同時帶 sale_id 才視為 Gumroad 購後轉址，避免誤觸
-  if(!email || !p.get('sale_id')) return;
-  // 立即把 email/sale_id 等參數從網址移除（隱私：別留在網址列或被分享）
-  history.replaceState(null,'',location.pathname);
-  const saleId=(p.get('sale_id')||'').trim();
+  if(!email || !saleId) return;
   const tryCheck=async(attempt)=>{
     try{
-      // sale_id 跟 webhook 寫進付費記錄的對得上 → worker 直接發 session token（購買證明，不用再收驗證信）
+      // sale_id 是 webhook 存下的一次性兌換碼（30 分鐘、兌一次就作廢）→ 對得上 worker 直接發 session token
       const r=await fetch(WORKER_URL+'/check',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,sale_id:saleId})});
       const d=await r.json();
       if(d.verified && d.token){

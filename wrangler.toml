@@ -29,3 +29,19 @@ class_name = "GeminiProxy"
 [[migrations]]
 tag = "v1-gemini-proxy"
 new_sqlite_classes = ["GeminiProxy"]
+
+# 登入閘門（見 worker.js AuthGate）：驗證碼錯幾次／用過即作廢、購後兌換碼只能兌一次、IP 計數，
+# 都在 Durable Object 裡做，才不會像 KV 那樣同時兩個請求互相蓋掉
+[[durable_objects.bindings]]
+name = "AUTH_GATE"
+class_name = "AuthGate"
+
+[[migrations]]
+tag = "v2-auth-gate"
+new_sqlite_classes = ["AuthGate"]
+
+# 登入驗證碼寄信：之後網域在 Cloudflare Email Sending 上線後，再加
+#   [[send_email]]
+#   name = "EMAIL"
+# 並設 var MAIL_FROM（如 "塔羅占卜 <tarot@angiehu.com>"）。沒綁 EMAIL 時 worker 會改用 Resend
+# （secrets RESEND_API_KEY + EMAIL_FROM）。

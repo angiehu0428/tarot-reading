@@ -97,6 +97,21 @@
 }
 </script>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Noto+Serif+TC:wght@300;400;700&display=swap" rel="stylesheet">
+<script>
+/* Gumroad 購後轉址會把 email、sale_id 掛在網址上。在任何第三方腳本（下面的 gumroad.js）載入前
+   先收進記憶體／sessionStorage 並從網址清掉，app.js 的 autoUnlockFromPurchase 再接手。純 ES5。 */
+(function(){
+  try{
+    var p=new URLSearchParams(location.search);
+    var email=p.get('email'), sid=p.get('sale_id');
+    if(!email||!sid) return;
+    var stash={email:email,sale_id:sid};
+    window.__trPurchase=stash;
+    try{ sessionStorage.setItem('tr_purchase',JSON.stringify(stash)); }catch(e){}
+    history.replaceState(null,'',location.pathname);
+  }catch(e){}
+})();
+</script>
 <script src="https://gumroad.com/js/gumroad.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}

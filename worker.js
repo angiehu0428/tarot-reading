@@ -449,6 +449,11 @@ async function handleWebhook(request, env) {
     JSON.stringify({ verified: true, date: new Date().toISOString(), saleId, subId, plan: subId ? 'sub' : 'lifetime' }),
     { expirationTtl: ttl }
   );
+  // 購後轉址的一次性兌換碼：買家瀏覽器會帶著同一個 sale_id 回站上（見 handleCheck），
+  // 30 分鐘內兌一次就作廢。存失敗不影響付款記錄（用戶還是能走驗證碼登入）
+  if (saleId && env.AUTH_GATE) {
+    try { await gate(env, `email:${email}`, { op: 'redeem_put', h: await sha256Hex(`sale:${saleId}`), ttlMs: REDEEM_TTL_MS }); } catch (e) {}
+  }
 
   return new Response('OK');
 }
@@ -480,17 +485,96 @@ async function handleCreditsAdmin(request, env) {
 // ── Login / session ──────────────────────────────────────────
 // 2026-11 以前 /gemini、/sync、/credits 只看 body 裡的 email 有沒有付費記錄，知道別人的
 // email 就能讀他的占卜記錄、清空它、燒他的點數。現在改成：
-//   /auth/start  {email}        → 有付費記錄才寄 6 位數驗證碼（Resend；10 分鐘有效）
+//   /auth/start  {email}        → 有付費記錄才寄 6 位數驗證碼（10 分鐘有效）；回應不分有沒有付費
 //   /auth/verify {email, code}  → 對了就發隨機 session token（KV `sess:<token>` → email）
 //   付費端點一律要 `Authorization: Bearer <token>`，email 以 token 對出來的為準
-//   /check {email, sale_id}     → Gumroad 購後轉址帶的 sale_id 對得上 webhook 寫的記錄，
-//                                 等於購買證明，直接發 token（新買家不用再收一封信）
+//   /check {email, sale_id}     → Gumroad 購後轉址帶的 sale_id 當「一次性兌換碼」：webhook 收到購買時
+//                                 把它的雜湊存進 AuthGate（30 分鐘、只能兌一次），對得上就發 token
+// 驗證碼的「錯幾次／用過一次就作廢」、兌換碼的「只能兌一次」、IP 計數，都放在 Durable Object
+// AuthGate 裡做（每個 email／IP 一個物件，單執行緒，同時打進來的請求會排隊，不會像 KV 那樣
+// read-then-write 互相蓋掉）。session token 本身只是隨機字串，放 KV 就夠。
 const SESSION_TTL = 60 * 60 * 24 * 180; // 半年；到期就再收一次驗證碼
-const OTP_TTL = 60 * 10;
+const OTP_TTL_MS = 10 * 60 * 1000;
 const OTP_MAX_TRIES = 5;
-const OTP_RESEND_COOLDOWN = 60;
-const AUTH_IP_HOURLY_CAP = 20; // 每個 IP 每小時最多幾次「寄碼」（防拿 /auth/start 掃信箱）
+const OTP_RESEND_COOLDOWN_MS = 60 * 1000;
+const VERIFY_WINDOW_MS = 10 * 60 * 1000;
+const VERIFY_WINDOW_CAP = 10;          // 同一個 email 10 分鐘內最多猜幾次（不分對錯、不分 OTP 新舊）
+const AUTH_IP_HOURLY_CAP = 20;         // 每個 IP 每小時最多幾次「寄碼」（防拿 /auth/start 掃信箱）
+const VERIFY_IP_HOURLY_CAP = 60;       // 每個 IP 每小時最多幾次「猜碼」
+const REDEEM_TTL_MS = 30 * 60 * 1000;  // Gumroad 購後兌換碼有效期
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// 每個 email（otp／兌換碼）或 IP（計數）一個物件。所有「讀了再寫」都在同一個事件裡完成：
+// Durable Object 在等 storage 的時候不會接新的請求（input gate），所以天然是原子的。
+export class AuthGate {
+  constructor(state, env) { this.storage = state.storage; }
+  async fetch(req) {
+    const a = await req.json().catch(() => ({}));
+    const st = this.storage;
+    const now = Date.now();
+    const out = (o) => new Response(JSON.stringify(o), { headers: { 'Content-Type': 'application/json' } });
+    switch (a.op) {
+      case 'otp_start': {
+        const until = (await st.get('cooldownUntil')) || 0;
+        if (now < until) return out({ cooldown: true });
+        await st.put('otp', { h: a.h, exp: now + a.ttlMs, tries: 0 });
+        await st.put('cooldownUntil', now + a.cooldownMs);
+        return out({ ok: true });
+      }
+      case 'otp_cancel': { // 信沒寄出去：把剛存的碼跟冷卻一起撤掉，讓用戶能馬上重試
+        await st.delete(['otp', 'cooldownUntil']);
+        return out({ ok: true });
+      }
+      case 'otp_verify': {
+        let w = (await st.get('vwin')) || { start: now, n: 0 };
+        if (now - w.start > a.windowMs) w = { start: now, n: 0 };
+        w.n += 1;
+        await st.put('vwin', w);
+        if (w.n > a.cap) return out({ limited: true });
+        const otp = await st.get('otp');
+        if (!otp || otp.exp < now) { if (otp) await st.delete('otp'); return out({ expired: true }); }
+        if (otp.h !== a.h) {
+          otp.tries += 1;
+          if (otp.tries >= a.maxTries) { await st.delete('otp'); return out({ expired: true, exhausted: true }); }
+          await st.put('otp', otp);
+          return out({ wrong: true, left: a.maxTries - otp.tries });
+        }
+        await st.delete('otp'); // 對了就作廢，第二個人拿同一組碼進來只會看到 expired
+        return out({ ok: true });
+      }
+      case 'redeem_put': {
+        await st.put('redeem', { h: a.h, exp: now + a.ttlMs });
+        return out({ ok: true });
+      }
+      case 'redeem_take': {
+        const r = await st.get('redeem');
+        if (!r || r.exp < now || r.h !== a.h) return out({ ok: false });
+        await st.delete('redeem');
+        return out({ ok: true });
+      }
+      case 'hit': { // 固定視窗計數（IP 限流）
+        let w = (await st.get('hits')) || { start: now, n: 0 };
+        if (now - w.start > a.windowMs) w = { start: now, n: 0 };
+        if (w.n >= a.cap) return out({ allowed: false });
+        w.n += 1;
+        await st.put('hits', w);
+        return out({ allowed: true });
+      }
+      default:
+        return new Response('bad op', { status: 400 });
+    }
+  }
+}
+async function gate(env, name, payload) {
+  const ns = env.AUTH_GATE;
+  const stub = ns.get(ns.idFromName(name));
+  const res = await stub.fetch('https://auth-gate/', { method: 'POST', body: JSON.stringify(payload) });
+  return res.json();
+}
+function gateMissing(env, request) {
+  if (env.AUTH_GATE) return null;
+  return json({ error: '登入服務尚未設定（缺 AUTH_GATE 綁定）/ Sign-in is not configured', unconfigured: true }, 503, request);
+}
 
 function normEmail(v) { return String(v || '').toLowerCase().trim().slice(0, 254); }
 function safeJson(raw) { try { return JSON.parse(raw); } catch (e) { return null; } }
@@ -528,21 +612,40 @@ async function requirePaidSession(request, env) {
   if (!s.record) return { error: json({ error: '此 email 尚未驗證付款。請確認使用 Gumroad 購買時的 email。', notPaid: true }, 403, request) };
   return s;
 }
-// 每個 IP 每小時的簡單計數（KV 非原子，擋掃描夠用）
+// 每個 IP 每小時的計數（在 AuthGate 裡做，原子）
 async function ipAllow(env, request, bucket, cap) {
   const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
-  const k = `ipc:${bucket}:${ip}:${new Date().toISOString().slice(0, 13)}`;
-  const n = parseInt((await env.TAROT_KV.get(k)) || '0', 10);
-  if (n >= cap) return false;
-  await env.TAROT_KV.put(k, String(n + 1), { expirationTtl: 60 * 60 });
-  return true;
+  const r = await gate(env, `ip:${bucket}:${ip}`, { op: 'hit', cap, windowMs: 60 * 60 * 1000 });
+  return !!r.allowed;
 }
-// 寄驗證碼。Resend（RESEND_API_KEY + EMAIL_FROM，跟 Angie 其他專案同一套）；
-// 兩個都沒設時退而求其次丟到站長 Telegram，讓站長手動轉給用戶（過渡期用，不是長久之計）
+// 站長通知節流：同一件事一小時只吵一次
+async function alertOnce(env, key, text) {
+  const k = `alert:${key}`;
+  if (await env.TAROT_KV.get(k)) return;
+  await env.TAROT_KV.put(k, '1', { expirationTtl: 60 * 60 });
+  await sendTelegram(env, text);
+}
+// 「名字 <addr>」或純 addr → Email Sending binding 要的 from
+function parseFrom(v) {
+  const m = /^\s*(.*?)\s*<([^>]+)>\s*$/.exec(String(v || ''));
+  return m ? { name: m[1].replace(/^"|"$/g, ''), email: m[2].trim() } : String(v || '').trim();
+}
+// 寄驗證碼。優先用 Cloudflare Email Sending binding（wrangler 的 send_email，名字 EMAIL，寄件人 MAIL_FROM），
+// 沒綁就走 Resend（RESEND_API_KEY + EMAIL_FROM，跟 Angie 其他專案同一套）。
+// 只有寄件端明確回成功才算寄出；兩個都沒設 → 回失敗，不代寄、不把碼丟去別的地方。
 async function sendLoginCode(env, email, code) {
   const subject = `塔羅占卜驗證碼 ${code} / Your Tarot verification code`;
   const text = `你的塔羅占卜登入驗證碼：${code}\n10 分鐘內有效。不是你本人操作的話，直接忽略這封信就好。\n\nYour Tarot Reading sign-in code: ${code}\nIt expires in 10 minutes. If this wasn't you, just ignore this email.`;
   const html = `<p>你的塔羅占卜登入驗證碼：</p><p style="font-size:28px;letter-spacing:6px;font-weight:bold">${code}</p><p>10 分鐘內有效。不是你本人操作的話，直接忽略這封信就好。</p><hr><p>Your Tarot Reading sign-in code:</p><p style="font-size:28px;letter-spacing:6px;font-weight:bold">${code}</p><p>It expires in 10 minutes. If this wasn't you, just ignore this email.</p>`;
+  if (env.EMAIL && env.MAIL_FROM) {
+    try {
+      await env.EMAIL.send({ to: email, from: parseFrom(env.MAIL_FROM), subject, text, html });
+      return { ok: true, via: 'email' };
+    } catch (e) {
+      await alertOnce(env, 'mailfail', `⚠️ 塔羅登入驗證碼寄信失敗（Email Sending）：${String(e && e.message || e).slice(0, 200)}`);
+      return { ok: false, reason: 'send' };
+    }
+  }
   if (env.RESEND_API_KEY && env.EMAIL_FROM) {
     try {
       const res = await fetch('https://api.resend.com/emails', {
@@ -552,58 +655,60 @@ async function sendLoginCode(env, email, code) {
       });
       if (res.ok) return { ok: true, via: 'email' };
       const detail = (await res.text().catch(() => '')).slice(0, 300);
-      await sendTelegram(env, `⚠️ 塔羅登入驗證碼寄信失敗（Resend ${res.status}）：${detail}`);
-      return { ok: false };
+      await alertOnce(env, 'mailfail', `⚠️ 塔羅登入驗證碼寄信失敗（Resend ${res.status}）：${detail}`);
+      return { ok: false, reason: 'send' };
     } catch (e) {
-      await sendTelegram(env, `⚠️ 塔羅登入驗證碼寄信失敗：${String(e && e.message || e).slice(0, 200)}`);
-      return { ok: false };
+      await alertOnce(env, 'mailfail', `⚠️ 塔羅登入驗證碼寄信失敗：${String(e && e.message || e).slice(0, 200)}`);
+      return { ok: false, reason: 'send' };
     }
   }
-  if (env.TG_BOT_TOKEN && env.TG_CHAT_ID) {
-    await sendTelegram(env, `🔑 塔羅登入（寄信尚未設定 RESEND_API_KEY／EMAIL_FROM，請手動轉給用戶）\n${email} 的驗證碼：${code}（10 分鐘內有效）`);
-    return { ok: true, via: 'manual' };
-  }
-  return { ok: false };
+  await alertOnce(env, 'mailunset', '⚠️ 塔羅有付費用戶想登入，但 worker 還沒設寄信（EMAIL 綁定＋MAIL_FROM，或 RESEND_API_KEY＋EMAIL_FROM），用戶被擋在外面');
+  return { ok: false, reason: 'unconfigured' };
 }
 
+// 回應不分「有沒有付費記錄」，免得被拿來掃哪些 email 是付費用戶
+const START_GENERIC = { sent: true, message: '如果這個 Email 有購買記錄，驗證碼已寄出（10 分鐘內有效）/ If this email has a purchase, a code is on its way (valid 10 min)' };
+
 async function handleAuthStart(request, env) {
+  const missing = gateMissing(env, request); if (missing) return missing;
   const { email } = await request.json().catch(() => ({}));
   const e = normEmail(email);
   if (!e || !EMAIL_RE.test(e)) return json({ error: '請輸入正確的 Email / Please enter a valid email' }, 400, request);
-  if (!(await ipAllow(env, request, 'auth', AUTH_IP_HOURLY_CAP))) {
+  if (!(await ipAllow(env, request, 'start', AUTH_IP_HOURLY_CAP))) {
     return json({ error: '嘗試太多次，請一小時後再試 / Too many attempts, please try again in an hour', rateLimited: true }, 429, request);
   }
   const record = await env.TAROT_KV.get(`email:${e}`);
-  if (!record) return json({ error: 'no purchase', verified: false }, 404, request);
-  if (await env.TAROT_KV.get(`otpr:${e}`)) return json({ sent: true, cooldown: true }, 200, request);
+  if (!record) return json(START_GENERIC, 200, request);
   const code = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1000000).padStart(6, '0');
-  await env.TAROT_KV.put(`otp:${e}`, JSON.stringify({ h: await sha256Hex(`${e}:${code}`), tries: 0, exp: Date.now() + OTP_TTL * 1000 }), { expirationTtl: OTP_TTL });
-  await env.TAROT_KV.put(`otpr:${e}`, '1', { expirationTtl: OTP_RESEND_COOLDOWN });
+  const g = await gate(env, `email:${e}`, { op: 'otp_start', h: await sha256Hex(`${e}:${code}`), ttlMs: OTP_TTL_MS, cooldownMs: OTP_RESEND_COOLDOWN_MS });
+  if (g.cooldown) return json(START_GENERIC, 200, request); // 60 秒內已寄過：不再寄，回應也長一樣
   const sent = await sendLoginCode(env, e, code);
-  if (!sent.ok) return json({ error: '驗證碼寄不出去，請稍後再試 / Could not send the code, please try again later', mailFailed: true }, 503, request);
-  return json({ sent: true, via: sent.via }, 200, request);
+  if (!sent.ok) {
+    await gate(env, `email:${e}`, { op: 'otp_cancel' }); // 沒寄出去就撤掉，讓用戶能馬上重試
+    const msg = sent.reason === 'unconfigured'
+      ? '寄信服務尚未設定，暫時無法登入，請聯絡站長 / Sign-in email is not set up yet — please contact support'
+      : '驗證碼寄不出去，請稍後再試 / Could not send the code, please try again later';
+    return json({ error: msg, mailFailed: true }, 503, request);
+  }
+  return json(START_GENERIC, 200, request);
 }
 
 async function handleAuthVerify(request, env) {
+  const missing = gateMissing(env, request); if (missing) return missing;
   const { email, code } = await request.json().catch(() => ({}));
   const e = normEmail(email);
   const c = String(code || '').replace(/\D/g, '');
   if (!e || c.length !== 6) return json({ error: '請輸入 6 位數驗證碼 / Enter the 6-digit code' }, 400, request);
-  const k = `otp:${e}`;
-  const otp = safeJson((await env.TAROT_KV.get(k)) || '');
-  if (!otp || !otp.h || otp.exp < Date.now()) {
-    return json({ error: '驗證碼已過期，請重新寄一次 / Code expired, please request a new one', expired: true }, 401, request);
+  if (!(await ipAllow(env, request, 'verify', VERIFY_IP_HOURLY_CAP))) {
+    return json({ error: '嘗試太多次，請一小時後再試 / Too many attempts, please try again in an hour', rateLimited: true }, 429, request);
   }
-  if (otp.h !== await sha256Hex(`${e}:${c}`)) {
-    otp.tries = (otp.tries || 0) + 1;
-    if (otp.tries >= OTP_MAX_TRIES) {
-      await env.TAROT_KV.delete(k);
-      return json({ error: '錯太多次，請重新寄驗證碼 / Too many wrong tries, please request a new code', expired: true }, 401, request);
-    }
-    await env.TAROT_KV.put(k, JSON.stringify(otp), { expirationTtl: Math.max(60, Math.ceil((otp.exp - Date.now()) / 1000)) });
-    return json({ error: '驗證碼不對 / Wrong code', wrong: true, left: OTP_MAX_TRIES - otp.tries }, 401, request);
+  const g = await gate(env, `email:${e}`, { op: 'otp_verify', h: await sha256Hex(`${e}:${c}`), maxTries: OTP_MAX_TRIES, windowMs: VERIFY_WINDOW_MS, cap: VERIFY_WINDOW_CAP });
+  if (g.limited) return json({ error: '嘗試太多次，請 10 分鐘後再重寄驗證碼 / Too many attempts, request a new code in 10 minutes', rateLimited: true }, 429, request);
+  if (g.expired) {
+    return json({ error: g.exhausted ? '錯太多次，請重新寄驗證碼 / Too many wrong tries, please request a new code' : '驗證碼已過期，請重新寄一次 / Code expired, please request a new one', expired: true }, 401, request);
   }
-  await env.TAROT_KV.delete(k);
+  if (g.wrong) return json({ error: '驗證碼不對 / Wrong code', wrong: true, left: g.left }, 401, request);
+  if (!g.ok) return json({ error: '驗證失敗 / Verification failed' }, 401, request);
   const record = await env.TAROT_KV.get(`email:${e}`);
   if (!record) return json({ error: 'no purchase', verified: false }, 403, request);
   const token = await issueSession(env, e);
@@ -622,14 +727,14 @@ async function handleCheck(request, env) {
   const s = await readSession(request, env);
   if (s) return json({ verified: !!s.record, email: s.email }, 200, request);
 
-  // Gumroad 購後轉址（?email=&sale_id=）：sale_id 只有買家和 Gumroad 知道，
-  // 跟 webhook 寫進付費記錄的 saleId 對得上就當購買證明，直接發 session
+  // Gumroad 購後轉址（?email=&sale_id=）：sale_id 當一次性兌換碼——webhook 收到這筆購買時
+  // 存進 AuthGate（30 分鐘、只能兌一次），兌掉就作廢，網址歷史裡留著也沒用
   const e = normEmail(email);
   const sid = String(sale_id || '').trim().slice(0, 100);
-  if (e && sid) {
+  if (e && sid && env.AUTH_GATE) {
     if (!(await ipAllow(env, request, 'check', AUTH_IP_HOURLY_CAP))) return json({ verified: false, rateLimited: true }, 429, request);
-    const rec = safeJson((await env.TAROT_KV.get(`email:${e}`)) || '');
-    if (rec && rec.saleId && rec.saleId === sid) {
+    const r = await gate(env, `email:${e}`, { op: 'redeem_take', h: await sha256Hex(`sale:${sid}`) });
+    if (r.ok && await env.TAROT_KV.get(`email:${e}`)) {
       const token = await issueSession(env, e);
       return json({ verified: true, token, email: e }, 200, request);
     }
