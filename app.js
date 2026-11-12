@@ -1007,6 +1007,7 @@ function startNoProject() {
 //  SPREAD / QUESTION
 // ══════════════════════════════════════════
 function pickSpread(type) {
+  S.readingSeq=(S.readingSeq||0)+1; // 開始新的一局：還在跑的舊 AI 回來只寫回自己那筆
   S.type=type;
   const isCustom=type==='custom';
   document.getElementById('q-title').textContent=isCustom?t('q.title.custom'):t('q.title');
@@ -1248,6 +1249,7 @@ function showReading(resumeId, restore){ // restore={interp,chat}：從記錄還
   S.lastInterpText = restore ? (restore.interp||'') : '';
   S.chatHistory = restore ? (restore.chat||[]).map(m=>({...m})) : [];
   S.currentReadingId = resumeId || null; // resumeId：從記錄補解析時保留原記錄 id
+  S.readingSeq=(S.readingSeq||0)+1;
   document.getElementById('chat-area').style.display='none';
   document.getElementById('chat-msgs').innerHTML='';
   go('s-reading');
@@ -1319,6 +1321,14 @@ function showReading(resumeId, restore){ // restore={interp,chat}：從記錄還
   }
 }
 
+// 牌局快照：AI 回來時使用者可能已經去占下一題（左上角「選牌陣」），舊結果要照這份存回自己那筆、不動畫面
+function readingSnap(){
+  return {seq:S.readingSeq, type:S.type, q:S.q, pos:[...(S.pos||[])],
+    deck:S.picked.map(di=>S.deck[di]), picked:S.picked.map((_,i)=>i),
+    currentReadingId:S.currentReadingId, activeProjectId:S.activeProjectId,
+    lastInterpText:S.lastInterpText, chatHistory:S.chatHistory};
+}
+function isCurrentReading(snap){ return snap.seq===S.readingSeq; }
 // AI 解讀（可重用：首次解讀 + 重試）。失敗/暫停時自動保留抽牌並提供重試。
 function runAIReading(){
   const key=getApiKey();
@@ -1345,7 +1355,13 @@ function runAIReading(){
       <div class="ai-dots"><div class="ai-dot"></div><div class="ai-dot"></div><div class="ai-dot"></div></div>
       <div style="font-size:.85rem;color:var(--muted);letter-spacing:.1em">${getActiveProject()?L('AI 正在結合過去脈絡解讀牌陣...','AI is reading your spread with past context...'):L('AI 正在解讀牌陣...','AI is reading your spread...')}</div>
     </div>`;
+  const snap=readingSnap(); S.aiSnap=snap;
   callGemini(key,proxyEmail).then(text=>{
+    if(!isCurrentReading(snap)){
+      snap.lastInterpText=text; snap.chatHistory=[];
+      saveReading(true, !!snap.currentReadingId, snap);
+      return;
+    }
     S.lastInterpText=text; S.chatHistory=[];
     const formatted=text.replace(/\*\*(.+?)\*\*/g,'$1').replace(/\*(.+?)\*/g,'$1').replace(/[*#`_~]/g,'').replace(/\n{2,}/g,'</p><p class="interp-p">').replace(/\n/g,'<br>');
     document.getElementById('interp-main').innerHTML=`<p class="interp-p">${formatted}</p>`;
@@ -1357,6 +1373,10 @@ function runAIReading(){
     saveReading(true, !!S.currentReadingId);
   }).catch(err=>{
     console.error(err);
+    if(!isCurrentReading(snap)){
+      if(!snap.currentReadingId) saveReading(true, false, snap); // 保留那次抽牌，之後可到記錄用 AI 重新解析
+      return;
+    }
     const fb=fbRender();
     document.getElementById('interp-main').innerHTML=`${fb}${unlockCtaHtml()}${retryBarHtml()}
       <div style="font-size:.72rem;color:var(--red);margin-top:10px;opacity:.7">${L('（AI 暫時無法連線：','(AI temporarily unavailable: ')}${friendlyApiErr(err.message)}）
@@ -2510,6 +2530,7 @@ async function sendChat(){
   const userMsg={role:'user',text:q};
   S.chatHistory.push(userMsg);
   renderChat();
+  const snap=readingSnap(); // 等回答時使用者可能已去占下一題：回答只進這局的對話
   const msgsEl=document.getElementById('chat-msgs');
   const loadingEl=document.createElement('div');
   loadingEl.className='chat-msg-ai';
@@ -2551,7 +2572,7 @@ async function sendChat(){
     if(ownK){
       const cleanKey=key.split('').filter(c=>c.charCodeAt(0)>=32&&c.charCodeAt(0)<=126).join('');
       if(apiProvider(cleanKey)==='openai'){
-        const oaMsgs=S.chatHistory.slice(0,-1).filter(m=>!m.failed).map(m=>({role:m.role==='user'?'user':'assistant',content:m.text}));
+        const oaMsgs=snap.chatHistory.slice(0,-1).filter(m=>!m.failed).map(m=>({role:m.role==='user'?'user':'assistant',content:m.text}));
         ans=await callOpenAI(cleanKey, context, [...oaMsgs,{role:'user',content:q}]);
       } else {
         const r=await fetchGeminiOwnKey(cleanKey, geminiBody);
@@ -2561,14 +2582,15 @@ async function sendChat(){
         ans=data.candidates?.[0]?.content?.parts?.[0]?.text||L('無法取得回應','No response received');
       }
     }
-    S.chatHistory.push({role:'ai',text:ans.replace(/\*\*(.+?)\*\*/g,'$1').replace(/\*(.+?)\*/g,'$1').replace(/[*#`_~]/g,'')});
+    snap.chatHistory.push({role:'ai',text:ans.replace(/\*\*(.+?)\*\*/g,'$1').replace(/\*(.+?)\*/g,'$1').replace(/[*#`_~]/g,'')});
   }catch(e){
     // 這次追問沒有成功取得回答 → 標記為 failed，不計入追問次數
     userMsg.failed=true;
-    S.chatHistory.push({role:'ai',failed:true,
+    snap.chatHistory.push({role:'ai',failed:true,
       text:L('抱歉，發生錯誤：','Sorry, an error occurred: ')+friendlyApiErr(e.message)
         +L('（這次不計入追問次數，可以再試一次）',' (this attempt doesn\'t count toward your limit — feel free to retry)')});
   }
+  if(!isCurrentReading(snap)){ if(snap.currentReadingId) saveReading(true, true, snap); return; }
   renderChat();
   if(S.currentReadingId) saveReading(true, true); // 追問後即時入檔：網頁重整/自動刷新也不會遺失對話與剩餘額度
 }
@@ -2620,22 +2642,24 @@ function toggleLore(id,btn){
 // ══════════════════════════════════════════
 //  SAVE READING
 // ══════════════════════════════════════════
-function saveReading(silent, skipProject){
-  const spreadName = S.type==='custom'?L('自訂牌陣','Custom Spread'):spreadNameOf(S.type);
-  const id = S.currentReadingId || Date.now();
-  S.currentReadingId = id;
+function saveReading(silent, skipProject, st=S){ // st：預設存目前這局；舊 AI 晚回來時傳 readingSnap() 的快照
+  const spreadName = st.type==='custom'?L('自訂牌陣','Custom Spread'):spreadNameOf(st.type);
+  const id = st.currentReadingId || Date.now();
+  st.currentReadingId = id;
+  // AI 還在跑時先按了儲存：快照也記下 id，晚回來的結果才會更新同一筆、不會多出一筆
+  if(st===S && S.aiSnap && isCurrentReading(S.aiSnap)) S.aiSnap.currentReadingId = id;
   // 更新既有記錄時保留原本的占卜日期（補解析不應改到抽牌結果/日期）
   const prev = safeParse('tr_full','[]').find(r=>r.id===id);
   const recDate = (prev && prev.date) ? prev.date : new Date().toLocaleString(LANG==='en'?'en-US':'zh-TW');
   const rec = {
-    id, type:S.type, // type 供日後「用 AI 重新解析」重建牌局
+    id, type:st.type, // type 供日後「用 AI 重新解析」重建牌局
     date:recDate,
-    q:S.q, spread:spreadName, pos:S.pos,
-    cards:S.picked.map(di=>({cid:S.deck[di].cid, rev:S.deck[di].rev})),
-    interp: S.lastInterpText,
-    chat: S.chatHistory ? [...S.chatHistory] : []
+    q:st.q, spread:spreadName, pos:st.pos,
+    cards:st.picked.map(di=>({cid:st.deck[di].cid, rev:st.deck[di].rev})),
+    interp: st.lastInterpText,
+    chat: st.chatHistory ? [...st.chatHistory] : []
   };
-  const lite = {id, date:rec.date, q:rec.q, spread:spreadName, cards:S.picked.map((di,i)=>({name:cardName(S.deck[di].cid),pos:S.pos[i],rev:S.deck[di].rev}))};
+  const lite = {id, date:rec.date, q:rec.q, spread:spreadName, cards:st.picked.map((di,i)=>({name:cardName(st.deck[di].cid),pos:st.pos[i],rev:st.deck[di].rev}))};
   // 以 id upsert（去重，避免自動保存 + 手動保存 重複）
   S.readings = S.readings.filter(r=>r.id!==id);
   S.readings.unshift(lite);
@@ -2654,7 +2678,7 @@ function saveReading(silent, skipProject){
   if(inProject) saveProjects();
   // skipProject 只阻止「新增」進專案（草稿自動保存不加入專案）；既有紀錄的更新不受限
   if(!skipProject){
-    const proj = getActiveProject();
+    const proj = S.projects.find(p => p.id === st.activeProjectId) || null;
     if(proj){
       if(!proj.readings.some(r=>r.id===id)){ proj.readings.push(rec); saveProjects(); }
       if(!silent) toast(LANG==='en'?`✦ Saved to project "${proj.name}"`:`✦ 已儲存至專案「${proj.name}」`);
