@@ -1340,12 +1340,13 @@ function saveStale(snap, add){
     lastInterpText:cur.interp||'', chatHistory:[...(cur.chat||[])]};
   if(add.interp!=null && (cur.interp||'')===(snap.baseInterp||'')) st.lastInterpText=add.interp;
   const msgs=add.msgs||[];
-  st.chatHistory.push(...msgs);
+  const has=(arr,m)=>arr.some(x=>x===m||(m.mid&&x.mid===m.mid)); // 以訊息 id 去重（等待期間手動存檔可能已存過問題）
+  msgs.forEach(m=>{ if(!has(st.chatHistory,m)) st.chatHistory.push(m); });
   // 同一筆正開在畫面上：記憶體裡的對話也補上，不然下次存檔又把它蓋掉
   const open=document.querySelector('.screen.on');
   if(S.currentReadingId===id && open && open.id==='s-reading'){
     if(!S.chatHistory) S.chatHistory=[];
-    S.chatHistory.push(...msgs);
+    msgs.forEach(m=>{ if(!has(S.chatHistory,m)) S.chatHistory.push(m); });
     if(st.lastInterpText!==(cur.interp||'')) S.lastInterpText=st.lastInterpText;
     renderChat();
   }
@@ -2546,7 +2547,9 @@ async function sendChat(){
   }
   input.value=''; input.style.height='auto';
   if(!S.chatHistory) S.chatHistory=[];
-  const userMsg={role:'user',text:q};
+  const mid=Date.now()+'-'+Math.random().toString(36).slice(2,8);
+  const userMsg={role:'user',text:q,mid};
+  let ansMsg=null;
   S.chatHistory.push(userMsg);
   renderChat();
   const snap=readingSnap(); // 等回答時使用者可能已去占下一題（或重開同一筆）：回答只併進這局
@@ -2601,17 +2604,16 @@ async function sendChat(){
         ans=data.candidates?.[0]?.content?.parts?.[0]?.text||L('無法取得回應','No response received');
       }
     }
-    snap.chatHistory.push({role:'ai',text:ans.replace(/\*\*(.+?)\*\*/g,'$1').replace(/\*(.+?)\*/g,'$1').replace(/[*#`_~]/g,'')});
+    snap.chatHistory.push(ansMsg={role:'ai',mid:mid+'a',text:ans.replace(/\*\*(.+?)\*\*/g,'$1').replace(/\*(.+?)\*/g,'$1').replace(/[*#`_~]/g,'')});
   }catch(e){
     // 這次追問沒有成功取得回答 → 標記為 failed，不計入追問次數
     userMsg.failed=true;
-    snap.chatHistory.push({role:'ai',failed:true,
+    snap.chatHistory.push(ansMsg={role:'ai',mid:mid+'a',failed:true,
       text:L('抱歉，發生錯誤：','Sorry, an error occurred: ')+friendlyApiErr(e.message)
         +L('（這次不計入追問次數，可以再試一次）',' (this attempt doesn\'t count toward your limit — feel free to retry)')});
   }
   if(!isCurrentReading(snap)){
-    const h=snap.chatHistory, i=h.indexOf(userMsg);
-    if(snap.currentReadingId && i>=0) saveStale(snap, {msgs:h.slice(i)});
+    if(snap.currentReadingId) saveStale(snap, {msgs:[userMsg, ansMsg].filter(Boolean)}); // 只併這次的一問一答
     return;
   }
   renderChat();
