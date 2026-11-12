@@ -1340,13 +1340,15 @@ function saveStale(snap, add){
     lastInterpText:cur.interp||'', chatHistory:[...(cur.chat||[])]};
   if(add.interp!=null && (cur.interp||'')===(snap.baseInterp||'')) st.lastInterpText=add.interp;
   const msgs=add.msgs||[];
-  const has=(arr,m)=>arr.some(x=>x===m||(m.mid&&x.mid===m.mid)); // 以訊息 id 去重（等待期間手動存檔可能已存過問題）
-  msgs.forEach(m=>{ if(!has(st.chatHistory,m)) st.chatHistory.push(m); });
+  // 以訊息 id upsert（等待期間手動存檔可能已存過問題；失敗時要把 failed 帶過去，才不會被算進追問次數）
+  const upsert=(arr,m)=>{ const x=arr.find(x=>x===m||(m.mid&&x.mid===m.mid)); if(!x) arr.push(m); else if(x!==m) Object.assign(x,m); };
+  msgs.forEach(m=>upsert(st.chatHistory,m));
   // 同一筆正開在畫面上：記憶體裡的對話也補上，不然下次存檔又把它蓋掉
   const open=document.querySelector('.screen.on');
   if(S.currentReadingId===id && open && open.id==='s-reading'){
     if(!S.chatHistory) S.chatHistory=[];
-    msgs.forEach(m=>{ if(!has(S.chatHistory,m)) S.chatHistory.push(m); });
+    msgs.forEach(m=>upsert(S.chatHistory,m));
+    updateChatRemaining();
     if(st.lastInterpText!==(cur.interp||'')) S.lastInterpText=st.lastInterpText;
     renderChat();
   }
