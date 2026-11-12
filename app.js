@@ -180,6 +180,7 @@ Object.assign(T, {
   'brand':{zh:'塔羅神諭',en:'Tarot Oracle'},
   'nav.back':{zh:'← 返回',en:'← Back'},
   'nav.back2':{zh:'返回',en:'Back'},
+  'nav.spread':{zh:'← 選牌陣',en:'← Spreads'},
   'settings.btn.label':{zh:'AI 解牌設定',en:'AI Reading'},
   'settings.btn.title':{zh:'解鎖 AI 深度解牌 / API 設定',en:'Unlock AI reading / API settings'},
   'music.btn.title':{zh:'靜心音場 開/關：海浪聲＋theta 靜心音波（建議戴耳機）',en:'Meditation sound on/off: ocean waves + theta soundwave (headphones recommended)'},
@@ -791,7 +792,17 @@ function go(id) {
   if (cur && cur.id !== id) navStack.push(cur.id);
   _showScreen(id);
 }
+// 占卜完（不是從歷史記錄點進來的）左上角改成回選牌陣，不退回抽牌畫面
+function readingBackToSpread() {
+  const cur = document.querySelector('.screen.on');
+  return !!cur && cur.id === 's-reading' && navStack[navStack.length-1] !== 's-history';
+}
 function goBack() {
+  if (readingBackToSpread()) {
+    navStack.length = 0; navStack.push('s-welcome');
+    _showScreen('s-spread'); updateProjectBanners();
+    return;
+  }
   const prev = navStack.pop();
   _showScreen(prev || 's-welcome');
 }
@@ -802,7 +813,10 @@ function _showScreen(id) {
   el.style.display='flex'; el.classList.add('on');
   try{ if(document.activeElement && document.activeElement.blur) document.activeElement.blur(); }catch(e){}
   window.scrollTo(0,0);
-  document.getElementById('nav-back').style.display = id==='s-welcome'?'none':'block';
+  const navBack = document.getElementById('nav-back');
+  navBack.style.display = id==='s-welcome'?'none':'block';
+  navBack.setAttribute('data-i18n', readingBackToSpread() ? 'nav.spread' : 'nav.back');
+  navBack.textContent = t(navBack.getAttribute('data-i18n'));
   if (id === 's-projects') renderProjectList();
   if (id === 's-project-new') renderColorSwatches();
 }
@@ -3206,6 +3220,9 @@ function toggleAiInfo(){
 //  更新紀錄 CHANGELOG（新項目加在最上面；中英務必同步）
 // ══════════════════════════════════════════
 const CHANGELOG = [
+  { date:'2026-11-13',
+    zh:['占卜完左上角的按鈕改成「← 選牌陣」，按了直接回去挑下一個牌陣，不會再退回抽牌畫面（從歷史記錄點進來的還是回歷史記錄）'],
+    en:['After a reading, the top-left button is now "← Spreads" and takes you straight back to choosing a spread instead of the card-picking screen (readings opened from History still go back to History)'] },
   { date:'2026-11-03',
     zh:['用本站額度的 AI 解牌／追問，以及自備金鑰被地區擋下時的代轉，改成一律從美國的伺服器送給 Google，不會再因為被分到香港等地區的機房而出現「User location is not supported」','備援模型換成目前還在服務的版本（舊的 2.5 系列 Google 已經下架），主模型忙線時能順利接手'],
     en:['Readings and follow-ups that use the site\'s quota, and the fallback relay for your own API key when your region is blocked, now always reach Google from a US server, so "User location is not supported" errors caused by Hong Kong routing should no longer happen','Backup models updated to versions Google still serves (the old 2.5 series was retired), so busy periods hand over smoothly'] },
