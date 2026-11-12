@@ -1329,6 +1329,28 @@ function readingSnap(){
     lastInterpText:S.lastInterpText, chatHistory:S.chatHistory};
 }
 function isCurrentReading(snap){ return snap.seq===S.readingSeq; }
+function storedReading(id){ return id ? safeParse('tr_full','[]').find(r=>r.id===id) : null; }
+// 舊局晚回來的結果：那筆可能已從記錄重新打開又寫過（例如又追問了），所以只把這次新增的併進最新記錄，不整份覆蓋
+// add.interp：新解讀（記錄的解讀從送出到現在都沒被改過才寫入）；add.msgs：這次追問的問答
+function saveStale(snap, add){
+  const id=snap.currentReadingId, cur=storedReading(id);
+  if(!cur){ if(add.interp!=null) snap.lastInterpText=add.interp; saveReading(true, false, snap); return; }
+  const st={...snap, type:cur.type||snap.type, q:cur.q, pos:cur.pos||snap.pos,
+    deck:cur.cards, picked:cur.cards.map((_,i)=>i),
+    lastInterpText:cur.interp||'', chatHistory:[...(cur.chat||[])]};
+  if(add.interp!=null && (cur.interp||'')===(snap.baseInterp||'')) st.lastInterpText=add.interp;
+  const msgs=add.msgs||[];
+  st.chatHistory.push(...msgs);
+  // 同一筆正開在畫面上：記憶體裡的對話也補上，不然下次存檔又把它蓋掉
+  const open=document.querySelector('.screen.on');
+  if(S.currentReadingId===id && open && open.id==='s-reading'){
+    if(!S.chatHistory) S.chatHistory=[];
+    S.chatHistory.push(...msgs);
+    if(st.lastInterpText!==(cur.interp||'')) S.lastInterpText=st.lastInterpText;
+    renderChat();
+  }
+  saveReading(true, true, st);
+}
 // AI 解讀（可重用：首次解讀 + 重試）。失敗/暫停時自動保留抽牌並提供重試。
 function runAIReading(){
   const key=getApiKey();
@@ -1356,12 +1378,9 @@ function runAIReading(){
       <div style="font-size:.85rem;color:var(--muted);letter-spacing:.1em">${getActiveProject()?L('AI 正在結合過去脈絡解讀牌陣...','AI is reading your spread with past context...'):L('AI 正在解讀牌陣...','AI is reading your spread...')}</div>
     </div>`;
   const snap=readingSnap(); S.aiSnap=snap;
+  const base=storedReading(snap.currentReadingId); snap.baseInterp=base?(base.interp||''):'';
   callGemini(key,proxyEmail).then(text=>{
-    if(!isCurrentReading(snap)){
-      snap.lastInterpText=text; snap.chatHistory=[];
-      saveReading(true, !!snap.currentReadingId, snap);
-      return;
-    }
+    if(!isCurrentReading(snap)){ saveStale(snap, {interp:text}); return; }
     S.lastInterpText=text; S.chatHistory=[];
     const formatted=text.replace(/\*\*(.+?)\*\*/g,'$1').replace(/\*(.+?)\*/g,'$1').replace(/[*#`_~]/g,'').replace(/\n{2,}/g,'</p><p class="interp-p">').replace(/\n/g,'<br>');
     document.getElementById('interp-main').innerHTML=`<p class="interp-p">${formatted}</p>`;
@@ -2530,7 +2549,7 @@ async function sendChat(){
   const userMsg={role:'user',text:q};
   S.chatHistory.push(userMsg);
   renderChat();
-  const snap=readingSnap(); // 等回答時使用者可能已去占下一題：回答只進這局的對話
+  const snap=readingSnap(); // 等回答時使用者可能已去占下一題（或重開同一筆）：回答只併進這局
   const msgsEl=document.getElementById('chat-msgs');
   const loadingEl=document.createElement('div');
   loadingEl.className='chat-msg-ai';
@@ -2590,7 +2609,11 @@ async function sendChat(){
       text:L('抱歉，發生錯誤：','Sorry, an error occurred: ')+friendlyApiErr(e.message)
         +L('（這次不計入追問次數，可以再試一次）',' (this attempt doesn\'t count toward your limit — feel free to retry)')});
   }
-  if(!isCurrentReading(snap)){ if(snap.currentReadingId) saveReading(true, true, snap); return; }
+  if(!isCurrentReading(snap)){
+    const h=snap.chatHistory, i=h.indexOf(userMsg);
+    if(snap.currentReadingId && i>=0) saveStale(snap, {msgs:h.slice(i)});
+    return;
+  }
   renderChat();
   if(S.currentReadingId) saveReading(true, true); // 追問後即時入檔：網頁重整/自動刷新也不會遺失對話與剩餘額度
 }
