@@ -113,7 +113,8 @@ let CREDITS = null; // null=尚未載入；數字=剩餘點數
 async function fetchCredits(){
   if(!isVerified()||!WORKER_URL) return;
   try{
-    const r=await fetch(WORKER_URL+'/credits',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:getVerifiedEmail()})});
+    const r=await fetch(WORKER_URL+'/credits',{method:'POST',headers:authHeaders(),body:'{}'});
+    if(r.status===401){ sessionLost(); return; }
     if(!r.ok) return;
     const d=await r.json();
     if(typeof d.balance==='number'){ CREDITS=d.balance; renderCreditUI(); }
@@ -197,8 +198,9 @@ Object.assign(T, {
   'set.buy.launchnote':{zh:'限時新開張：一次付清、不需每月續訂（僅到 6/30）',en:'Limited launch deal: pay once, no monthly renewal (until Jun 30)'},
   'set.buy.fx':{zh:'※ 全部以美金（USD）計價。非美國地區看到的當地幣別（如 NT$）為即時換算僅供參考；信用卡實際以美金扣款，部分發卡銀行可能另收一筆外幣交易手續費。',en:'※ All prices are in USD. Local-currency amounts shown outside the US (e.g. NT$) are real-time conversions for reference only; your card is charged in USD, and some banks may add a foreign-transaction fee.'},
   'set.buy.note':{zh:'以購買 / 訂閱時填寫的 email 驗證解鎖',en:'Unlock by verifying with your checkout email'},
-  'set.buy.label':{zh:'已訂閱？輸入訂閱時的 Email 驗證',en:'Already subscribed? Enter your checkout email'},
-  'set.buy.verify':{zh:'驗證解鎖',en:'Verify & Unlock'},
+  'set.buy.label':{zh:'已訂閱？輸入訂閱時的 Email，我們會寄一組驗證碼給你',en:'Already subscribed? Enter your checkout email and we\'ll send you a code'},
+  'set.buy.verify':{zh:'寄驗證碼',en:'Send code'},
+  'set.buy.code':{zh:'確認驗證碼',en:'Confirm code'},
   'set.buy.clear':{zh:'清除驗證',en:'Clear'},
   'set.buy.sync':{zh:'☁ 立即同步歷史記錄',en:'☁ Sync history now'},
   'set.key.head':{zh:'✦ 使用自己的 API Key',en:'✦ Use Your Own API Key'},
@@ -1885,11 +1887,16 @@ ${refCtx}
   let useOwnKey = !(proxyEmail && WORKER_URL);
   if(!useOwnKey){
     resp=await fetchRetry(()=>fetch(WORKER_URL+'/gemini',{
-      method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({email:proxyEmail,body:geminiBody})
+      method:'POST',headers:authHeaders(),
+      body:JSON.stringify({body:geminiBody})
     }));
     data=await resp.json().catch(()=>({}));
     if(!resp.ok){
+      if(resp.status===401){
+        // session 失效（換裝置/清過資料/半年到期）→ 請用戶重新驗證一次 Email
+        sessionLost();
+        throw new Error(L('登入已失效，請到「設定」重新驗證 Email','Session expired — please re-verify your email in Settings'));
+      }
       if(resp.status===403){
         // email 不再有效（訂閱到期/失效）→ 清掉本機解鎖狀態並給明確訊息
         localStorage.removeItem('tr_verified_email');
@@ -1904,8 +1911,8 @@ ${refCtx}
         // 沒有自備 key 但有 AI 點數 → 扣 1 點繼續
         toast(L('⚡ 本日免費次數已用完，改用 1 點繼續','⚡ Daily free limit reached — using 1 credit'));
         resp=await fetchRetry(()=>fetch(WORKER_URL+'/gemini',{
-          method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({email:proxyEmail,body:geminiBody,spend:true})
+          method:'POST',headers:authHeaders(),
+          body:JSON.stringify({body:geminiBody,spend:true})
         }));
         data=await resp.json().catch(()=>({}));
         if(!resp.ok){
@@ -2574,15 +2581,16 @@ async function sendChat(){
     let ans;
     let ownK = !(proxyEmail&&WORKER_URL);
     if(!ownK){
-      let r=await fetchRetry(()=>fetch(WORKER_URL+'/gemini',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:proxyEmail,body:geminiBody,spend:spendCredit})}));
+      let r=await fetchRetry(()=>fetch(WORKER_URL+'/gemini',{method:'POST',headers:authHeaders(),body:JSON.stringify({body:geminiBody,spend:spendCredit})}));
       let data=await r.json().catch(()=>({}));
       if(!r.ok && r.status===429 && !key && ((data.balance||0)>0 || (CREDITS||0)>0)){
         // 當日免費次數用完但有點數 → 改扣點重試
         toast(L('⚡ 本日免費次數已用完，改用 1 點繼續','⚡ Daily free limit reached — using 1 credit'));
-        r=await fetchRetry(()=>fetch(WORKER_URL+'/gemini',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:proxyEmail,body:geminiBody,spend:true})}));
+        r=await fetchRetry(()=>fetch(WORKER_URL+'/gemini',{method:'POST',headers:authHeaders(),body:JSON.stringify({body:geminiBody,spend:true})}));
         data=await r.json().catch(()=>({}));
       }
       if(!r.ok){
+        if(r.status===401){ sessionLost(); throw new Error(L('登入已失效，請到「設定」重新驗證 Email','Session expired — please re-verify your email in Settings')); }
         if(r.status===403){ localStorage.removeItem('tr_verified_email'); if(typeof updateApiStatus==='function') updateApiStatus(); throw new Error(L('訂閱已到期或未生效，請續訂以繼續使用 AI 解牌','Your subscription has lapsed — please resubscribe to keep using AI readings')); }
         if(r.status===402){ CREDITS=0; renderCreditUI(); updateChatRemaining(); throw new Error(L('AI 點數不足，可到「設定」儲值 ⚡','Not enough credits — top up in Settings ⚡')); }
         if(r.status===429 && key){ ownK=true; toast(L('今日訂閱額度已滿，已自動改用你的 API Key 🔑','Daily subscription limit reached — switched to your own API key 🔑')); }
@@ -2837,44 +2845,107 @@ function maybeRunAIAfterUnlock(){
     runAIReading();
   }
 }
+// ── 登入（2026-11）：付費功能改用「Email 驗證碼 → session token」──
+// 以前只要知道付費者的 email 就能用他的額度、讀他的占卜記錄；現在 worker 的 /gemini、
+// /sync、/credits 一律要帶 token（localStorage tr_session），token 由 /auth/verify 發。
+function getSessionToken(){ try{ return localStorage.getItem('tr_session')||''; }catch(e){ return ''; } }
+function authHeaders(){ const h={'Content-Type':'application/json'}; const t=getSessionToken(); if(t) h['Authorization']='Bearer '+t; return h; }
+// 舊用戶升級：以前驗證過（有 email）但還沒有 token → 要重新驗證一次 Email
+function needsRelogin(){ return !!localStorage.getItem('tr_verified_email') && !getSessionToken() && !!WORKER_URL; }
+function sessionLost(){
+  localStorage.removeItem('tr_session');
+  updateApiStatus();
+}
+function showUnlockCodeStep(show){
+  const inp=document.getElementById('unlock-code'); const btn=document.getElementById('unlock-code-btn');
+  if(inp) inp.style.display=show?'block':'none';
+  if(btn) btn.style.display=show?'inline-block':'none';
+  if(show && inp){ inp.value=''; inp.focus(); }
+}
+// 第一步：寄驗證碼到購買時的 Email
 async function verifyEmail(){
   const email=document.getElementById('unlock-input').value.trim().toLowerCase();
   if(!email){toast(L('請輸入 Email','Please enter your email'));return;}
   if(!WORKER_URL){toast(L('⚠ 管理員尚未設定 Worker URL','⚠ Worker URL not configured'));return;}
   const ubar=document.getElementById('unlock-status-bar');
-  ubar.style.display='block';ubar.className='api-status api-none';ubar.textContent=L('驗證中...','Verifying...');
+  ubar.style.display='block';ubar.className='api-status api-none';ubar.textContent=L('寄驗證碼中...','Sending code...');
   try{
-    const r=await fetch(WORKER_URL+'/check',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});
-    const d=await r.json();
-    if(d.verified){
-      localStorage.setItem('tr_verified_email',email);
-      ubar.className='api-status api-ok';ubar.textContent=L('✓ 驗證成功！已解鎖 AI 解牌','✓ Verified! AI reading unlocked');
-      updateApiStatus();toast(L('✦ 驗證成功！AI 解牌已解鎖','✦ Verified! AI reading unlocked'));closeSettings();
-      maybeRunAIAfterUnlock(); // 解鎖後立即解析當前這次抽牌
-      fetchCredits();
-      // 驗證後拉回雲端歷史並合併，再推回（跨裝置同步）
-      syncPull().then(merged=>{ if(merged) toast(L('☁ 已同步雲端歷史記錄','☁ Cloud history synced')); syncPush(); });
+    const r=await fetch(WORKER_URL+'/auth/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});
+    const d=await r.json().catch(()=>({}));
+    if(r.ok && d.sent){
+      // worker 不會說這個 email 有沒有購買記錄（防掃描），所以提示要同時講到兩種情況
+      localStorage.setItem('tr_pending_email',email);
+      showUnlockCodeStep(true);
+      ubar.textContent=L('✉ 如果 '+email+' 有購買記錄，驗證碼已寄出，請貼到下面（10 分鐘內有效）。沒收到：翻翻垃圾郵件、確認是 Gumroad 購買時填的 Email，1 分鐘後可再寄','✉ If '+email+' has a purchase, a code is on its way — paste it below (valid 10 min). Nothing arrived? Check spam, make sure it\'s your Gumroad checkout email, and resend after a minute');
     } else {
-      ubar.textContent=L('✗ 此 Email 尚未有購買記錄，請確認使用 Gumroad 購買時填寫的 Email','✗ No purchase found for this email. Please use the email from your Gumroad checkout.');
+      showUnlockCodeStep(false);
+      ubar.textContent='✗ '+extractErrMsg(d.error, L('寄不出驗證碼，請稍後再試','Could not send the code, please try later'));
     }
   }catch(e){ubar.textContent=L('✗ 無法連線，請稍後再試：','✗ Connection failed, please try again: ')+e.message.slice(0,60);}
 }
+// 第二步：貼驗證碼 → 拿 token → 解鎖
+async function verifyCode(){
+  const email=(localStorage.getItem('tr_pending_email')||document.getElementById('unlock-input').value||'').trim().toLowerCase();
+  const code=(document.getElementById('unlock-code').value||'').replace(/\D/g,'');
+  const ubar=document.getElementById('unlock-status-bar');
+  if(code.length!==6){ toast(L('請輸入 6 位數驗證碼','Enter the 6-digit code')); return; }
+  ubar.style.display='block';ubar.className='api-status api-none';ubar.textContent=L('驗證中...','Verifying...');
+  try{
+    const r=await fetch(WORKER_URL+'/auth/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,code})});
+    const d=await r.json().catch(()=>({}));
+    if(r.ok && d.token){
+      onLoggedIn(email, d.token);
+      localStorage.removeItem('tr_pending_email');
+      showUnlockCodeStep(false);
+      ubar.className='api-status api-ok';ubar.textContent=L('✓ 驗證成功！已解鎖 AI 解牌','✓ Verified! AI reading unlocked');
+      toast(L('✦ 驗證成功！AI 解牌已解鎖','✦ Verified! AI reading unlocked'));closeSettings();
+      maybeRunAIAfterUnlock(); // 解鎖後立即解析當前這次抽牌
+      // 驗證後拉回雲端歷史並合併，再推回（跨裝置同步）
+      syncPull().then(merged=>{ if(merged) toast(L('☁ 已同步雲端歷史記錄','☁ Cloud history synced')); syncPush(); });
+    } else if(d.expired){
+      showUnlockCodeStep(false);
+      ubar.textContent=L('✗ 驗證碼已失效，請再按一次「寄驗證碼」','✗ Code expired — tap "Send code" again');
+    } else if(d.wrong){
+      ubar.textContent=L('✗ 驗證碼不對，還可以試 '+d.left+' 次','✗ Wrong code — '+d.left+' tries left');
+    } else {
+      ubar.textContent='✗ '+extractErrMsg(d.error, L('驗證失敗，請稍後再試','Verification failed, please try later'));
+    }
+  }catch(e){ubar.textContent=L('✗ 無法連線，請稍後再試：','✗ Connection failed, please try again: ')+e.message.slice(0,60);}
+}
+// 拿到 token 後的共同收尾（驗證碼登入、Gumroad 購後轉址都走這裡）
+function onLoggedIn(email, token){
+  localStorage.setItem('tr_verified_email',email);
+  localStorage.setItem('tr_session',token);
+  updateApiStatus();
+  fetchCredits();
+}
 function clearVerifiedEmail(){
+  const t=getSessionToken();
+  if(t && WORKER_URL){ fetch(WORKER_URL+'/auth/logout',{method:'POST',headers:authHeaders(),body:'{}'}).catch(()=>{}); } // 順便把雲端的 session 作廢
   localStorage.removeItem('tr_verified_email');
+  localStorage.removeItem('tr_session');
+  localStorage.removeItem('tr_pending_email');
   document.getElementById('unlock-input').value='';
+  showUnlockCodeStep(false);
   updateApiStatus();toast(L('已清除驗證','Verification cleared'));
 }
-function isVerified(){return !!localStorage.getItem('tr_verified_email')&&!!WORKER_URL;}
+function isVerified(){return !!localStorage.getItem('tr_verified_email')&&!!getSessionToken()&&!!WORKER_URL;}
 function getVerifiedEmail(){return localStorage.getItem('tr_verified_email')||'';}
 // 開頁時重新確認訂閱仍有效（訂閱可能已到期）。回傳「是否仍有效」。
 async function revalidateAccess(){
   if(!isVerified())return false;
   try{
-    const r=await fetch(WORKER_URL+'/check',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:getVerifiedEmail()})});
+    const r=await fetch(WORKER_URL+'/check',{method:'POST',headers:authHeaders(),body:'{}'});
     const d=await r.json();
+    if(d&&d.needLogin){
+      // token 失效（半年到期/被清除）→ 保留 email，請用戶重新驗證一次
+      sessionLost();
+      return false;
+    }
     if(d&&d.verified===false){
       // 訂閱已到期/失效 → 清掉本機解鎖狀態並提示
       localStorage.removeItem('tr_verified_email');
+      localStorage.removeItem('tr_session');
       updateApiStatus();
       toast(L('訂閱已到期，AI 解牌已鎖定，續訂即可恢復','Your subscription has lapsed — AI readings are locked; resubscribe to restore'));
       return false;
@@ -2882,14 +2953,28 @@ async function revalidateAccess(){
     return true;
   }catch(e){ return true; } // 網路失敗就保留現狀，不誤鎖
 }
+// 舊用戶第一次遇到新版：每次開站提醒一次（這一輪瀏覽只跳一次），直到重新驗證完成
+function promptRelogin(){
+  if(!needsRelogin()) return;
+  try{ if(sessionStorage.getItem('tr_relogin_prompted')) return; sessionStorage.setItem('tr_relogin_prompted','1'); }catch(e){}
+  setTimeout(()=>{
+    if(typeof openSettings!=='function') return;
+    openSettings();
+    const inp=document.getElementById('unlock-input'); if(inp) inp.value=getVerifiedEmail();
+    const bar=document.getElementById('unlock-status-bar');
+    if(bar){ bar.style.display='block'; bar.className='api-status api-none';
+      bar.textContent=L('為了保護你的占卜記錄，請再驗證一次 Email（按「寄驗證碼」，之後這台裝置半年內不用再驗）','To protect your readings, please verify your email once more (tap "Send code"; this device stays signed in for 6 months)'); }
+  }, 600);
+}
 
 // ── 跨裝置歷史同步（付費驗證 email 專屬） ──
 async function syncPush(){
   if(!isVerified())return;
   try{
-    const r=await fetch(WORKER_URL+'/sync',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({email:getVerifiedEmail(),action:'push',
+    const r=await fetch(WORKER_URL+'/sync',{method:'POST',headers:authHeaders(),
+      body:JSON.stringify({action:'push',
         readings:S.readings, full:safeParse('tr_full','[]'), projects:S.projects})});
+    if(r&&r.status===401){ sessionLost(); return; }
     if(r&&r.ok) localStorage.setItem('tr_last_sync', new Date().toISOString());
   }catch(e){/* 靜默失敗，本地仍保留 */}
 }
@@ -2916,8 +3001,9 @@ function mergeProjects(local, cloud){
 async function syncPull(){
   if(!isVerified())return false;
   try{
-    const r=await fetch(WORKER_URL+'/sync',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({email:getVerifiedEmail(),action:'pull'})});
+    const r=await fetch(WORKER_URL+'/sync',{method:'POST',headers:authHeaders(),
+      body:JSON.stringify({action:'pull'})});
+    if(r.status===401){ sessionLost(); return false; }
     if(!r.ok)return false;
     const cloud=await r.json();
     if(!cloud||!Array.isArray(cloud.readings))return false;
@@ -2949,7 +3035,8 @@ async function manualSync(){
   const before=S.readings.length;
   try{
     // 先確認雲端可連線（也驗證 email 仍有效）
-    const probe=await fetch(WORKER_URL+'/sync',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:getVerifiedEmail(),action:'pull'})});
+    const probe=await fetch(WORKER_URL+'/sync',{method:'POST',headers:authHeaders(),body:JSON.stringify({action:'pull'})});
+    if(probe.status===401){ sessionLost(); toast(L('登入已失效，請重新驗證 Email 後再同步','Session expired — re-verify your email, then sync')); return; }
     if(probe.status===403){ toast(L('此 Email 尚未驗證或訂閱已到期，無法同步','This email isn\'t verified or the subscription has lapsed — can\'t sync')); return; }
     if(!probe.ok){ toast(L('雲端暫時無法連線，請稍後再試','Cloud sync unavailable, please try again later')); return; }
     await syncPull();   // 拉回合併（內部會在本地有新東西時自動推回）
@@ -3010,6 +3097,10 @@ function updateApiStatus(){
       bar.className='api-status api-ok';bar.textContent=L('✦ 已解鎖 AI 深度解牌（','✦ AI deep reading unlocked (')+getVerifiedEmail()+'）';bar.style.display='block';
     }
     if(ubar){ubar.style.display='block';ubar.className='api-status api-ok';ubar.textContent=L('✓ Email 驗證有效','✓ Email verified');}
+  } else if(needsRelogin()){
+    bar.className='api-status api-none';bar.style.display='block';
+    bar.textContent=L('⚠ 請重新驗證一次 Email（'+getVerifiedEmail()+'）才能繼續用 AI 解牌與同步','⚠ Please re-verify your email ('+getVerifiedEmail()+') to keep using AI readings and sync');
+    if(ubar && !ubar.textContent){ubar.style.display='block';ubar.className='api-status api-none';ubar.textContent=L('按「寄驗證碼」，驗證碼會寄到上面的 Email','Tap "Send code" — we\'ll email a code to the address above');}
   } else if(getApiKey()){
     bar.className='api-status api-ok';bar.textContent=L('✓ 自備 ','✓ Your own ')+(apiProvider(getApiKey())==='openai'?'OpenAI':'Gemini')+L(' Key（AI 解牌啟用）',' key (AI reading enabled)');bar.style.display='block';
     if(ubar)ubar.style.display='none';
@@ -3021,7 +3112,8 @@ function updateApiStatus(){
 function openSettings(){
   fetchCredits(); renderCreditUI();
   document.getElementById('api-key-input').value=localStorage.getItem('gemini_key')||'';
-  document.getElementById('unlock-input').value=getVerifiedEmail();
+  document.getElementById('unlock-input').value=getVerifiedEmail()||localStorage.getItem('tr_pending_email')||'';
+  showUnlockCodeStep(!isVerified() && !!localStorage.getItem('tr_pending_email')); // 寄過碼還沒驗完 → 直接顯示驗證碼欄
   updateApiStatus();
   document.getElementById('settings-modal').classList.add('on');
 }
@@ -3271,6 +3363,9 @@ function toggleAiInfo(){
 //  更新紀錄 CHANGELOG（新項目加在最上面；中英務必同步）
 // ══════════════════════════════════════════
 const CHANGELOG = [
+  { date:'2026-11-15',
+    zh:['訂閱解鎖改成「Email 收驗證碼」登入：以前只要知道你的 email 就能用你的額度、看你的雲端占卜記錄，現在要收到信裡的 6 位數驗證碼才行。已驗證過的用戶會被請求再驗證一次，之後同一台裝置半年內不用再驗','Gumroad 付款完成自動轉回本站時照樣直接解鎖，不用再收驗證信'],
+    en:['Subscriber unlock now signs in with an emailed code: previously anyone who knew your email could use your quota and read your cloud readings; now the 6-digit code from your inbox is required. Already-verified users will be asked to verify once more, then the device stays signed in for 6 months','Returning from Gumroad checkout still unlocks automatically — no code needed'] },
   { date:'2026-11-13',
     zh:['占卜完左上角的按鈕改成「← 選牌陣」，按了直接回去挑下一個牌陣，不會再退回抽牌畫面（從歷史記錄點進來的還是回歷史記錄）'],
     en:['After a reading, the top-left button is now "← Spreads" and takes you straight back to choosing a spread instead of the card-picking screen (readings opened from History still go back to History)'] },
@@ -3413,14 +3508,20 @@ if(isVerified()) fetchCredits(); // 已驗證用戶載入 AI 點數餘額
 // 新開張一次性買斷優惠：只在 6/30 前顯示，之後自動隱藏（毋須手動改站）
 (function(){ const el=document.getElementById('launch-offer'); if(el && inPromo()) el.style.display='block'; })();
 // 已驗證 email → 先確認訂閱仍有效（可能已到期），再靜默拉回雲端歷史
-if(isVerified()) revalidateAccess().then(ok=>{
-  if(!ok) return;
-  syncPull().then(merged=>{
-    if(!merged) return;
-    const cur=document.querySelector('.screen.on');
-    if(cur && cur.id==='s-history') showHistory(); // 正停在歷史頁才重繪
+// 舊版驗證過但還沒 token 的用戶（或 token 剛被 revalidate 判定失效）→ 請他重新驗證一次 Email。
+// 一定要等 revalidateAccess 回來才判斷，不然 token 被清掉時提示已經跳過了
+if(isVerified()){
+  revalidateAccess().then(ok=>{
+    if(!ok){ promptRelogin(); return; }
+    syncPull().then(merged=>{
+      if(!merged) return;
+      const cur=document.querySelector('.screen.on');
+      if(cur && cur.id==='s-history') showHistory(); // 正停在歷史頁才重繪
+    });
   });
-});
+} else {
+  promptRelogin();
+}
 
 // ── Gumroad 購買後自動解鎖 ──
 // Gumroad「Redirect to a URL after purchase」會把買家資訊以 query 參數帶回
@@ -3428,19 +3529,28 @@ if(isVerified()) revalidateAccess().then(ok=>{
 // 安全等級與手動貼信箱相同），確認後自動解鎖，免去使用者手動輸入。
 (function autoUnlockFromPurchase(){
   if(!WORKER_URL) return;
-  const p=new URLSearchParams(location.search);
-  const email=(p.get('email')||'').trim().toLowerCase();
+  // index.html <head> 的小腳本在 gumroad.js 載入前就把 email/sale_id 收進 window.__trPurchase／sessionStorage
+  // 並從網址清掉；這裡只是接手。萬一那段沒跑到（舊快取），才退回看網址
+  let email='', saleId='';
+  try{
+    let stash=window.__trPurchase; if(!stash){ const raw=sessionStorage.getItem('tr_purchase'); if(raw) stash=JSON.parse(raw); }
+    if(stash){ email=String(stash.email||'').trim().toLowerCase(); saleId=String(stash.sale_id||'').trim(); }
+    try{ sessionStorage.removeItem('tr_purchase'); }catch(e){} window.__trPurchase=null;
+  }catch(e){}
+  if(!email || !saleId){
+    const p=new URLSearchParams(location.search);
+    email=(p.get('email')||'').trim().toLowerCase(); saleId=(p.get('sale_id')||'').trim();
+    if(email && saleId) history.replaceState(null,'',location.pathname);
+  }
   // 需同時帶 sale_id 才視為 Gumroad 購後轉址，避免誤觸
-  if(!email || !p.get('sale_id')) return;
-  // 立即把 email/sale_id 等參數從網址移除（隱私：別留在網址列或被分享）
-  history.replaceState(null,'',location.pathname);
+  if(!email || !saleId) return;
   const tryCheck=async(attempt)=>{
     try{
-      const r=await fetch(WORKER_URL+'/check',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});
+      // sale_id 是 webhook 存下的一次性兌換碼（30 分鐘、兌一次就作廢）→ 對得上 worker 直接發 session token
+      const r=await fetch(WORKER_URL+'/check',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,sale_id:saleId})});
       const d=await r.json();
-      if(d.verified){
-        localStorage.setItem('tr_verified_email',email);
-        updateApiStatus();
+      if(d.verified && d.token){
+        onLoggedIn(email, d.token);
         toast(L('✦ 付款成功，AI 解牌已自動解鎖！','✦ Payment confirmed — AI reading unlocked!'));
         syncPull().then(merged=>{ if(!merged) return; const cur=document.querySelector('.screen.on'); if(cur&&cur.id==='s-history') showHistory(); });
         return;
