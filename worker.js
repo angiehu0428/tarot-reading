@@ -542,14 +542,20 @@ export class AuthGate {
         await st.delete('otp'); // 對了就作廢，第二個人拿同一組碼進來只會看到 expired
         return out({ ok: true });
       }
+      // 購後兌換碼：每筆 sale 各記一列（key 帶 sale 雜湊），記「第一次收到的時間」跟「用過沒」。
+      // Gumroad 會重送同一筆購買通知：重送不能把期限往後延，也不能讓兌過的碼復活，所以已有紀錄就完全不動。
+      // 紀錄不刪（一列很小）：刪掉的話下一次重送又會被當成新的。
       case 'redeem_put': {
-        await st.put('redeem', { h: a.h, exp: now + a.ttlMs });
+        const key = `sale:${a.h}`;
+        if (await st.get(key)) return out({ ok: true, existed: true });
+        await st.put(key, { exp: now + a.ttlMs, used: false });
         return out({ ok: true });
       }
       case 'redeem_take': {
-        const r = await st.get('redeem');
-        if (!r || r.exp < now || r.h !== a.h) return out({ ok: false });
-        await st.delete('redeem');
+        const key = `sale:${a.h}`;
+        const r = await st.get(key);
+        if (!r || r.used || r.exp < now) return out({ ok: false });
+        await st.put(key, { exp: r.exp, used: true });
         return out({ ok: true });
       }
       case 'hit': { // 固定視窗計數（IP 限流）

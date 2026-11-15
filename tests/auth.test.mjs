@@ -285,3 +285,28 @@ test('CORS 預檢放行 Authorization header', async () => {
   assert.equal(res.status, 204);
   assert.match(res.headers.get('Access-Control-Allow-Headers'), /Authorization/);
 });
+
+test('Gumroad 重送同一筆購買通知：兌過的 sale_id 不會復活、期限也不會被往後延（Codex PR #104）', async () => {
+  const kv = fakeKV(); fakeNet(); const e = env(kv);
+  assert.equal(await webhook(e, { email: PAID, sale_id: SALE }), 200);
+  const first = await call(e, '/check', { email: PAID, sale_id: SALE });
+  assert.equal(first.data.verified, true); assert.ok(first.data.token);
+  // 同一筆通知重送（Gumroad 會重試）→ 再拿同一個 sale_id 來兌：沒用
+  assert.equal(await webhook(e, { email: PAID, sale_id: SALE }), 200);
+  assert.equal(await webhook(e, { email: PAID, sale_id: SALE }), 200);
+  assert.deepEqual((await call(e, '/check', { email: PAID, sale_id: SALE })).data, { verified: false, needLogin: true });
+  // 同一個人的另一筆購買（續訂）是新的 sale_id：照樣能兌一次
+  assert.equal(await webhook(e, { email: PAID, sale_id: 'sale_second' }), 200);
+  assert.equal((await call(e, '/check', { email: PAID, sale_id: 'sale_second' })).data.verified, true);
+  assert.deepEqual((await call(e, '/check', { email: PAID, sale_id: 'sale_second' })).data, { verified: false, needLogin: true });
+
+  // 還沒兌、已經過期的：重送不會重新起算 30 分鐘
+  const kv2 = fakeKV(); const e2 = env(kv2);
+  const realNow = Date.now;
+  try {
+    assert.equal(await webhook(e2, { email: PAID, sale_id: SALE }), 200);
+    Date.now = () => realNow() + 31 * 60 * 1000;
+    assert.equal(await webhook(e2, { email: PAID, sale_id: SALE }), 200);
+    assert.deepEqual((await call(e2, '/check', { email: PAID, sale_id: SALE })).data, { verified: false, needLogin: true });
+  } finally { Date.now = realNow; }
+});

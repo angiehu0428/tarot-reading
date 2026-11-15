@@ -6,7 +6,7 @@
 
 - **worker.js** 由 Cloudflare **Workers Builds** 自動部署：push 到 `main` → 自動執行 `npx wrangler deploy`（worker 名稱：`tarot-worker`）。
 - Worker 需要的 Secrets（在 Cloudflare dashboard 設定，不進 repo）：`GUMROAD_SELLER_ID`、`WEBHOOK_SECRET`（Gumroad Ping URL 需帶相同的 `?token=`）、Gemini API key。
-- 登入驗證碼寄信（二選一，沒設就沒人登得進來）：Cloudflare Email Sending binding `EMAIL`（`send_email`，網域上線後再加進 wrangler.toml）＋ var `MAIL_FROM`；或 Resend secrets `RESEND_API_KEY` ＋ `EMAIL_FROM`。有綁 `EMAIL` 優先。
+- 登入驗證碼寄信（沒設就沒人登得進來）：Cloudflare Email Sending binding `EMAIL`（wrangler.toml 的 `[[send_email]]`）＋ var `MAIL_FROM`（寄件網域 `notify.angiehu.com`，2026-11-15 開通；不開在 `angiehu.com` 本身，那邊有別的信箱在用）。沒綁 `EMAIL` 時改走 Resend（secrets `RESEND_API_KEY`＋`EMAIL_FROM`）。
 - KV：`TAROT_KV`（付費用戶存取記錄、同步資料、登入 session `sess:*`）。
 - Durable Objects：`GEMINI_PROXY`（Gemini 美國中繼）、`AUTH_GATE`（登入閘門：驗證碼錯幾次／用過即作廢、購後兌換碼只能兌一次、IP 計數；部署時 migration `v2-auth-gate` 會自動建）。
 
