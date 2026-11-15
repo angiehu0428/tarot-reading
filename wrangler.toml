@@ -40,8 +40,11 @@ class_name = "AuthGate"
 tag = "v2-auth-gate"
 new_sqlite_classes = ["AuthGate"]
 
-# 登入驗證碼寄信：之後網域在 Cloudflare Email Sending 上線後，再加
-#   [[send_email]]
-#   name = "EMAIL"
-# 並設 var MAIL_FROM（如 "塔羅占卜 <tarot@angiehu.com>"）。沒綁 EMAIL 時 worker 會改用 Resend
-# （secrets RESEND_API_KEY + EMAIL_FROM）。
+# 登入驗證碼寄信：Cloudflare Email Sending（2026-11-15 開通子網域 notify.angiehu.com）。
+# 不開在 angiehu.com 本身：那個網域有 GoDaddy 信箱在收發信，直接開會動到它的 DMARC。
+# 沒綁 EMAIL 時 worker 會改用 Resend（secrets RESEND_API_KEY + EMAIL_FROM）。
+[[send_email]]
+name = "EMAIL"
+
+[vars]
+MAIL_FROM = "塔羅占卜 <tarot@notify.angiehu.com>"

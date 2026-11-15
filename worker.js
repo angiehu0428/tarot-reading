@@ -43,7 +43,7 @@ async function geminiFetch(url, init = {}) {
 }
 
 // 改 worker 時一起改，才能從 /version 確認 Cloudflare 真的部署了新版本
-const WORKER_VERSION = '2026.11.11a';
+const WORKER_VERSION = '2026.11.15a';
 
 const ALLOWED_ORIGINS = [
   'https://angiehu0428.github.io',
