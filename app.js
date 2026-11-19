@@ -2561,11 +2561,13 @@ async function sendChat(resendText){
     return;
   }
   if(!S.chatHistory) S.chatHistory=[];
+  let retried=null;
   if(resend){
-    // 確定送得出去才拿掉失敗的那一問一答，並立刻存檔（不然等回答時離開這局，舊存檔裡失敗的那組會被併回來）
+    // 失敗的那一問一答先只是「畫面上藏起來」，等這次有結果（成功或再失敗）才真的拿掉、跟新的一起存檔。
+    // 中途重新整理／關掉：存檔沒動過，舊的失敗訊息和重送鈕都還在，問題不會不見
     if(chatResendText()!==resendText) return;
-    S.chatHistory.splice(-2,2);
-    if(S.currentReadingId) saveReading(true, true);
+    retried=S.chatHistory.slice(-2);
+    retried.forEach(m=>CHAT_RETRYING.add(m));
   } else { input.value=''; input.style.height='auto'; }
   const mid=Date.now()+'-'+Math.random().toString(36).slice(2,8);
   const userMsg={role:'user',text:q,mid};
@@ -2633,6 +2635,7 @@ async function sendChat(resendText){
       text:L('抱歉，發生錯誤：','Sorry, an error occurred: ')+friendlyApiErr(e.message)
         +L('（這次不計入追問次數，可以再試一次）',' (this attempt doesn\'t count toward your limit — feel free to retry)')});
   }
+  if(retried) retried.forEach(m=>{ CHAT_RETRYING.delete(m); const i=snap.chatHistory.indexOf(m); if(i>=0) snap.chatHistory.splice(i,1); });
   if(!isCurrentReading(snap)){
     if(snap.currentReadingId) saveStale(snap, {msgs:[userMsg, ansMsg].filter(Boolean)}); // 只併這次的一問一答
     return;
@@ -2640,6 +2643,7 @@ async function sendChat(resendText){
   renderChat();
   if(S.currentReadingId) saveReading(true, true); // 追問後即時入檔：網頁重整/自動刷新也不會遺失對話與剩餘額度
 }
+var CHAT_RETRYING=new Set(); // 正在重送的舊失敗問答（只在記憶體裡，不進存檔）
 var CHAT_BTN_STYLE='display:block;margin-top:10px;padding:7px 16px;border:1px solid rgba(212,175,55,.55);border-radius:18px;background:rgba(212,175,55,.12);color:var(--gold,#d4af37);font:inherit;font-size:.85rem;cursor:pointer';
 // 複製文字到剪貼簿；舊瀏覽器或不給權限時退回用隱藏文字框
 async function copyText(text){
@@ -2693,7 +2697,8 @@ function renderChat(){
   // 最後一則是失敗的回答 → 底下放「重送」，按了用同一句再問一次（不用複製貼上）
   const canResend=chatResendText()!==null;
   el.innerHTML=S.chatHistory.map((m,i)=>
-    m.role==='user'
+    CHAT_RETRYING.has(m) ? ''
+    : m.role==='user'
       ?`<div class="chat-msg-user">${escHtml(m.text)}</div>`
       :`<div class="chat-msg-ai">${escHtml(m.text).replace(/\n/g,'<br>')}${canResend&&i===S.chatHistory.length-1
           ?`<button type="button" class="chat-resend" onclick="resendChat()" style="${CHAT_BTN_STYLE}">↻ ${L('重送','Resend')}</button>`
