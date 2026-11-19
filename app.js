@@ -249,8 +249,8 @@ Object.assign(T, {
   'set.font.head':{zh:'✦ 字級大小（看不清楚可調大）',en:'✦ Text size (make it bigger if hard to read)'},
   'font.lv0':{zh:'標準',en:'Normal'},'font.lv1':{zh:'大',en:'Large'},'font.lv2':{zh:'特大',en:'X-Large'},'font.lv3':{zh:'超大',en:'XX-Large'},
   'font.btn.title':{zh:'字級大小（點我放大）',en:'Text size (tap to enlarge)'},
-  'ann.title':{zh:'✦ 追問的三個問題已修好 🔮',en:'✦ Three Follow-up Issues Fixed 🔮'},
-  'ann.body':{zh:'🙏 <strong style="color:var(--gold)">感謝大家持續回報，這幾天修好了三件事：</strong><br><br><strong>① 追問失敗不再扣次數</strong><br>以前只要 AI 出錯或連線有問題，那次失敗仍然會佔掉一次追問機會。現在失敗不計入次數，可以直接再試一次 ✦<br><br><strong>② 偶爾解不了牌的問題已根治</strong><br>有些朋友會看到「User location is not supported」這串英文——那是伺服器連線位置造成的，<strong>跟你的額度完全無關</strong>，已經從根本修掉，不會再發生 ✦<br><br><strong>③ 錯誤訊息看得懂了</strong><br>萬一再遇到狀況，會直接說明是什麼原因、可以怎麼處理，不再顯示英文原文或「[object Object]」✦<br><br>💬 另外提醒：<strong>舊的占卜在「占卜記錄」裡還可以繼續追問</strong>，只要次數還沒用完。有任何問題都歡迎隨時回報 🙏',en:'🙏 <strong style="color:var(--gold)">Thanks to your reports, three things were fixed this week:</strong><br><br><strong>1. Failed follow-ups no longer use up your allowance</strong><br>Previously, if the AI errored or the connection dropped, that attempt still counted against your follow-ups. Now it doesn\'t — just try again ✦<br><br><strong>2. The occasional "no reading" problem is fixed for good</strong><br>Some of you saw a raw "User location is not supported" error — that came from the server\'s network location and had <strong>nothing to do with your quota</strong>. It is fixed at the root and won\'t happen again ✦<br><br><strong>3. Error messages make sense now</strong><br>If something does go wrong, you will see what happened and what to do — no more raw English errors or "[object Object]" ✦<br><br>💬 A reminder: <strong>past readings in History can still be continued</strong> as long as you have follow-ups left. Reports are always welcome 🙏'},
+  'ann.title':{zh:'✦ 新功能：重送、複製全文 🔮',en:'✦ New: Resend & Copy Full Reading 🔮'},
+  'ann.body':{zh:'🙏 <strong style="color:var(--gold)">這陣子更新了四件事：</strong><br><br><strong>① 追問失敗可以「重送」</strong><br>AI 出錯或連線斷掉時，錯誤訊息下面有一顆「↻ 重送」，按了就用同一句再問一次，不用複製貼上（失敗的那次照樣不扣次數）✦<br><br><strong>② 「複製全文」</strong><br>整體解讀下面和頁面最底下都有，一次複製問題、抽到的牌、整體解讀和所有追問；每則追問回答也可以單獨複製 ✦<br><br><strong>③ 單牌解析更對題</strong><br>問公司、上班、離職這類問題，會聚焦在「事業」的牌義，不會再被當成感情題 ✦<br><br><strong>④ 訂閱改用 Email 驗證碼登入</strong><br>解鎖 AI 解牌要輸入信箱收到的 6 位數驗證碼，別人光知道你的 Email 用不了你的額度。同一台裝置驗證一次，半年內不用再驗 ✦<br><br>💬 有任何問題都歡迎隨時回報 🙏',en:'🙏 <strong style="color:var(--gold)">Four recent updates:</strong><br><br><strong>1. Resend a failed follow-up</strong><br>If the AI errors or the connection drops, the error message now has a "↻ Resend" button that asks the same question again — no copy and paste (failed attempts still don\'t count) ✦<br><br><strong>2. Copy full reading</strong><br>Under the overall reading and at the bottom of the page: copies your question, the cards, the overall reading and every follow-up in one go. Each follow-up answer can also be copied on its own ✦<br><br><strong>3. Card-by-card meanings stay on topic</strong><br>Questions about a company, a job or resigning now focus on the "career" meanings instead of being treated as love questions ✦<br><br><strong>4. Subscribers sign in with an emailed code</strong><br>Unlocking AI readings now needs the 6-digit code sent to your inbox, so knowing your email is not enough to use your quota. Verify once per device and you stay signed in for 6 months ✦<br><br>💬 Reports and feature wishes are always welcome 🙏'},
   'ann.feedback':{zh:'有問題或想許願新功能？點此回報 →',en:'Found a bug or have a feature wish? Tell us →'},
   'ann.ok':{zh:'我知道了',en:'Got it'},
   'report.title':{zh:'🐞 回報問題',en:'🐞 Report a Problem'},
@@ -3291,8 +3291,8 @@ async function submitReport(){
 }
 // 一次性公告（沒看過的人會看到一次，關閉後不再跳；要發新公告換新的 ANNOUNCE_ID 即可）
 // 注意：App 內瀏覽器（LINE/FB）可能每次清除儲存，這類用戶每次開啟仍會視為「第一次」看到一次
-const ANNOUNCE_ID = '2026-09-24-followup-fixes';
-const ANNOUNCE_EXPIRES = new Date('2026-12-31T00:00:00'); // 到期日：讓第一次來的訪客持續看得到
+const ANNOUNCE_ID = '2026-11-19-resend-copy';
+const ANNOUNCE_EXPIRES = new Date('2027-01-31T00:00:00'); // 到期日：讓第一次來的訪客持續看得到
 // 儲存三層備援：localStorage（跨次）→ sessionStorage（LINE/FB 等 App 內瀏覽器常清 localStorage）
 // → 記憶體（隱私模式下兩者都可能不可用），確保同一次瀏覽絕不重複跳出
 let announceSeen=false;
