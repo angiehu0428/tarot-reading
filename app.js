@@ -182,6 +182,12 @@ Object.assign(T, {
   'nav.back':{zh:'← 返回',en:'← Back'},
   'nav.back2':{zh:'返回',en:'Back'},
   'nav.spread':{zh:'← 選牌陣',en:'← Spreads'},
+  'nav.home':{zh:'⌂ 首頁',en:'⌂ Home'},
+  'rd.addproj':{zh:'加入專案',en:'Add to Project'},
+  'ap.title':{zh:'加入專案',en:'Add to a Project'},
+  'ap.hint':{zh:'牌、解讀和追問會原樣放進專案，不用重抽。之後在這個專案占卜，AI 會參考這一筆。',en:'The cards, reading and follow-ups move in as they are — no redraw. Later readings in that project will take this one into account.'},
+  'ap.new':{zh:'或是開一個新專案',en:'Or start a new project'},
+  'ap.create':{zh:'建立並加入',en:'Create & Add'},
   'settings.btn.label':{zh:'AI 解牌設定',en:'AI Reading'},
   'settings.btn.title':{zh:'解鎖 AI 深度解牌 / API 設定',en:'Unlock AI reading / API settings'},
   'music.btn.title':{zh:'靜心音場 開/關：海浪聲＋theta 靜心音波（建議戴耳機）',en:'Meditation sound on/off: ocean waves + theta soundwave (headphones recommended)'},
@@ -249,8 +255,8 @@ Object.assign(T, {
   'set.font.head':{zh:'✦ 字級大小（看不清楚可調大）',en:'✦ Text size (make it bigger if hard to read)'},
   'font.lv0':{zh:'標準',en:'Normal'},'font.lv1':{zh:'大',en:'Large'},'font.lv2':{zh:'特大',en:'X-Large'},'font.lv3':{zh:'超大',en:'XX-Large'},
   'font.btn.title':{zh:'字級大小（點我放大）',en:'Text size (tap to enlarge)'},
-  'ann.title':{zh:'✦ 新功能：重送、複製全文 🔮',en:'✦ New: Resend & Copy Full Reading 🔮'},
-  'ann.body':{zh:'🙏 <strong style="color:var(--gold)">這陣子更新了四件事：</strong><br><br><strong>① 追問失敗可以「重送」</strong><br>AI 出錯或連線斷掉時，錯誤訊息下面有一顆「↻ 重送」，按了就用同一句再問一次，不用複製貼上（失敗的那次照樣不扣次數）✦<br><br><strong>② 「複製全文」</strong><br>整體解讀下面和頁面最底下都有，一次複製問題、抽到的牌、整體解讀和所有追問；每則追問回答也可以單獨複製 ✦<br><br><strong>③ 單牌解析更對題</strong><br>問公司、上班、離職這類職場問題，主題判斷比以前準，單牌解析多半會聚焦在「事業」的牌義，比較不會被當成感情題 ✦<br><br><strong>④ 訂閱改用 Email 驗證碼登入</strong><br>解鎖 AI 解牌要輸入信箱收到的 6 位數驗證碼，別人光知道你的 Email 用不了你的額度（剛付款完自動回到本站的不用輸入）。同一台裝置驗證一次，通常半年內不用再驗；清除瀏覽器資料後要再驗一次 ✦<br><br>💬 有任何問題都歡迎隨時回報 🙏',en:'🙏 <strong style="color:var(--gold)">Four recent updates:</strong><br><br><strong>1. Resend a failed follow-up</strong><br>If the AI errors or the connection drops, the error message now has a "↻ Resend" button that asks the same question again — no copy and paste (failed attempts still don\'t count) ✦<br><br><strong>2. Copy full reading</strong><br>Under the overall reading and at the bottom of the page: copies your question, the cards, the overall reading and every follow-up in one go. Each follow-up answer can also be copied on its own ✦<br><br><strong>3. Card-by-card meanings stay on topic</strong><br>Workplace questions (a company, a job, resigning) are recognised better, so the card-by-card reading usually focuses on the "career" meanings rather than treating them as love questions ✦<br><br><strong>4. Subscribers sign in with an emailed code</strong><br>Unlocking AI readings now needs the 6-digit code sent to your inbox, so knowing your email is not enough to use your quota (no code needed when you return straight from checkout). Verify once per device and you usually stay signed in for about 6 months; clearing your browser data means verifying again ✦<br><br>💬 Reports and feature wishes are always welcome 🙏'},
+  'ann.title':{zh:'✦ 新功能：加入專案、上方回首頁 🔮',en:'✦ New: Add to Project & Home Button 🔮'},
+  'ann.body':{zh:'🙏 <strong style="color:var(--gold)">這陣子更新了六件事：</strong><br><br><strong>① 單獨占卜可以事後「加入專案」</strong><br>占完才想到要歸到某個專案也可以：在解讀頁最下面或「占卜記錄」按「加入專案」，選一個專案或當場開新的。牌、解讀和追問原樣放進去，不用重抽；之後在那個專案占卜，AI 會參考這一筆 ✦<br><br><strong>② 上方多了「⌂ 首頁」</strong><br>看完長長的解讀不用滑到最底，左上角一按就回首頁 ✦<br><br><strong>③ 追問失敗可以「重送」</strong><br>AI 出錯或連線斷掉時，錯誤訊息下面有一顆「↻ 重送」，按了就用同一句再問一次，不用複製貼上（失敗的那次照樣不扣次數）✦<br><br><strong>④ 「複製全文」</strong><br>整體解讀下面和頁面最底下都有，一次複製問題、抽到的牌、整體解讀和所有追問；每則追問回答也可以單獨複製 ✦<br><br><strong>⑤ 單牌解析更對題</strong><br>問公司、上班、離職這類職場問題，主題判斷比以前準，單牌解析多半會聚焦在「事業」的牌義，比較不會被當成感情題 ✦<br><br><strong>⑥ 訂閱改用 Email 驗證碼登入</strong><br>解鎖 AI 解牌要輸入信箱收到的 6 位數驗證碼，別人光知道你的 Email 用不了你的額度（剛付款完自動回到本站的不用輸入）。同一台裝置驗證一次，通常半年內不用再驗；清除瀏覽器資料後要再驗一次 ✦<br><br>💬 有任何問題都歡迎隨時回報 🙏',en:'🙏 <strong style="color:var(--gold)">Six recent updates:</strong><br><br><strong>1. Add a reading to a project afterwards</strong><br>Did a reading on its own and want it in a project after all? Tap "Add to Project" at the bottom of the reading or in History, then pick a project or start a new one. The cards, reading and follow-ups move in as they are — no redraw — and later readings in that project take it into account ✦<br><br><strong>2. "⌂ Home" at the top</strong><br>No more scrolling to the bottom of a long reading: the top-left button takes you straight home ✦<br><br><strong>3. Resend a failed follow-up</strong><br>If the AI errors or the connection drops, the error message now has a "↻ Resend" button that asks the same question again — no copy and paste (failed attempts still don\'t count) ✦<br><br><strong>4. Copy full reading</strong><br>Under the overall reading and at the bottom of the page: copies your question, the cards, the overall reading and every follow-up in one go. Each follow-up answer can also be copied on its own ✦<br><br><strong>5. Card-by-card meanings stay on topic</strong><br>Workplace questions (a company, a job, resigning) are recognised better, so the card-by-card reading usually focuses on the "career" meanings rather than treating them as love questions ✦<br><br><strong>6. Subscribers sign in with an emailed code</strong><br>Unlocking AI readings now needs the 6-digit code sent to your inbox, so knowing your email is not enough to use your quota (no code needed when you return straight from checkout). Verify once per device and you usually stay signed in for about 6 months; clearing your browser data means verifying again ✦<br><br>💬 Reports and feature wishes are always welcome 🙏'},
   'ann.feedback':{zh:'有問題或想許願新功能？點此回報 →',en:'Found a bug or have a feature wish? Tell us →'},
   'ann.ok':{zh:'我知道了',en:'Got it'},
   'report.title':{zh:'🐞 回報問題',en:'🐞 Report a Problem'},
@@ -809,6 +815,11 @@ function goBack() {
   const prev = navStack.pop();
   _showScreen(prev || 's-welcome');
 }
+// 上方「⌂ 首頁」：不管在哪一頁、滑到多下面，一按直接回首頁
+function goHome() {
+  navStack.length = 0;
+  _showScreen('s-welcome');
+}
 function _showScreen(id) {
   document.querySelectorAll('.screen').forEach(el=>{el.classList.remove('on');el.style.display='none';});
   const el = document.getElementById(id);
@@ -820,6 +831,12 @@ function _showScreen(id) {
   navBack.style.display = id==='s-welcome'?'none':'block';
   navBack.setAttribute('data-i18n', readingBackToSpread() ? 'nav.spread' : 'nav.back');
   navBack.textContent = t(navBack.getAttribute('data-i18n'));
+  // 「返回」本來就會回首頁的頁面不重複放首頁鈕
+  const navHome = document.getElementById('nav-home');
+  if (navHome) {
+    const backIsHome = !readingBackToSpread() && (!navStack.length || navStack[navStack.length-1] === 's-welcome');
+    navHome.style.display = (id === 's-welcome' || backIsHome) ? 'none' : 'block';
+  }
   if (id === 's-projects') renderProjectList();
   if (id === 's-project-new') renderColorSwatches();
 }
@@ -978,6 +995,72 @@ function deleteProject(id) {
   if (S.activeProjectId === id) S.activeProjectId = null;
   toast(L('專案已刪除','Project deleted'));
   goBack();
+}
+
+// ══════════════════════════════════════════
+//  加入專案：單獨占卜事後歸到專案（牌、解讀、追問原樣放進去，不重抽）
+// ══════════════════════════════════════════
+let addProjReadingId = null;
+function projectsOfReading(rid) {
+  return S.projects.filter(p => (p.readings||[]).some(r => r.id === rid));
+}
+function openAddToProject(rid) {
+  const rec = safeParse('tr_full','[]').find(r => r && r.id === rid);
+  if (!rec || !rec.cards || !rec.cards.length) { toast(L('這筆記錄缺少牌局資料，沒辦法加入專案','This record has no draw data, so it can\'t be added to a project')); return; }
+  addProjReadingId = rid;
+  const list = document.getElementById('addproj-list');
+  list.innerHTML = S.projects.length
+    ? S.projects.map(p => `<button class="proj-card" style="width:100%;text-align:left;cursor:pointer;font:inherit;color:inherit" onclick="addReadingToProject(${p.id})">
+        <div class="proj-dot" style="background:${p.color}"></div>
+        <div class="proj-info"><div class="proj-name">${escHtml(p.name)}</div>
+        <div class="proj-meta">${L((p.readings||[]).length+' 次占卜',(p.readings||[]).length+' reading(s)')}</div></div>
+        <div class="proj-arrow">＋</div>
+      </button>`).join('')
+    : `<p style="color:var(--muted);font-size:.84rem">${L('還沒有專案，在下面開一個','No projects yet — start one below')}</p>`;
+  document.getElementById('addproj-name').value = '';
+  document.getElementById('addproj-modal').classList.add('on');
+}
+function closeAddToProject() {
+  addProjReadingId = null;
+  document.getElementById('addproj-modal').classList.remove('on');
+  if (typeof resetViewport === 'function') resetViewport();
+}
+function addReadingToProject(projId) {
+  const rid = addProjReadingId;
+  const proj = S.projects.find(p => p.id === projId);
+  const rec = sanitizeRec(safeParse('tr_full','[]').find(r => r && r.id === rid));
+  if (!proj || !rec) { closeAddToProject(); return; }
+  if (!proj.readings.some(r => r.id === rid)) {
+    proj.readings.push(rec);
+    proj.readings.sort((a,b) => (a.id||0) - (b.id||0)); // 時間軸照占卜時間排，跟雲端合併後的順序一致
+    saveProjects();
+    syncPush();
+  }
+  closeAddToProject();
+  const cur = document.querySelector('.screen.on');
+  if (cur && cur.id === 's-history') renderHistList();
+  toast(LANG==='en'?`✦ Added to project "${proj.name}"`:`✦ 已加入專案「${proj.name}」`);
+}
+function addToNewProject() {
+  const name = document.getElementById('addproj-name').value.trim();
+  if (!name) { toast(L('請輸入專案名稱','Please enter a project name')); return; }
+  const proj = {
+    id: Date.now(), name: name.slice(0, 40), desc: '', color: PROJ_COLORS[4],
+    createdAt: new Date().toLocaleDateString(LANG==='en'?'en-US':'zh-TW'),
+    readings: []
+  };
+  S.projects.unshift(proj);
+  addReadingToProject(proj.id);
+}
+// 解牌畫面的「加入專案」：這次占卜還沒存就先存一筆，再選專案
+function addCurrentToProject() {
+  if (!S.picked || !S.picked.length) return;
+  const active = getActiveProject();
+  if (active) { saveReading(true); toast(LANG==='en'?`Already in project "${active.name}"`:`這次占卜已經在專案「${active.name}」裡了`); return; }
+  if (!S.currentReadingId || !safeParse('tr_full','[]').some(r => r && r.id === S.currentReadingId)) saveReading(true, true);
+  const inP = projectsOfReading(S.currentReadingId);
+  if (inP.length) { toast(LANG==='en'?`Already in project "${inP[0].name}"`:`這次占卜已經在專案「${inP[0].name}」裡了`); return; }
+  openAddToProject(S.currentReadingId);
 }
 
 // ══════════════════════════════════════════
@@ -2873,7 +2956,11 @@ function renderHistList(){
         const chatBtn=(canAI && full.interp && usedT<CHAT_LIMIT)
           ? `<button class="btn btn-sm" style="margin:0" onclick="resumeChat(${r.id})">${L(`💬 繼續追問（還剩 ${CHAT_LIMIT-usedT} 次）`,`💬 Continue asking (${CHAT_LIMIT-usedT} left)`)}</button>` : '';
         const aiBtn = canAI ? `<button class="btn btn-sm btn-ghost" style="margin:0" onclick="analyzeWithAI(${r.id})">${full.interp?L('🔄 用 AI 重新解析','🔄 Re-analyze with AI'):L('✦ 用 AI 解析這次占卜','✦ Analyze with AI')}</button>` : '';
-        const btnRow=(chatBtn||aiBtn)?`<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">${chatBtn}${aiBtn}</div>`:'';
+        // 已在專案裡的標出是哪個專案（點了去看）；還沒有的給「加入專案」
+        const inProj=projectsOfReading(r.id);
+        const projTag=inProj.length?`<div style="margin-top:7px;font-size:.74rem;color:var(--muted)">📁 ${L('專案：','Project: ')}${inProj.map(p=>`<a href="javascript:void(0)" onclick="viewProject(${p.id})" style="color:var(--gold);text-decoration:none;border-bottom:1px dashed rgba(212,175,55,.4)">${escHtml(p.name)}</a>`).join(L('、',', '))}</div>`:'';
+        const projBtn=(canAI && !inProj.length)?`<button class="btn btn-sm btn-ghost" style="margin:0" onclick="openAddToProject(${r.id})">${L('📁 加入專案','📁 Add to project')}</button>`:'';
+        const btnRow=(chatBtn||aiBtn||projBtn)?`<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">${chatBtn}${aiBtn}${projBtn}</div>`:'';
         const interpHtml=full.interp?`<div style="margin-top:10px;font-size:.82rem;color:var(--muted);line-height:1.7;border-top:1px solid rgba(212,175,55,.12);padding-top:10px">${escHtml(full.interp).replace(/\n/g,'<br>')}</div>`:'';
         const chatHtml=(full.chat&&full.chat.length)?`<div style="margin-top:10px;border-top:1px solid rgba(212,175,55,.1);padding-top:10px">${full.chat.map(m=>m.role==='user'?`<div style="font-size:.78rem;color:var(--gold);margin-bottom:4px">▶ ${escHtml(m.text)}</div>`:`<div style="font-size:.78rem;color:var(--muted);margin-bottom:8px;line-height:1.6">${escHtml(m.text).replace(/\n/g,'<br>')}</div>`).join('')}</div>`:'';
         return `<div style="border:1px solid rgba(212,175,55,.18);background:rgba(42,22,96,.18);padding:18px 20px;margin-bottom:12px;position:relative">
@@ -2884,7 +2971,7 @@ function renderHistList(){
           <div style="font-size:.72rem;color:var(--muted);margin-bottom:5px;padding-right:30px">${r.date} · ${r.spread}</div>
           <div style="font-size:.92rem;color:var(--white)">「${escHtml(r.q)}」</div>
           <div style="font-size:.78rem;color:var(--gold);margin-top:7px">${r.cards.map(c=>`${c.name}${c.rev?'↓':''}`).join(' · ')}</div>
-          ${interpHtml}${chatHtml}${btnRow}
+          ${projTag}${interpHtml}${chatHtml}${btnRow}
         </div>`;
       }).join('')
       + `<div style="text-align:center;margin-top:18px">
@@ -3291,7 +3378,7 @@ async function submitReport(){
 }
 // 一次性公告（沒看過的人會看到一次，關閉後不再跳；要發新公告換新的 ANNOUNCE_ID 即可）
 // 注意：App 內瀏覽器（LINE/FB）可能每次清除儲存，這類用戶每次開啟仍會視為「第一次」看到一次
-const ANNOUNCE_ID = '2026-11-19-resend-copy';
+const ANNOUNCE_ID = '2026-11-19-add-to-project';
 const ANNOUNCE_EXPIRES = new Date('2027-01-31T00:00:00'); // 到期日：讓第一次來的訪客持續看得到
 // 儲存三層備援：localStorage（跨次）→ sessionStorage（LINE/FB 等 App 內瀏覽器常清 localStorage）
 // → 記憶體（隱私模式下兩者都可能不可用），確保同一次瀏覽絕不重複跳出
@@ -3449,8 +3536,8 @@ function toggleAiInfo(){
 // ══════════════════════════════════════════
 const CHANGELOG = [
   { date:'2026-11-19',
-    zh:['占卜結果多了「複製全文」：問題、抽到的牌、整體解讀和追問的一問一答一次複製；每則追問回答下面也有「複製這則」','追問失敗時，錯誤訊息下面多一顆「重送」，按了直接用同一句再問一次，不用複製貼上','問公司、上班、離職這類職場問題，主題判斷比以前準，單牌解析多半會聚焦在「事業」的牌義；以前題目裡沒寫到「工作」「事業」又剛好有「他／她」，會被當成感情題'],
-    en:['Readings now have "Copy full reading": the question, cards, overall reading and every follow-up in one copy; each follow-up answer also has its own Copy button','When a follow-up fails, the error message now has a "Resend" button that asks the same question again — no more copy and paste','Workplace questions (a company, a job, resigning) are recognised better, so the card-by-card reading usually focuses on the "career" meanings; previously, a question without the word "work" or "career" that mentioned "he/she" was treated as a love question'] },
+    zh:['單獨占卜可以事後「加入專案」：解讀頁最下面和「占卜記錄」的每一筆都有「加入專案」，選既有專案或當場開新的；牌、解讀和追問原樣放進專案，不用重抽。已經在專案裡的記錄會標出是哪個專案','上方多了「⌂ 首頁」：看完解讀或翻記錄翻到很下面，不用滑到最底，左上角一按就回首頁','占卜結果多了「複製全文」：問題、抽到的牌、整體解讀和追問的一問一答一次複製；每則追問回答下面也有「複製這則」','追問失敗時，錯誤訊息下面多一顆「重送」，按了直接用同一句再問一次，不用複製貼上','問公司、上班、離職這類職場問題，主題判斷比以前準，單牌解析多半會聚焦在「事業」的牌義；以前題目裡沒寫到「工作」「事業」又剛好有「他／她」，會被當成感情題'],
+    en:['Add a reading to a project afterwards: "Add to Project" is at the bottom of the reading and on every entry in History — pick an existing project or start a new one. The cards, reading and follow-ups move in as they are, no redraw. Entries already in a project show which one','New "⌂ Home" button at the top: after a long reading or deep in History, one tap on the top-left takes you home — no scrolling to the bottom','Readings now have "Copy full reading": the question, cards, overall reading and every follow-up in one copy; each follow-up answer also has its own Copy button','When a follow-up fails, the error message now has a "Resend" button that asks the same question again — no more copy and paste','Workplace questions (a company, a job, resigning) are recognised better, so the card-by-card reading usually focuses on the "career" meanings; previously, a question without the word "work" or "career" that mentioned "he/she" was treated as a love question'] },
   { date:'2026-11-15',
     zh:['訂閱解鎖改成「Email 收驗證碼」登入：以前只要知道你的 email 就能用你的額度、看你的雲端占卜記錄，現在要收到信裡的 6 位數驗證碼才行。已驗證過的用戶會被請求再驗證一次，之後同一台裝置半年內不用再驗','Gumroad 付款完成自動轉回本站時照樣直接解鎖，不用再收驗證信'],
     en:['Subscriber unlock now signs in with an emailed code: previously anyone who knew your email could use your quota and read your cloud readings; now the 6-digit code from your inbox is required. Already-verified users will be asked to verify once more, then the device stays signed in for 6 months','Returning from Gumroad checkout still unlocks automatically — no code needed'] },
