@@ -9,3 +9,4 @@
 
 - 主程式在 `app.js`，由 `index.html` 的載入器以 `app.js?v=<版本>` 載入（onload/onerror 事件把關、自動重試）。
 - **修改 `app.js` 後，務必同步 bump `index.html` 載入器中的 `?v=` 版本字串與頁尾版本號**，否則用戶會拿到舊快取。
+- **使用者看得到的更新，開站公告也要一起換**（2026-11-19）：`app.js` 的 `ANNOUNCE_ID` 換新值（看過舊公告的人才會再看到一次）、`ann.title`／`ann.body` 中英一起改、`ANNOUNCE_EXPIRES` 往後延；`CHANGELOG` 照樣加一條。公告沒換，新訪客會一直看到舊消息。
