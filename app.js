@@ -1068,24 +1068,31 @@ function addToNewProject() {
   S.projects.unshift(proj);
   addReadingToProject(proj.id);
 }
+const HIST_MAX = 60; // 占卜記錄保存筆數上限（saveReading、雲端合併都是 60）
 // 從專案移出：占卜本身留在「占卜記錄」，只是不再算在這個專案裡
 function removeFromProject(projId, rid) {
   const proj = S.projects.find(p => p.id === projId);
   if (!proj) return;
   const rec = proj.readings.find(r => r.id === rid);
   if (!rec) return;
-  if (!confirm(L('把這次占卜移出專案？占卜本身會留在「占卜記錄」裡。','Remove this reading from the project? The reading itself stays in History.'))) return;
-  // 占卜記錄裡已經沒有這筆（被刪掉或超過保存筆數）→ 先放回去，移出才不會變成整筆不見
+  // 占卜記錄只留最近 60 筆。這筆不在記錄裡、記錄又滿了 → 放不回去，移出就等於刪掉，要先講清楚
   let fullRecs = safeParse('tr_full','[]');
-  if (!fullRecs.some(r => r && r.id === rid)) {
-    fullRecs.push(rec); fullRecs.sort((a,b) => (b.id||0) - (a.id||0));
-    localStorage.setItem('tr_full', JSON.stringify(fullRecs.slice(0, 60)));
-  }
-  if (!S.readings.some(r => r.id === rid)) {
-    S.readings.push({id: rid, date: rec.date, q: rec.q, spread: rec.spread, cards: (rec.cards||[]).map((c,i) => ({name: cardName(c.cid), pos: (rec.pos||[])[i], rev: c.rev}))});
-    S.readings.sort((a,b) => (b.id||0) - (a.id||0));
-    S.readings = S.readings.slice(0, 60);
-    localStorage.setItem('tr_readings', JSON.stringify(S.readings));
+  const inHistory = fullRecs.some(r => r && r.id === rid) && S.readings.some(r => r.id === rid);
+  const canRestore = inHistory || (fullRecs.length < HIST_MAX && S.readings.length < HIST_MAX);
+  if (!confirm(canRestore
+    ? L('把這次占卜移出專案？占卜本身會留在「占卜記錄」裡。','Remove this reading from the project? The reading itself stays in History.')
+    : L('「占卜記錄」只留最近 60 筆，已經滿了，這次占卜放不回去。移出專案後它會整筆消失，確定要移出嗎？','History only keeps the latest 60 readings and is full, so this one cannot go back there. Removing it from the project deletes it for good — continue?'))) return;
+  if (canRestore && !inHistory) {
+    // 占卜記錄裡沒有這筆（之前被刪掉）→ 先放回去，移出才不會變成整筆不見
+    if (!fullRecs.some(r => r && r.id === rid)) {
+      fullRecs.push(rec); fullRecs.sort((a,b) => (b.id||0) - (a.id||0));
+      localStorage.setItem('tr_full', JSON.stringify(fullRecs));
+    }
+    if (!S.readings.some(r => r.id === rid)) {
+      S.readings.push({id: rid, date: rec.date, q: rec.q, spread: rec.spread, cards: (rec.cards||[]).map((c,i) => ({name: cardName(c.cid), pos: (rec.pos||[])[i], rev: c.rev}))});
+      S.readings.sort((a,b) => (b.id||0) - (a.id||0));
+      localStorage.setItem('tr_readings', JSON.stringify(S.readings));
+    }
   }
   proj.readings = proj.readings.filter(r => r.id !== rid);
   proj.mv = proj.mv || {}; proj.mv[rid] = {t: Date.now(), in: 0};
@@ -1094,7 +1101,7 @@ function removeFromProject(projId, rid) {
   const y = window.scrollY;
   viewProject(projId);
   window.scrollTo(0, y);
-  toast(L('✦ 已移出專案，占卜還在「占卜記錄」裡','✦ Removed from the project — the reading is still in History'));
+  toast(canRestore ? L('✦ 已移出專案，占卜還在「占卜記錄」裡','✦ Removed from the project — the reading is still in History') : L('✦ 已移出專案','✦ Removed from the project'));
 }
 // 解牌畫面的「加入專案」：這次占卜還沒存就先存一筆，再選專案
 function addCurrentToProject() {
@@ -2932,7 +2939,7 @@ function saveReading(silent, skipProject, st=S){ // st：預設存目前這局�
     const proj = S.projects.find(p => p.id === st.activeProjectId) || null;
     if(proj){
       if(!proj.readings.some(r=>r.id===id) && !projRemoved(proj, id)){ proj.readings.push(rec); saveProjects(); } // 手動移出過的不自動加回去
-      if(!silent) toast(LANG==='en'?`✦ Saved to project "${proj.name}"`:`✦ 已儲存至專案「${proj.name}」`);
+      if(!silent) toast(proj.readings.some(r=>r.id===id) ? (LANG==='en'?`✦ Saved to project "${proj.name}"`:`✦ 已儲存至專案「${proj.name}」`) : L('✦ 占卜記錄已儲存','✦ Reading saved'));
     } else if(!silent){
       toast(L('✦ 占卜記錄已儲存','✦ Reading saved'));
     }
@@ -3199,6 +3206,8 @@ async function syncPush(){
   }catch(e){/* 靜默失敗，本地仍保留 */}
 }
 // 專案的 mv：{占卜 id: {t: 時間, in: 1 加入／0 移出}}，只記使用者手動加入、移出的動作
+// 兩個動作誰算數：時間新的贏；時間一樣時「移出」贏（跟誰先誰後合併無關，兩台算出來一樣）
+function mvWins(a, b){ const ta=+a.t||0, tb=+b.t||0; if(ta!==tb) return ta>tb; return !a.in && !!b.in; }
 function projRemoved(p, rid){ const m=p && p.mv && p.mv[rid]; return !!m && !m.in; }
 // 一筆記錄的內容指紋（問題、牌、解讀、追問）：用來判斷存檔時內容有沒有變
 function recContentKey(r){
@@ -3226,7 +3235,7 @@ function mergeProjects(local, cloud){
     } else {
       const tgt=map[p.id];
       // 加入／移出紀錄：同一筆留時間比較新的那次動作
-      Object.keys(p.mv||{}).forEach(k=>{ const a=p.mv[k], b=tgt.mv[k]; if(a && (!b || (+a.t||0)>=(+b.t||0))) tgt.mv[k]=a; });
+      Object.keys(p.mv||{}).forEach(k=>{ const a=p.mv[k], b=tgt.mv[k]; if(a && (!b || mvWins(a, b))) tgt.mv[k]=a; });
       recs.forEach(r=>{
         const i=tgt.readings.findIndex(x=>x.id===r.id);
         if(i<0) tgt.readings.push(r);
@@ -3619,8 +3628,8 @@ function toggleAiInfo(){
 // ══════════════════════════════════════════
 const CHANGELOG = [
   { date:'2026-11-19',
-    zh:['單獨占卜可以事後「加入專案」：解讀頁最下面和「占卜記錄」裡還沒進專案的記錄都有「加入專案」，選既有專案或當場開新的；牌、解讀和追問原樣放進專案，不用重抽。已經在專案裡的記錄會標出是哪個專案','放錯專案可以「移出專案」：進專案後每一筆右上角都有，移出後占卜本身還留在「占卜記錄」，可以再加到別的專案','上方多了「⌂ 首頁」：看完解讀或翻記錄翻到很下面，不用滑到最底，左上角一按就回首頁','占卜結果多了「複製全文」：問題、抽到的牌、整體解讀和追問的一問一答一次複製；每則追問回答下面也有「複製這則」','追問失敗時，錯誤訊息下面多一顆「重送」，按了直接用同一句再問一次，不用複製貼上','問公司、上班、離職這類職場問題，主題判斷比以前準，單牌解析多半會聚焦在「事業」的牌義；以前題目裡沒寫到「工作」「事業」又剛好有「他／她」，會被當成感情題'],
-    en:['Add a reading to a project afterwards: "Add to Project" is at the bottom of the reading and on History entries that are not in a project yet — pick an existing project or start a new one. The cards, reading and follow-ups move in as they are, no redraw. Entries already in a project show which one','Put a reading in the wrong project? Each entry inside a project now has "Remove" — the reading itself stays in History and can be added to another project','New "⌂ Home" button at the top: after a long reading or deep in History, one tap on the top-left takes you home — no scrolling to the bottom','Readings now have "Copy full reading": the question, cards, overall reading and every follow-up in one copy; each follow-up answer also has its own Copy button','When a follow-up fails, the error message now has a "Resend" button that asks the same question again — no more copy and paste','Workplace questions (a company, a job, resigning) are recognised better, so the card-by-card reading usually focuses on the "career" meanings; previously, a question without the word "work" or "career" that mentioned "he/she" was treated as a love question'] },
+    zh:['單獨占卜可以事後「加入專案」：解讀頁最下面和「占卜記錄」裡還沒進專案的記錄都有「加入專案」，選既有專案或當場開新的；牌、解讀和追問原樣放進專案，不用重抽。已經在專案裡的記錄會標出是哪個專案','放錯專案可以「移出專案」：進專案後每一筆右上角都有，移出後占卜本身還留在「占卜記錄」，可以再加到別的專案（占卜記錄滿 60 筆又放不回去時，會先跟你確認）','上方多了「⌂ 首頁」：看完解讀或翻記錄翻到很下面，不用滑到最底，左上角一按就回首頁','占卜結果多了「複製全文」：問題、抽到的牌、整體解讀和追問的一問一答一次複製；每則追問回答下面也有「複製這則」','追問失敗時，錯誤訊息下面多一顆「重送」，按了直接用同一句再問一次，不用複製貼上','問公司、上班、離職這類職場問題，主題判斷比以前準，單牌解析多半會聚焦在「事業」的牌義；以前題目裡沒寫到「工作」「事業」又剛好有「他／她」，會被當成感情題'],
+    en:['Add a reading to a project afterwards: "Add to Project" is at the bottom of the reading and on History entries that are not in a project yet — pick an existing project or start a new one. The cards, reading and follow-ups move in as they are, no redraw. Entries already in a project show which one','Put a reading in the wrong project? Each entry inside a project now has "Remove" — the reading itself stays in History and can be added to another project (if History is full at 60 and it cannot go back, you are asked first)','New "⌂ Home" button at the top: after a long reading or deep in History, one tap on the top-left takes you home — no scrolling to the bottom','Readings now have "Copy full reading": the question, cards, overall reading and every follow-up in one copy; each follow-up answer also has its own Copy button','When a follow-up fails, the error message now has a "Resend" button that asks the same question again — no more copy and paste','Workplace questions (a company, a job, resigning) are recognised better, so the card-by-card reading usually focuses on the "career" meanings; previously, a question without the word "work" or "career" that mentioned "he/she" was treated as a love question'] },
   { date:'2026-11-15',
     zh:['訂閱解鎖改成「Email 收驗證碼」登入：以前只要知道你的 email 就能用你的額度、看你的雲端占卜記錄，現在要收到信裡的 6 位數驗證碼才行。已驗證過的用戶會被請求再驗證一次，之後同一台裝置半年內不用再驗','Gumroad 付款完成自動轉回本站時照樣直接解鎖，不用再收驗證信'],
     en:['Subscriber unlock now signs in with an emailed code: previously anyone who knew your email could use your quota and read your cloud readings; now the 6-digit code from your inbox is required. Already-verified users will be asked to verify once more, then the device stays signed in for 6 months','Returning from Gumroad checkout still unlocks automatically — no code needed'] },

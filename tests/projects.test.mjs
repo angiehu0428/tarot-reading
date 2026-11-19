@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 const src = readFileSync(new URL('../app.js', import.meta.url), 'utf8');
 const cut = (from, to) => src.slice(src.indexOf(from), src.indexOf(to));
 const endSan = src.indexOf('\n', src.indexOf('function sanitizeRecs('));
-const body = src.slice(src.indexOf('function sanitizeRec('), endSan) + '\n' + cut('function projRemoved(', 'async function syncPull');
+const body = src.slice(src.indexOf('function sanitizeRec('), endSan) + '\n' + cut('function mvWins(', 'async function syncPull');
 const { mergeProjects, recContentKey } = new Function(body + '; return { mergeProjects, recContentKey };')();
 
 const rec = (id, interp = '', chat = []) => ({ id, q: 'q', cards: [{ cid: 0, rev: false }], pos: [], interp, chat });
@@ -108,4 +108,21 @@ test('沒有 mv 的舊專案照舊聯集，也不會長出空的 mv', () => {
   const out = mergeProjects([proj(1, [rec(10, 'a')])], [proj(1, [rec(11, 'b')])]);
   assert.equal(out[0].readings.length, 2);
   assert.equal('mv' in out[0], false);
+});
+
+test('同一毫秒一台加入、一台移出 → 兩個方向合併結果一樣（移出算數）', () => {
+  const added = projMv(1, [rec(10, 'a')], { 10: { t: 2000, in: 1 } });
+  const removed = projMv(1, [], { 10: { t: 2000, in: 0 } });
+  const x = mergeProjects([added], [removed])[0], y = mergeProjects([removed], [added])[0];
+  assert.equal(x.readings.length, 0);
+  assert.equal(y.readings.length, 0);
+  assert.deepEqual(x.mv, y.mv);
+});
+
+test('舊版頁面把沒有 mv、還含那筆占卜的專案整份蓋上雲端 → 移出過的裝置再同步，照樣濾掉並保住 mv', () => {
+  const mine = projMv(1, [rec(11, 'b')], { 10: { t: 2000, in: 0 } });
+  const overwrittenCloud = proj(1, [rec(10, 'a'), rec(11, 'b')]); // 舊版推上來的，沒有 mv
+  const out = mergeProjects([mine], [overwrittenCloud])[0];
+  assert.deepEqual(out.readings.map(r => r.id), [11]);
+  assert.deepEqual(out.mv, { 10: { t: 2000, in: 0 } });
 });
