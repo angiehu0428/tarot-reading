@@ -3150,6 +3150,15 @@ async function syncPush(){
     if(r&&r.ok) localStorage.setItem('tr_last_sync', new Date().toISOString());
   }catch(e){/* 靜默失敗，本地仍保留 */}
 }
+// 同一筆占卜兩邊都有時留內容比較完整的：有解讀 > 追問多 > 解讀長；一樣就留後來的（本機）
+// （單獨占卜可能在 AI 還沒回來時就加入專案，另一台會先拿到空解讀的副本，不能讓它蓋掉完整的）
+function recRicher(a, b){
+  const sc=r=>[(r.interp?1:0), (r.chat||[]).length, (r.interp||'').length];
+  const x=sc(a), y=sc(b);
+  for(let i=0;i<3;i++){ if(x[i]!==y[i]) return x[i]>y[i]; }
+  return true;
+}
+function projReadingCount(arr){ return (Array.isArray(arr)?arr:[]).reduce((n,p)=>n+((p&&Array.isArray(p.readings))?p.readings.length:0),0); }
 // 專案合併：cloud 先、local 後（同 id 時 local 的名稱/描述/顏色優先），readings 依 id 聯集
 function mergeProjects(local, cloud){
   const map={};
@@ -3160,8 +3169,11 @@ function mergeProjects(local, cloud){
       map[p.id]={...p, readings:recs};
     } else {
       const tgt=map[p.id];
-      const have=new Set(tgt.readings.map(r=>r.id));
-      recs.forEach(r=>{ if(!have.has(r.id)){ tgt.readings.push(r); have.add(r.id); } });
+      recs.forEach(r=>{
+        const i=tgt.readings.findIndex(x=>x.id===r.id);
+        if(i<0) tgt.readings.push(r);
+        else if(recRicher(r, tgt.readings[i])) tgt.readings[i]=r;
+      });
       if(p.name) tgt.name=p.name;
       if(p.desc!=null) tgt.desc=p.desc;
       if(p.color) tgt.color=p.color;
@@ -3189,13 +3201,15 @@ async function syncPull(){
     localStorage.setItem('tr_readings',JSON.stringify(S.readings));
     localStorage.setItem('tr_full',JSON.stringify(mergedFull));
     // 專案同步合併：以專案 id 聯集；同 id 時名稱/顏色以本機為準，各自的占卜記錄以 id 聯集
-    const beforeP=S.projects.length;
+    const beforeP=S.projects.length, beforePR=projReadingCount(S.projects);
     S.projects=mergeProjects(S.projects, cloud.projects||[]);
     saveProjects();
+    // 專案內容跟雲端不一樣（含專案裡多了占卜、或同一筆本機比較完整）→ 也要推回，另一台才收得到完整的聯集
+    const projDiffers=JSON.stringify(mergeProjects([], cloud.projects||[]))!==JSON.stringify(S.projects);
     // 本地有、雲端還沒有的記錄 → 推回讓雲端收斂（另一台裝置下次才拉得到）
-    if(S.readings.length>cloud.readings.length || mergedFull.length>(cloud.full||[]).length || S.projects.length>(cloud.projects||[]).length) syncPush();
+    if(S.readings.length>cloud.readings.length || mergedFull.length>(cloud.full||[]).length || S.projects.length>(cloud.projects||[]).length || projDiffers) syncPush();
     // 本地因雲端而新增 → 回報 true，供呼叫端重繪 / 提示（無新增則免重繪）
-    return S.readings.length>beforeR || mergedFull.length>localFull.length || S.projects.length>beforeP;
+    return S.readings.length>beforeR || mergedFull.length>localFull.length || S.projects.length>beforeP || projReadingCount(S.projects)>beforePR;
   }catch(e){return false;}
 }
 // 手動同步：明確上傳 + 拉回合併，並回報結果（讓使用者看得到同步有在運作）
@@ -3379,7 +3393,7 @@ async function submitReport(){
 // 一次性公告（沒看過的人會看到一次，關閉後不再跳；要發新公告換新的 ANNOUNCE_ID 即可）
 // 注意：App 內瀏覽器（LINE/FB）可能每次清除儲存，這類用戶每次開啟仍會視為「第一次」看到一次
 const ANNOUNCE_ID = '2026-11-19-add-to-project';
-const ANNOUNCE_EXPIRES = new Date('2027-01-31T00:00:00'); // 到期日：讓第一次來的訪客持續看得到
+const ANNOUNCE_EXPIRES = new Date('2027-02-28T00:00:00'); // 到期日：讓第一次來的訪客持續看得到
 // 儲存三層備援：localStorage（跨次）→ sessionStorage（LINE/FB 等 App 內瀏覽器常清 localStorage）
 // → 記憶體（隱私模式下兩者都可能不可用），確保同一次瀏覽絕不重複跳出
 let announceSeen=false;
@@ -3536,8 +3550,8 @@ function toggleAiInfo(){
 // ══════════════════════════════════════════
 const CHANGELOG = [
   { date:'2026-11-19',
-    zh:['單獨占卜可以事後「加入專案」：解讀頁最下面和「占卜記錄」的每一筆都有「加入專案」，選既有專案或當場開新的；牌、解讀和追問原樣放進專案，不用重抽。已經在專案裡的記錄會標出是哪個專案','上方多了「⌂ 首頁」：看完解讀或翻記錄翻到很下面，不用滑到最底，左上角一按就回首頁','占卜結果多了「複製全文」：問題、抽到的牌、整體解讀和追問的一問一答一次複製；每則追問回答下面也有「複製這則」','追問失敗時，錯誤訊息下面多一顆「重送」，按了直接用同一句再問一次，不用複製貼上','問公司、上班、離職這類職場問題，主題判斷比以前準，單牌解析多半會聚焦在「事業」的牌義；以前題目裡沒寫到「工作」「事業」又剛好有「他／她」，會被當成感情題'],
-    en:['Add a reading to a project afterwards: "Add to Project" is at the bottom of the reading and on every entry in History — pick an existing project or start a new one. The cards, reading and follow-ups move in as they are, no redraw. Entries already in a project show which one','New "⌂ Home" button at the top: after a long reading or deep in History, one tap on the top-left takes you home — no scrolling to the bottom','Readings now have "Copy full reading": the question, cards, overall reading and every follow-up in one copy; each follow-up answer also has its own Copy button','When a follow-up fails, the error message now has a "Resend" button that asks the same question again — no more copy and paste','Workplace questions (a company, a job, resigning) are recognised better, so the card-by-card reading usually focuses on the "career" meanings; previously, a question without the word "work" or "career" that mentioned "he/she" was treated as a love question'] },
+    zh:['單獨占卜可以事後「加入專案」：解讀頁最下面和「占卜記錄」裡還沒進專案的記錄都有「加入專案」，選既有專案或當場開新的；牌、解讀和追問原樣放進專案，不用重抽。已經在專案裡的記錄會標出是哪個專案','上方多了「⌂ 首頁」：看完解讀或翻記錄翻到很下面，不用滑到最底，左上角一按就回首頁','占卜結果多了「複製全文」：問題、抽到的牌、整體解讀和追問的一問一答一次複製；每則追問回答下面也有「複製這則」','追問失敗時，錯誤訊息下面多一顆「重送」，按了直接用同一句再問一次，不用複製貼上','問公司、上班、離職這類職場問題，主題判斷比以前準，單牌解析多半會聚焦在「事業」的牌義；以前題目裡沒寫到「工作」「事業」又剛好有「他／她」，會被當成感情題'],
+    en:['Add a reading to a project afterwards: "Add to Project" is at the bottom of the reading and on History entries that are not in a project yet — pick an existing project or start a new one. The cards, reading and follow-ups move in as they are, no redraw. Entries already in a project show which one','New "⌂ Home" button at the top: after a long reading or deep in History, one tap on the top-left takes you home — no scrolling to the bottom','Readings now have "Copy full reading": the question, cards, overall reading and every follow-up in one copy; each follow-up answer also has its own Copy button','When a follow-up fails, the error message now has a "Resend" button that asks the same question again — no more copy and paste','Workplace questions (a company, a job, resigning) are recognised better, so the card-by-card reading usually focuses on the "career" meanings; previously, a question without the word "work" or "career" that mentioned "he/she" was treated as a love question'] },
   { date:'2026-11-15',
     zh:['訂閱解鎖改成「Email 收驗證碼」登入：以前只要知道你的 email 就能用你的額度、看你的雲端占卜記錄，現在要收到信裡的 6 位數驗證碼才行。已驗證過的用戶會被請求再驗證一次，之後同一台裝置半年內不用再驗','Gumroad 付款完成自動轉回本站時照樣直接解鎖，不用再收驗證信'],
     en:['Subscriber unlock now signs in with an emailed code: previously anyone who knew your email could use your quota and read your cloud readings; now the 6-digit code from your inbox is required. Already-verified users will be asked to verify once more, then the device stays signed in for 6 months','Returning from Gumroad checkout still unlocks automatically — no code needed'] },
