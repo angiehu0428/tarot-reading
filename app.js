@@ -256,6 +256,7 @@ Object.assign(T, {
   'report.title':{zh:'🐞 回報問題',en:'🐞 Report a Problem'},
   'report.desc':{zh:'遇到問題或有建議嗎？把情況描述寄到下面這個信箱，我會盡快處理 🙏',en:'Hit a problem or have a suggestion? Email the details to the address below and I\'ll get on it 🙏'},
   'report.copy':{zh:'複製',en:'Copy'},
+  'rd.copyall':{zh:'複製全文',en:'Copy full reading'},
   'report.mail':{zh:'開啟郵件 App 寄出',en:'Open mail app'},
   // ── Spread select ──
   'sp.title':{zh:'選擇牌陣',en:'Choose a Spread'},
@@ -1344,11 +1345,19 @@ function saveStale(snap, add){
   const msgs=add.msgs||[];
   // 以訊息 id upsert（等待期間手動存檔可能已存過問題；失敗時要把 failed 帶過去，才不會被算進追問次數）
   const upsert=(arr,m)=>{ const x=arr.find(x=>x===m||(m.mid&&x.mid===m.mid)); if(!x) arr.push(m); else if(x!==m) Object.assign(x,m); };
+  // add.drop：重送時被取代的舊失敗問答，從最新記錄裡拿掉（有 mid 比 mid；舊記錄沒 mid 就比「失敗＋同角色＋同文字」，取最後一筆）
+  const drop=(arr,m)=>{
+    let i=arr.findIndex(x=>x===m||(m.mid&&x.mid===m.mid));
+    if(i<0&&!m.mid) for(let k=arr.length-1;k>=0;k--){ const x=arr[k]; if(x.failed&&x.role===m.role&&x.text===m.text){ i=k; break; } }
+    if(i>=0) arr.splice(i,1);
+  };
+  (add.drop||[]).forEach(m=>drop(st.chatHistory,m));
   msgs.forEach(m=>upsert(st.chatHistory,m));
   // 同一筆正開在畫面上：記憶體裡的對話也補上，不然下次存檔又把它蓋掉
   const open=document.querySelector('.screen.on');
   if(S.currentReadingId===id && open && open.id==='s-reading'){
     if(!S.chatHistory) S.chatHistory=[];
+    (add.drop||[]).forEach(m=>drop(S.chatHistory,m));
     msgs.forEach(m=>upsert(S.chatHistory,m));
     updateChatRemaining();
     if(st.lastInterpText!==(cur.interp||'')) S.lastInterpText=st.lastInterpText;
@@ -2525,9 +2534,11 @@ function autoGrowChat(el){
   el.style.height='auto';
   el.style.height=Math.min(el.scrollHeight,120)+'px';
 }
-async function sendChat(){
+// resendText：按「重送」時帶進來的原句（不動輸入框裡還沒送出的草稿）
+async function sendChat(resendText){
   const input=document.getElementById('chat-input');
-  const q=input.value.trim().replace(/[<>]/g,'');
+  const resend=typeof resendText==='string';
+  const q=(resend?resendText:input.value).trim().replace(/[<>]/g,'');
   if(!q)return;
   const key=getApiKey();
   const proxyEmail=isVerified()?getVerifiedEmail():null;
@@ -2548,6 +2559,7 @@ async function sendChat(){
   }
   // 付費 AI 暫停中（且無自備 key）→ 不呼叫，回覆暫停訊息
   if(AI_PAUSED && proxyEmail && !key){
+    if(resend){ toast(L('AI 解牌暫停服務中，請稍後再試 🙏','AI readings are paused — please try again later 🙏')); return; }
     input.value=''; input.style.height='auto';
     if(!S.chatHistory) S.chatHistory=[];
     S.chatHistory.push({role:'user',text:q,failed:true});
@@ -2556,12 +2568,21 @@ async function sendChat(){
     if(S.currentReadingId) saveReading(true, true); // 追問也即時入檔，網頁重整不遺失
     return;
   }
-  input.value=''; input.style.height='auto';
   if(!S.chatHistory) S.chatHistory=[];
+  let retried=null, resendKey=null;
+  if(resend){
+    // 失敗的那一問一答先只是「畫面上藏起來」，等這次有結果（成功或再失敗）才真的拿掉、跟新的一起存檔。
+    // 中途重新整理／關掉：存檔沒動過，舊的失敗訊息和重送鈕都還在，問題不會不見
+    if(chatResendText()!==resendText) return;
+    retried=S.chatHistory.slice(-2);
+    retried.forEach(m=>CHAT_RETRYING.add(m));
+    resendKey=chatResendKey(resendText); CHAT_RESENDING.add(resendKey);
+  } else { input.value=''; input.style.height='auto'; }
   const mid=Date.now()+'-'+Math.random().toString(36).slice(2,8);
   const userMsg={role:'user',text:q,mid};
   let ansMsg=null;
   S.chatHistory.push(userMsg);
+  if(retried) CHAT_PENDING.add(userMsg);
   renderChat();
   const snap=readingSnap(); // 等回答時使用者可能已去占下一題（或重開同一筆）：回答只併進這局
   const msgsEl=document.getElementById('chat-msgs');
@@ -2624,19 +2645,80 @@ async function sendChat(){
       text:L('抱歉，發生錯誤：','Sorry, an error occurred: ')+friendlyApiErr(e.message)
         +L('（這次不計入追問次數，可以再試一次）',' (this attempt doesn\'t count toward your limit — feel free to retry)')});
   }
+  CHAT_PENDING.delete(userMsg);
+  if(resendKey) CHAT_RESENDING.delete(resendKey);
+  if(retried) retried.forEach(m=>{ CHAT_RETRYING.delete(m); const i=snap.chatHistory.indexOf(m); if(i>=0) snap.chatHistory.splice(i,1); });
   if(!isCurrentReading(snap)){
-    if(snap.currentReadingId) saveStale(snap, {msgs:[userMsg, ansMsg].filter(Boolean)}); // 只併這次的一問一答
+    if(snap.currentReadingId) saveStale(snap, {msgs:[userMsg, ansMsg].filter(Boolean), drop:retried||[]}); // 只併這次的一問一答
     return;
   }
   renderChat();
   if(S.currentReadingId) saveReading(true, true); // 追問後即時入檔：網頁重整/自動刷新也不會遺失對話與剩餘額度
 }
+var CHAT_RESENDING=new Set(); // 正在重送的「牌局|原句」：同一題還沒回來前不給再按一次（離開再從記錄打開也一樣）
+function chatResendKey(text){ return (S.currentReadingId||('seq'+S.readingSeq))+'|'+text; }
+var CHAT_PENDING=new Set(); // 重送後還在等回答的新問題（不進存檔）
+var CHAT_RETRYING=new Set(); // 正在重送的舊失敗問答（只在記憶體裡，不進存檔）
+var CHAT_BTN_STYLE='display:block;margin-top:10px;padding:7px 16px;border:1px solid rgba(212,175,55,.55);border-radius:18px;background:rgba(212,175,55,.12);color:var(--gold,#d4af37);font:inherit;font-size:.85rem;cursor:pointer';
+// 複製文字到剪貼簿；舊瀏覽器或不給權限時退回用隱藏文字框
+async function copyText(text){
+  try{ await navigator.clipboard.writeText(text); return true; }catch(e){}
+  try{
+    const ta=document.createElement('textarea'); ta.value=text; ta.setAttribute('readonly','');
+    ta.style.cssText='position:fixed;top:0;left:0;opacity:0'; document.body.appendChild(ta);
+    ta.select(); ta.setSelectionRange(0,text.length);
+    const ok=document.execCommand('copy'); ta.remove(); return ok;
+  }catch(e){ return false; }
+}
+async function copyAndToast(text){
+  toast(await copyText(text) ? L('已複製 ✓','Copied ✓') : L('複製失敗，請長按文字手動複製','Copy failed — long-press the text to copy manually'));
+}
+function copyChatAnswer(i){
+  const m=(S.chatHistory||[])[i]; if(m&&m.text) copyAndToast(m.text);
+}
+// 這次占卜的全文：問題、抽到的牌、整體解讀、追問一問一答（失敗的不放）
+function readingFullText(){
+  const lines=[];
+  if(S.q) lines.push(L('問題：','Question: ')+S.q);
+  const cards=(S.picked||[]).map((di,i)=>{
+    const c=S.deck[di]; if(!c) return '';
+    return (S.pos[i]?S.pos[i]+L('：',': '):'')+cardName(c.cid)+(c.rev?L('（逆位）',' (reversed)'):L('（正位）',' (upright)'));
+  }).filter(Boolean);
+  if(cards.length) lines.push(L('牌：','Cards: ')+cards.join(L('、',', ')));
+  // 用存檔的那份解讀文字，不讀畫面：畫面上可能混著「AI 暫停」「解鎖」之類的提示和按鈕
+  const interp=String(S.lastInterpText||'').replace(/\*\*(.+?)\*\*/g,'$1').replace(/\*(.+?)\*/g,'$1').replace(/[*#`_~]/g,'').trim();
+  if(interp) lines.push(L('【整體解讀】','[Overall reading]')+'\n'+interp);
+  const chat=(S.chatHistory||[]).filter(m=>!m.failed&&m.text);
+  if(chat.length) lines.push(L('【追問】','[Follow-ups]')+'\n'+chat.map(m=>(m.role==='user'?L('問：','Q: '):L('答：','A: '))+m.text).join('\n\n'));
+  return lines.join('\n\n');
+}
+function copyReadingAll(){
+  const t=readingFullText();
+  if(!t){ toast(L('還沒有可以複製的內容','Nothing to copy yet')); return; }
+  copyAndToast(t);
+}
+// 最後一問失敗（使用者的話＋失敗的回答都標了 failed）時，回傳那句話；否則 null
+function chatResendText(){
+  const h=S.chatHistory||[]; const a=h[h.length-1], u=h[h.length-2];
+  if(!(a&&u&&a.role==='ai'&&a.failed&&u.role==='user'&&u.failed&&u.text)) return null;
+  return CHAT_RESENDING.has(chatResendKey(u.text)) ? null : u.text;
+}
+// 重送：用同一句重新送出（失敗的本來就不計次數）。送不出去（沒登入、次數用完…）時失敗訊息和重送鈕都留著
+function resendChat(){
+  const q=chatResendText(); if(q===null) return;
+  sendChat(q);
+}
 function renderChat(){
   const el=document.getElementById('chat-msgs');
-  el.innerHTML=S.chatHistory.map(m=>
-    m.role==='user'
+  // 最後一則是失敗的回答 → 底下放「重送」，按了用同一句再問一次（不用複製貼上）
+  const canResend=chatResendText()!==null;
+  el.innerHTML=S.chatHistory.map((m,i)=>
+    CHAT_RETRYING.has(m) ? ''
+    : m.role==='user'
       ?`<div class="chat-msg-user">${escHtml(m.text)}</div>`
-      :`<div class="chat-msg-ai">${escHtml(m.text).replace(/\n/g,'<br>')}</div>`
+      :`<div class="chat-msg-ai">${escHtml(m.text).replace(/\n/g,'<br>')}${canResend&&i===S.chatHistory.length-1
+          ?`<button type="button" class="chat-resend" onclick="resendChat()" style="${CHAT_BTN_STYLE}">↻ ${L('重送','Resend')}</button>`
+          :m.failed?'':`<button type="button" class="chat-copy" onclick="copyChatAnswer(${i})" style="${CHAT_BTN_STYLE};opacity:.8">⧉ ${L('複製這則','Copy')}</button>`}</div>`
   ).join('');
   // 捲到最新一則訊息的「頂端」，長回覆讓用戶自己往下捲
   const last=el.lastElementChild;
@@ -2694,7 +2776,8 @@ function saveReading(silent, skipProject, st=S){ // st：預設存目前這局�
     q:st.q, spread:spreadName, pos:st.pos,
     cards:st.picked.map(di=>({cid:st.deck[di].cid, rev:st.deck[di].rev})),
     interp: st.lastInterpText,
-    chat: st.chatHistory ? [...st.chatHistory] : []
+    // 重送等回答中的那句新問題先不存：這時存檔仍是「舊的失敗問答＋重送鈕」，重新整理後還能再按重送
+    chat: st.chatHistory ? st.chatHistory.filter(m=>!CHAT_PENDING.has(m)) : []
   };
   const lite = {id, date:rec.date, q:rec.q, spread:spreadName, cards:st.picked.map((di,i)=>({name:cardName(st.deck[di].cid),pos:st.pos[i],rev:st.deck[di].rev}))};
   // 以 id upsert（去重，避免自動保存 + 手動保存 重複）
@@ -3366,8 +3449,8 @@ function toggleAiInfo(){
 // ══════════════════════════════════════════
 const CHANGELOG = [
   { date:'2026-11-19',
-    zh:['問公司、上班、離職這類問題時，單牌解析會聚焦在「事業」的牌義；以前題目裡沒寫到「工作」「事業」又剛好有「他／她」，會被當成感情題'],
-    en:['Questions about a company, a job or resigning now focus the card-by-card reading on the "career" meanings; previously, a question without the word "work" or "career" that mentioned "he/she" was treated as a love question'] },
+    zh:['占卜結果多了「複製全文」：問題、抽到的牌、整體解讀和追問的一問一答一次複製；每則追問回答下面也有「複製這則」','追問失敗時，錯誤訊息下面多一顆「重送」，按了直接用同一句再問一次，不用複製貼上','問公司、上班、離職這類問題時，單牌解析會聚焦在「事業」的牌義；以前題目裡沒寫到「工作」「事業」又剛好有「他／她」，會被當成感情題'],
+    en:['Readings now have "Copy full reading": the question, cards, overall reading and every follow-up in one copy; each follow-up answer also has its own Copy button','When a follow-up fails, the error message now has a "Resend" button that asks the same question again — no more copy and paste','Questions about a company, a job or resigning now focus the card-by-card reading on the "career" meanings; previously, a question without the word "work" or "career" that mentioned "he/she" was treated as a love question'] },
   { date:'2026-11-15',
     zh:['訂閱解鎖改成「Email 收驗證碼」登入：以前只要知道你的 email 就能用你的額度、看你的雲端占卜記錄，現在要收到信裡的 6 位數驗證碼才行。已驗證過的用戶會被請求再驗證一次，之後同一台裝置半年內不用再驗','Gumroad 付款完成自動轉回本站時照樣直接解鎖，不用再收驗證信'],
     en:['Subscriber unlock now signs in with an emailed code: previously anyone who knew your email could use your quota and read your cloud readings; now the 6-digit code from your inbox is required. Already-verified users will be asked to verify once more, then the device stays signed in for 6 months','Returning from Gumroad checkout still unlocks automatically — no code needed'] },
