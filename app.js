@@ -953,7 +953,8 @@ function viewProject(id) {
     empty.innerHTML=`<p style="color:var(--muted)">${L('還沒有占卜記錄','No readings yet')}</p>`;
   } else {
     empty.innerHTML='';
-    tl.innerHTML = [...proj.readings].reverse().map((r, idx) => {
+    tl.innerHTML = [...proj.readings].reverse().map((r0, idx) => {
+      const r = latestRec(r0.id) || r0; // 跟占卜記錄那份比，顯示最新的
       const num = proj.readings.length - idx;
       const cardStr = (r.cards||[]).map((c,i)=>`${escHtml((r.pos||[])[i]||'')}：${cardName(c.cid)}${c.rev?'↓':''}`).join('｜');
       const used = usedChatTurns(r.chat);
@@ -1619,10 +1620,9 @@ function loadRecIntoState(rec){
   }
 }
 // 繼續追問：載回舊占卜（含已存解讀與對話），不重跑 AI，接續尚未用完的追問次數
-function resumeChat(id, projId){ // projId：從專案時間軸點進來的（占卜記錄滿 60 筆被擠掉的，用專案裡那份）
-  const arr=safeParse('tr_full','[]');
+function resumeChat(id, projId){ // projId：從專案時間軸點進來的。記錄和專案副本取最新那份（占卜記錄滿 60 筆被擠掉的，就只剩專案那份）
   const proj=projId!=null ? S.projects.find(p=>p.id===projId) : null;
-  const rec=sanitizeRec(arr.find(r=>r.id===id) || (proj && proj.readings.find(r=>r.id===id)));
+  const rec=latestRec(id);
   if(!rec||!rec.interp||!rec.cards.length){ toast(L('這筆記錄沒有已完成的解讀可以續問','This record has no saved reading to continue')); return; }
   if(!(getApiKey()||isVerified())){ toast(L('請先解鎖 AI 解牌（或設定 API Key）才能繼續追問','Unlock AI readings (or set an API key) to continue asking')); openSettings(); return; }
   if(proj){ S.activeProjectId=proj.id; updateProjectBanners(); }
@@ -2857,12 +2857,14 @@ function currentRec(){
     cards:S.picked.map(di=>S.deck[di]), interp:S.lastInterpText, chat:S.chatHistory};
 }
 // 存檔裡的一筆：先找占卜記錄的完整版，沒有（超過 60 筆被擠掉）再找專案裡的副本，最後才用簡略版
-function findRec(id){
-  const full=safeParse('tr_full','[]').find(r=>r&&r.id===id);
-  if(full&&full.cards&&full.cards.length) return sanitizeRec(full);
-  for(const p of S.projects){ const r=(p.readings||[]).find(x=>x&&x.id===id); if(r) return sanitizeRec(r); }
-  return S.readings.find(r=>r.id===id)||null;
+// 同一筆占卜可能有好幾份（占卜記錄一份、每個專案各一份），同步後內容不一定一樣：一律拿最新的那份（recRicher）
+// 顯示、複製、繼續追問、存檔都用這個，才不會畫面寫還剩 3 次、點進去變 5 次
+function latestRec(id, fullArr){ // fullArr：已經讀好的 tr_full（清單一次畫很多筆時不用每筆重讀）
+  const cands=[(fullArr||safeParse('tr_full','[]')).find(r=>r&&r.id===id)];
+  S.projects.forEach(p=>cands.push((p.readings||[]).find(x=>x&&x.id===id)));
+  return cands.map(sanitizeRec).filter(r=>r&&r.cards.length).reduce((best,r)=>(!best||!recRicher(best,r))?r:best, null);
 }
+function findRec(id){ return latestRec(id) || S.readings.find(r=>r.id===id) || null; }
 function copyRec(rec, full){
   const t=recText(rec, full);
   if(!t){ toast(L('還沒有可以複製的內容','Nothing to copy yet')); return; }
@@ -2957,7 +2959,8 @@ function saveReading(silent, skipProject, st=S){ // st：預設存目前這局�
   // AI 還在跑時先按了儲存：快照也記下 id，晚回來的結果才會更新同一筆、不會多出一筆
   if(st===S && S.aiSnap && isCurrentReading(S.aiSnap)) S.aiSnap.currentReadingId = id;
   // 更新既有記錄時保留原本的占卜日期（補解析不應改到抽牌結果/日期）
-  const prev = safeParse('tr_full','[]').find(r=>r.id===id);
+  // 原本那筆：占卜記錄沒有（超過 60 筆被擠掉）就用專案裡的副本，日期才不會被改成今天
+  const prev = latestRec(id);
   const recDate = (prev && prev.date) ? prev.date : new Date().toLocaleString(LANG==='en'?'en-US':'zh-TW');
   const rec = {
     id, type:st.type, // type 供日後「用 AI 重新解析」重建牌局
@@ -3060,7 +3063,7 @@ function renderHistList(){
   });
   el.innerHTML=list.length
     ?list.map(r=>{
-        const full=fullMap[r.id]||{};
+        const full=latestRec(r.id, fullRecs)||fullMap[r.id]||{};
         const canAI = full.cards && full.cards.length; // 有牌面資料即可（type 缺漏會自動反推）
         const chatBtn=canAI ? resumeBtnHtml(full) : '';
         const aiBtn = canAI ? `<button class="btn btn-sm btn-ghost" style="margin:0" onclick="analyzeWithAI(${r.id})">${full.interp?L('🔄 用 AI 重新解析','🔄 Re-analyze with AI'):L('✦ 用 AI 解析這次占卜','✦ Analyze with AI')}</button>` : '';
