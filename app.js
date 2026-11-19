@@ -923,6 +923,7 @@ function createProject() {
 function viewProject(id) {
   const proj = S.projects.find(p => p.id === id);
   if (!proj) return;
+  viewingProjectId = id;
 
   // header
   document.getElementById('pv-header').innerHTML = `
@@ -1001,6 +1002,19 @@ function deleteProject(id) {
 //  加入專案：單獨占卜事後歸到專案（牌、解讀、追問原樣放進去，不重抽）
 // ══════════════════════════════════════════
 let addProjReadingId = null;
+let viewingProjectId = null; // 目前打開的專案（同步完要重畫時用）
+// 雲端同步帶回新內容後，重畫目前停留的頁面（占卜記錄／專案列表／專案內容）
+function redrawAfterSync() {
+  const cur = document.querySelector('.screen.on');
+  if (!cur) return;
+  if (cur.id === 's-history') showHistory();
+  else if (cur.id === 's-projects') renderProjectList();
+  else if (cur.id === 's-project-view' && viewingProjectId != null && S.projects.some(p => p.id === viewingProjectId)) {
+    const y = window.scrollY;
+    viewProject(viewingProjectId);
+    window.scrollTo(0, y);
+  }
+}
 function projectsOfReading(rid) {
   return S.projects.filter(p => (p.readings||[]).some(r => r.id === rid));
 }
@@ -2859,10 +2873,13 @@ function saveReading(silent, skipProject, st=S){ // st：預設存目前這局�
     q:st.q, spread:spreadName, pos:st.pos,
     cards:st.picked.map(di=>({cid:st.deck[di].cid, rev:st.deck[di].rev})),
     interp: st.lastInterpText,
-    upd: Date.now(), // 最後更新時間：跨裝置合併時同一筆留比較新的（重新解析、重送後的內容不會被另一台的舊副本蓋回去）
     // 重送等回答中的那句新問題先不存：這時存檔仍是「舊的失敗問答＋重送鈕」，重新整理後還能再按重送
     chat: st.chatHistory ? st.chatHistory.filter(m=>!CHAT_PENDING.has(m)) : []
   };
+  // 最後更新時間 upd：跨裝置合併時同一筆留比較新的（重新解析、重送後的內容不會被另一台的舊副本蓋回去）。
+  // 只有內容真的變了才更新；沒改東西只是再按一次「儲存記錄」，沿用原本的時間，舊副本才不會冒充新版
+  rec.upd = (prev && recContentKey(prev)===recContentKey(rec)) ? prev.upd : Date.now();
+  if(rec.upd==null) delete rec.upd;
   const lite = {id, date:rec.date, q:rec.q, spread:spreadName, cards:st.picked.map((di,i)=>({name:cardName(st.deck[di].cid),pos:st.pos[i],rev:st.deck[di].rev}))};
   // 以 id upsert（去重，避免自動保存 + 手動保存 重複）
   S.readings = S.readings.filter(r=>r.id!==id);
@@ -3151,6 +3168,10 @@ async function syncPush(){
     if(r&&r.ok) localStorage.setItem('tr_last_sync', new Date().toISOString());
   }catch(e){/* 靜默失敗，本地仍保留 */}
 }
+// 一筆記錄的內容指紋（問題、牌、解讀、追問）：用來判斷存檔時內容有沒有變
+function recContentKey(r){
+  return JSON.stringify([r.q||'', (r.cards||[]).map(c=>[c.cid,!!c.rev]), r.interp||'', (r.chat||[]).map(m=>[m.role,m.text])]);
+}
 // 同一筆占卜兩邊都有時，a 要不要取代 b：
 // 有更新時間（upd，2026-11-19 起每次存檔都會寫）就留比較新的；只有一邊有 upd → 那邊是新版存的，留它；
 // 兩邊都沒有（舊資料）才退回比完整度：有解讀 > 追問多 > 解讀長；一樣就留後來的（本機）
@@ -3238,7 +3259,7 @@ async function manualSync(){
     await syncPull();   // 拉回合併（內部會在本地有新東西時自動推回）
     await syncPush();   // 再確保本地完整上傳一次
     const gained=S.readings.length-before;
-    const cur=document.querySelector('.screen.on'); if(cur&&cur.id==='s-history') showHistory();
+    redrawAfterSync();
     toast(gained>0
       ? L(`☁ 同步完成，從雲端拉回 ${gained} 筆記錄（共 ${S.readings.length} 筆）`,`☁ Synced — pulled ${gained} record(s) from cloud (${S.readings.length} total)`)
       : L(`☁ 同步完成，目前共 ${S.readings.length} 筆，已是最新`,`☁ Synced — ${S.readings.length} record(s), already up to date`));
@@ -3714,8 +3735,7 @@ if(isVerified()){
     if(!ok){ promptRelogin(); return; }
     syncPull().then(merged=>{
       if(!merged) return;
-      const cur=document.querySelector('.screen.on');
-      if(cur && cur.id==='s-history') showHistory(); // 正停在歷史頁才重繪
+      redrawAfterSync(); // 正停在歷史頁／專案頁才重繪
     });
   });
 } else {
@@ -3751,7 +3771,7 @@ if(isVerified()){
       if(d.verified && d.token){
         onLoggedIn(email, d.token);
         toast(L('✦ 付款成功，AI 解牌已自動解鎖！','✦ Payment confirmed — AI reading unlocked!'));
-        syncPull().then(merged=>{ if(!merged) return; const cur=document.querySelector('.screen.on'); if(cur&&cur.id==='s-history') showHistory(); });
+        syncPull().then(merged=>{ if(merged) redrawAfterSync(); });
         return;
       }
     }catch(e){/* 連線失敗就重試 */}
