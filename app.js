@@ -3449,8 +3449,8 @@ function toggleAiInfo(){
 // ══════════════════════════════════════════
 const CHANGELOG = [
   { date:'2026-11-19',
-    zh:['占卜結果多了「複製全文」：問題、抽到的牌、整體解讀和追問的一問一答一次複製；每則追問回答下面也有「複製這則」','追問失敗時，錯誤訊息下面多一顆「重送」，按了直接用同一句再問一次，不用複製貼上','問公司、上班、離職這類問題時，單牌解析會聚焦在「事業」的牌義；以前題目裡沒寫到「工作」「事業」又剛好有「他／她」，會被當成感情題'],
-    en:['Readings now have "Copy full reading": the question, cards, overall reading and every follow-up in one copy; each follow-up answer also has its own Copy button','When a follow-up fails, the error message now has a "Resend" button that asks the same question again — no more copy and paste','Questions about a company, a job or resigning now focus the card-by-card reading on the "career" meanings; previously, a question without the word "work" or "career" that mentioned "he/she" was treated as a love question'] },
+    zh:['占卜結果多了「複製全文」：問題、抽到的牌、整體解讀和追問的一問一答一次複製；每則追問回答下面也有「複製這則」','追問失敗時，錯誤訊息下面多一顆「重送」，按了直接用同一句再問一次，不用複製貼上','問公司、上班、離職這類職場問題，主題判斷比以前準，單牌解析多半會聚焦在「事業」的牌義；以前題目裡沒寫到「工作」「事業」又剛好有「他／她」，會被當成感情題'],
+    en:['Readings now have "Copy full reading": the question, cards, overall reading and every follow-up in one copy; each follow-up answer also has its own Copy button','When a follow-up fails, the error message now has a "Resend" button that asks the same question again — no more copy and paste','Workplace questions (a company, a job, resigning) are recognised better, so the card-by-card reading usually focuses on the "career" meanings; previously, a question without the word "work" or "career" that mentioned "he/she" was treated as a love question'] },
   { date:'2026-11-15',
     zh:['訂閱解鎖改成「Email 收驗證碼」登入：以前只要知道你的 email 就能用你的額度、看你的雲端占卜記錄，現在要收到信裡的 6 位數驗證碼才行。已驗證過的用戶會被請求再驗證一次，之後同一台裝置半年內不用再驗','Gumroad 付款完成自動轉回本站時照樣直接解鎖，不用再收驗證信'],
     en:['Subscriber unlock now signs in with an emailed code: previously anyone who knew your email could use your quota and read your cloud readings; now the 6-digit code from your inbox is required. Already-verified users will be asked to verify once more, then the device stays signed in for 6 months','Returning from Gumroad checkout still unlocks automatically — no code needed'] },
