@@ -255,14 +255,15 @@ Object.assign(T, {
   'set.font.head':{zh:'✦ 字級大小（看不清楚可調大）',en:'✦ Text size (make it bigger if hard to read)'},
   'font.lv0':{zh:'標準',en:'Normal'},'font.lv1':{zh:'大',en:'Large'},'font.lv2':{zh:'特大',en:'X-Large'},'font.lv3':{zh:'超大',en:'XX-Large'},
   'font.btn.title':{zh:'字級大小（點我放大）',en:'Text size (tap to enlarge)'},
-  'ann.title':{zh:'✦ 新功能：占卜加入／移出專案、上方回首頁 🔮',en:'✦ New: Move Readings In & Out of Projects, Home Button 🔮'},
-  'ann.body':{zh:'🙏 <strong style="color:var(--gold)">這陣子更新了六件事：</strong><br><br><strong>① 單獨占卜可以事後「加入專案」</strong><br>占完才想到要歸到某個專案也可以：在解讀頁最下面或「占卜記錄」按「加入專案」，選一個專案或當場開新的。牌、解讀和追問原樣放進去，不用重抽；之後在那個專案占卜，AI 會參考這一筆。放錯了，進專案按那一筆右上角的「移出專案」就好，占卜本身還留在占卜記錄 ✦<br><br><strong>② 上方多了「⌂ 首頁」</strong><br>看完長長的解讀不用滑到最底，左上角一按就回首頁 ✦<br><br><strong>③ 追問失敗可以「重送」</strong><br>AI 出錯或連線斷掉時，錯誤訊息下面有一顆「↻ 重送」，按了就用同一句再問一次，不用複製貼上（失敗的那次照樣不扣次數）✦<br><br><strong>④ 「複製全文」</strong><br>整體解讀下面和頁面最底下都有，一次複製問題、抽到的牌、整體解讀和所有追問；每則追問回答也可以單獨複製 ✦<br><br><strong>⑤ 單牌解析更對題</strong><br>問公司、上班、離職這類職場問題，主題判斷比以前準，單牌解析多半會聚焦在「事業」的牌義，比較不會被當成感情題 ✦<br><br><strong>⑥ 訂閱改用 Email 驗證碼登入</strong><br>解鎖 AI 解牌要輸入信箱收到的 6 位數驗證碼，別人光知道你的 Email 用不了你的額度（剛付款完自動回到本站的不用輸入）。同一台裝置驗證一次，通常半年內不用再驗；清除瀏覽器資料後要再驗一次 ✦<br><br>💬 有任何問題都歡迎隨時回報 🙏',en:'🙏 <strong style="color:var(--gold)">Six recent updates:</strong><br><br><strong>1. Add a reading to a project afterwards</strong><br>Did a reading on its own and want it in a project after all? Tap "Add to Project" at the bottom of the reading or in History, then pick a project or start a new one. The cards, reading and follow-ups move in as they are — no redraw — and later readings in that project take it into account. Wrong project? Open it and tap "Remove" on that entry; the reading itself stays in History ✦<br><br><strong>2. "⌂ Home" at the top</strong><br>No more scrolling to the bottom of a long reading: the top-left button takes you straight home ✦<br><br><strong>3. Resend a failed follow-up</strong><br>If the AI errors or the connection drops, the error message now has a "↻ Resend" button that asks the same question again — no copy and paste (failed attempts still don\'t count) ✦<br><br><strong>4. Copy full reading</strong><br>Under the overall reading and at the bottom of the page: copies your question, the cards, the overall reading and every follow-up in one go. Each follow-up answer can also be copied on its own ✦<br><br><strong>5. Card-by-card meanings stay on topic</strong><br>Workplace questions (a company, a job, resigning) are recognised better, so the card-by-card reading usually focuses on the "career" meanings rather than treating them as love questions ✦<br><br><strong>6. Subscribers sign in with an emailed code</strong><br>Unlocking AI readings now needs the 6-digit code sent to your inbox, so knowing your email is not enough to use your quota (no code needed when you return straight from checkout). Verify once per device and you usually stay signed in for about 6 months; clearing your browser data means verifying again ✦<br><br>💬 Reports and feature wishes are always welcome 🙏'},
+  'ann.title':{zh:'✦ 新功能：複製抽牌結果、專案裡繼續追問 🔮',en:'✦ New: Copy Your Cards, Follow-ups Inside Projects 🔮'},
+  'ann.body':{zh:'🙏 <strong style="color:var(--gold)">這陣子更新了八件事：</strong><br><br><strong>✦ 新「複製抽牌結果」</strong><br>只複製問題、牌陣和抽到的每一張牌（都標正位或逆位），不含解讀。解讀頁牌面下方、占卜記錄每一筆、專案裡每一筆點開後都有 ✦<br><br><strong>✦ 新 專案裡可以繼續追問</strong><br>專案裡每一筆會寫還可以追問幾次，點開能看之前的追問，按「繼續追問」接著問；事後加入專案的也一樣 ✦<br><br><strong>① 單獨占卜可以事後「加入專案」</strong><br>占完才想到要歸到某個專案也可以：在解讀頁最下面或「占卜記錄」按「加入專案」，選一個專案或當場開新的。牌、解讀和追問原樣放進去，不用重抽；之後在那個專案占卜，AI 會參考這一筆。放錯了，進專案按那一筆右上角的「移出專案」就好，占卜本身還留在占卜記錄 ✦<br><br><strong>② 上方多了「⌂ 首頁」</strong><br>看完長長的解讀不用滑到最底，左上角一按就回首頁 ✦<br><br><strong>③ 追問失敗可以「重送」</strong><br>AI 出錯或連線斷掉時，錯誤訊息下面有一顆「↻ 重送」，按了就用同一句再問一次，不用複製貼上（失敗的那次照樣不扣次數）✦<br><br><strong>④ 「複製全文」</strong><br>整體解讀下面和頁面最底下都有，一次複製問題、抽到的牌、整體解讀和所有追問；每則追問回答也可以單獨複製 ✦<br><br><strong>⑤ 單牌解析更對題</strong><br>問公司、上班、離職這類職場問題，主題判斷比以前準，單牌解析多半會聚焦在「事業」的牌義，比較不會被當成感情題 ✦<br><br><strong>⑥ 訂閱改用 Email 驗證碼登入</strong><br>解鎖 AI 解牌要輸入信箱收到的 6 位數驗證碼，別人光知道你的 Email 用不了你的額度（剛付款完自動回到本站的不用輸入）。同一台裝置驗證一次，通常半年內不用再驗；清除瀏覽器資料後要再驗一次 ✦<br><br>💬 有任何問題都歡迎隨時回報 🙏',en:'🙏 <strong style="color:var(--gold)">Eight recent updates:</strong><br><br><strong>New: Copy cards</strong><br>Copies just your question, the spread and every card drawn (each marked upright or reversed), without the reading. It is under the cards on the reading page, on every History entry, and on every project entry once opened ✦<br><br><strong>New: follow-ups inside projects</strong><br>Each project entry says how many follow-ups are left; open it to see earlier follow-ups and tap "Continue asking" to carry on — readings added to a project later too ✦<br><br><strong>1. Add a reading to a project afterwards</strong><br>Did a reading on its own and want it in a project after all? Tap "Add to Project" at the bottom of the reading or in History, then pick a project or start a new one. The cards, reading and follow-ups move in as they are — no redraw — and later readings in that project take it into account. Wrong project? Open it and tap "Remove" on that entry; the reading itself stays in History ✦<br><br><strong>2. "⌂ Home" at the top</strong><br>No more scrolling to the bottom of a long reading: the top-left button takes you straight home ✦<br><br><strong>3. Resend a failed follow-up</strong><br>If the AI errors or the connection drops, the error message now has a "↻ Resend" button that asks the same question again — no copy and paste (failed attempts still don\'t count) ✦<br><br><strong>4. Copy full reading</strong><br>Under the overall reading and at the bottom of the page: copies your question, the cards, the overall reading and every follow-up in one go. Each follow-up answer can also be copied on its own ✦<br><br><strong>5. Card-by-card meanings stay on topic</strong><br>Workplace questions (a company, a job, resigning) are recognised better, so the card-by-card reading usually focuses on the "career" meanings rather than treating them as love questions ✦<br><br><strong>6. Subscribers sign in with an emailed code</strong><br>Unlocking AI readings now needs the 6-digit code sent to your inbox, so knowing your email is not enough to use your quota (no code needed when you return straight from checkout). Verify once per device and you usually stay signed in for about 6 months; clearing your browser data means verifying again ✦<br><br>💬 Reports and feature wishes are always welcome 🙏'},
   'ann.feedback':{zh:'有問題或想許願新功能？點此回報 →',en:'Found a bug or have a feature wish? Tell us →'},
   'ann.ok':{zh:'我知道了',en:'Got it'},
   'report.title':{zh:'🐞 回報問題',en:'🐞 Report a Problem'},
   'report.desc':{zh:'遇到問題或有建議嗎？把情況描述寄到下面這個信箱，我會盡快處理 🙏',en:'Hit a problem or have a suggestion? Email the details to the address below and I\'ll get on it 🙏'},
   'report.copy':{zh:'複製',en:'Copy'},
   'rd.copyall':{zh:'複製全文',en:'Copy full reading'},
+  'rd.copydraw':{zh:'⧉ 複製抽牌結果',en:'⧉ Copy cards'},
   'report.mail':{zh:'開啟郵件 App 寄出',en:'Open mail app'},
   // ── Spread select ──
   'sp.title':{zh:'選擇牌陣',en:'Choose a Spread'},
@@ -952,18 +953,23 @@ function viewProject(id) {
     empty.innerHTML=`<p style="color:var(--muted)">${L('還沒有占卜記錄','No readings yet')}</p>`;
   } else {
     empty.innerHTML='';
-    tl.innerHTML = [...proj.readings].reverse().map((r, idx) => {
+    tl.innerHTML = [...proj.readings].reverse().map((r0, idx) => {
+      const r = latestRec(r0.id) || r0; // 跟占卜記錄那份比，顯示最新的
       const num = proj.readings.length - idx;
-      const cardStr = (r.cards||[]).map((c,i)=>`${(r.pos||[])[i]||''}：${cardName(c.cid)}${c.rev?'↓':''}`).join('｜');
+      const cardStr = (r.cards||[]).map((c,i)=>`${escHtml((r.pos||[])[i]||'')}：${cardName(c.cid)}${c.rev?'↓':''}`).join('｜');
+      const used = usedChatTurns(r.chat);
+      const chatNote = (r.interp && r.cards && r.cards.length) ? `<div style="font-size:.72rem;color:rgba(212,175,55,.75);margin-top:6px">💬 ${used<CHAT_LIMIT ? L(`還可以追問 ${CHAT_LIMIT-used} 次（點開繼續問）`,`${CHAT_LIMIT-used} follow-up(s) left — tap to continue`) : L(`追問 ${CHAT_LIMIT} 次已用完`,`All ${CHAT_LIMIT} follow-ups used`)}</div>` : '';
       return `<div class="tl-item">
         <div class="tl-dot"></div>
         <div class="tl-box" onclick="toggleTlItem(this)">
           <div class="tl-date" style="display:flex;justify-content:space-between;gap:10px;align-items:baseline"><span>${LANG==='en'?`#${num}`:`第 ${num} 次`} · ${r.date} · ${r.spread}</span>
             <a href="javascript:void(0)" onclick="event.stopPropagation();removeFromProject(${proj.id},${r.id})" style="flex-shrink:0;font-size:.72rem;color:var(--muted);text-decoration:none;border-bottom:1px dashed rgba(154,141,181,.5)">${L('移出專案','Remove')}</a></div>
           <div class="tl-q">「${escHtml(r.q)}」</div>
-          <div class="tl-cards">${cardStr}</div>
+          <div class="tl-cards">${cardStr}</div>${chatNote}
           <div class="tl-expand">
-            <div class="tl-interp">${r.interp||L('（無儲存解讀）','(no saved reading)')}</div>
+            <div class="tl-interp">${r.interp?escHtml(r.interp):L('（無儲存解讀）','(no saved reading)')}</div>
+            ${chatLogHtml(r.chat)}
+            <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">${resumeBtnHtml(r, proj.id)}${copyBtnsHtml(r.id, !!r.interp)}</div>
           </div>
         </div>
       </div>`;
@@ -1084,8 +1090,8 @@ async function removeFromProject(projId, rid) {
 function removeFromProjectNow(projId, rid) {
   const proj = S.projects.find(p => p.id === projId); // 同步後 S.projects 是新的一份，要重新找
   if (!proj) return;
-  const rec = proj.readings.find(r => r.id === rid);
-  if (!rec) { redrawAfterSync(); return; } // 同步後發現別台已經移出了
+  if (!proj.readings.some(r => r.id === rid)) { redrawAfterSync(); return; } // 同步後發現別台已經移出了
+  const rec = latestRec(rid) || proj.readings.find(r => r.id === rid); // 記錄和各專案副本裡最新的那份
   // 占卜記錄只留最近 60 筆。這筆不在記錄裡、記錄又滿了 → 放不回去，移出就等於刪掉，要先講清楚
   let fullRecs = safeParse('tr_full','[]');
   const inHistory = fullRecs.some(r => r && r.id === rid) && S.readings.some(r => r.id === rid);
@@ -1093,12 +1099,12 @@ function removeFromProjectNow(projId, rid) {
   if (!confirm(canRestore
     ? L('把這次占卜移出專案？占卜本身會留在「占卜記錄」裡。','Remove this reading from the project? The reading itself stays in History.')
     : L('「占卜記錄」只留最近 60 筆，已經滿了，這次占卜放不回去。移出專案後它會整筆消失，確定要移出嗎？','History only keeps the latest 60 readings and is full, so this one cannot go back there. Removing it from the project deletes it for good — continue?'))) return;
-  if (canRestore && !inHistory) {
-    // 占卜記錄裡沒有這筆（之前被刪掉）→ 先放回去，移出才不會變成整筆不見
-    if (!fullRecs.some(r => r && r.id === rid)) {
-      fullRecs.push(rec); fullRecs.sort((a,b) => (b.id||0) - (a.id||0));
-      localStorage.setItem('tr_full', JSON.stringify(fullRecs));
-    }
+  if (canRestore) {
+    // 占卜記錄留最新的那份：記錄裡沒有（之前被刪掉）就放回去；有但比專案副本舊（別台追問過、只同步到專案那份）就換成新的。
+    // 不然移出後畫面會退回舊的解讀和追問
+    fullRecs = fullRecs.filter(r => r && r.id !== rid);
+    fullRecs.push(rec); fullRecs.sort((a,b) => (b.id||0) - (a.id||0));
+    localStorage.setItem('tr_full', JSON.stringify(fullRecs));
     if (!S.readings.some(r => r.id === rid)) {
       S.readings.push({id: rid, date: rec.date, q: rec.q, spread: rec.spread, cards: (rec.cards||[]).map((c,i) => ({name: cardName(c.cid), pos: (rec.pos||[])[i], rev: c.rev}))});
       S.readings.sort((a,b) => (b.id||0) - (a.id||0));
@@ -1614,11 +1620,12 @@ function loadRecIntoState(rec){
   }
 }
 // 繼續追問：載回舊占卜（含已存解讀與對話），不重跑 AI，接續尚未用完的追問次數
-function resumeChat(id){
-  const arr=safeParse('tr_full','[]');
-  const rec=sanitizeRec(arr.find(r=>r.id===id));
+function resumeChat(id, projId){ // projId：從專案時間軸點進來的。記錄和專案副本取最新那份（占卜記錄滿 60 筆被擠掉的，就只剩專案那份）
+  const proj=projId!=null ? S.projects.find(p=>p.id===projId) : null;
+  const rec=latestRec(id);
   if(!rec||!rec.interp||!rec.cards.length){ toast(L('這筆記錄沒有已完成的解讀可以續問','This record has no saved reading to continue')); return; }
   if(!(getApiKey()||isVerified())){ toast(L('請先解鎖 AI 解牌（或設定 API Key）才能繼續追問','Unlock AI readings (or set an API key) to continue asking')); openSettings(); return; }
+  if(proj){ S.activeProjectId=proj.id; updateProjectBanners(); }
   loadRecIntoState(rec);
   showReading(id, {interp:rec.interp, chat:rec.chat||[]});
 }
@@ -2821,26 +2828,65 @@ async function copyAndToast(text){
 function copyChatAnswer(i){
   const m=(S.chatHistory||[])[i]; if(m&&m.text) copyAndToast(m.text);
 }
-// 這次占卜的全文：問題、抽到的牌、整體解讀、追問一問一答（失敗的不放）
-function readingFullText(){
+// 一筆占卜的文字版。rec＝{q,spread,pos,cards:[{cid,rev}],interp,chat}（占卜記錄的簡略版 cards 是 {name,pos,rev}，也吃）
+// full=false：只有問題、牌陣、抽到的牌（每張標正逆位）；full=true：再加整體解讀與追問一問一答（失敗的不放）
+function recText(rec, full){
+  if(!rec) return '';
   const lines=[];
-  if(S.q) lines.push(L('問題：','Question: ')+S.q);
-  const cards=(S.picked||[]).map((di,i)=>{
-    const c=S.deck[di]; if(!c) return '';
-    return (S.pos[i]?S.pos[i]+L('：',': '):'')+cardName(c.cid)+(c.rev?L('（逆位）',' (reversed)'):L('（正位）',' (upright)'));
+  if(rec.q) lines.push(L('問題：','Question: ')+rec.q);
+  if(rec.spread) lines.push(L('牌陣：','Spread: ')+rec.spread);
+  const cards=(rec.cards||[]).map((c,i)=>{
+    if(!c) return '';
+    const name=c.cid!=null?cardName(c.cid):(c.name||''); if(!name) return '';
+    const pos=(rec.pos||[])[i]||c.pos||'';
+    return (pos?pos+L('：',': '):'')+name+(c.rev?L('（逆位）',' (reversed)'):L('（正位）',' (upright)'));
   }).filter(Boolean);
-  if(cards.length) lines.push(L('牌：','Cards: ')+cards.join(L('、',', ')));
+  if(cards.length) lines.push(L('抽到的牌：','Cards:')+'\n'+cards.map((c,i)=>(i+1)+'. '+c).join('\n'));
+  if(!full) return cards.length?lines.join('\n'):'';
   // 用存檔的那份解讀文字，不讀畫面：畫面上可能混著「AI 暫停」「解鎖」之類的提示和按鈕
-  const interp=String(S.lastInterpText||'').replace(/\*\*(.+?)\*\*/g,'$1').replace(/\*(.+?)\*/g,'$1').replace(/[*#`_~]/g,'').trim();
+  const interp=String(rec.interp||'').replace(/\*\*(.+?)\*\*/g,'$1').replace(/\*(.+?)\*/g,'$1').replace(/[*#`_~]/g,'').trim();
   if(interp) lines.push(L('【整體解讀】','[Overall reading]')+'\n'+interp);
-  const chat=(S.chatHistory||[]).filter(m=>!m.failed&&m.text);
+  const chat=(rec.chat||[]).filter(m=>m&&!m.failed&&m.text);
   if(chat.length) lines.push(L('【追問】','[Follow-ups]')+'\n'+chat.map(m=>(m.role==='user'?L('問：','Q: '):L('答：','A: '))+m.text).join('\n\n'));
   return lines.join('\n\n');
 }
-function copyReadingAll(){
-  const t=readingFullText();
+// 畫面上這一局
+function currentRec(){
+  if(!S.picked||!S.picked.length) return null;
+  return {q:S.q, spread:S.type==='custom'?L('自訂牌陣','Custom Spread'):spreadNameOf(S.type), pos:S.pos||[],
+    cards:S.picked.map(di=>S.deck[di]), interp:S.lastInterpText, chat:S.chatHistory};
+}
+// 存檔裡的一筆：先找占卜記錄的完整版，沒有（超過 60 筆被擠掉）再找專案裡的副本，最後才用簡略版
+// 同一筆占卜可能有好幾份（占卜記錄一份、每個專案各一份），同步後內容不一定一樣：一律拿最新的那份（recRicher）
+// 顯示、複製、繼續追問、存檔都用這個，才不會畫面寫還剩 3 次、點進去變 5 次
+function latestRec(id, fullArr){ // fullArr：已經讀好的 tr_full（清單一次畫很多筆時不用每筆重讀）
+  const cands=[(fullArr||safeParse('tr_full','[]')).find(r=>r&&r.id===id)];
+  S.projects.forEach(p=>cands.push((p.readings||[]).find(x=>x&&x.id===id)));
+  return cands.map(sanitizeRec).filter(r=>r&&r.cards.length).reduce((best,r)=>(!best||!recRicher(best,r))?r:best, null);
+}
+function findRec(id){ return latestRec(id) || S.readings.find(r=>r.id===id) || null; }
+function copyRec(rec, full){
+  const t=recText(rec, full);
   if(!t){ toast(L('還沒有可以複製的內容','Nothing to copy yet')); return; }
   copyAndToast(t);
+}
+function readingFullText(){ return recText(currentRec(), true); }
+function copyReadingAll(){ copyRec(currentRec(), true); }
+function copyReadingDraw(){ copyRec(currentRec(), false); }
+function copySavedRec(id, full){ copyRec(findRec(id), full); }
+// 占卜記錄、專案時間軸共用的那排複製鈕
+function copyBtnsHtml(id, hasInterp){
+  return `<button class="btn btn-sm btn-ghost" style="margin:0" onclick="event.stopPropagation();copySavedRec(${id},false)">⧉ ${L('複製抽牌結果','Copy cards')}</button>`
+    +(hasInterp?`<button class="btn btn-sm btn-ghost" style="margin:0" onclick="event.stopPropagation();copySavedRec(${id},true)">⧉ ${L('複製全文','Copy full reading')}</button>`:'');
+}
+// 追問一問一答（占卜記錄、專案時間軸共用）
+function chatLogHtml(chat){
+  return (chat&&chat.length)?`<div style="margin-top:10px;border-top:1px solid rgba(212,175,55,.1);padding-top:10px">${chat.map(m=>m.role==='user'?`<div style="font-size:.78rem;color:var(--gold);margin-bottom:4px">▶ ${escHtml(m.text)}</div>`:`<div style="font-size:.78rem;color:var(--muted);margin-bottom:8px;line-height:1.6">${escHtml(m.text).replace(/\n/g,'<br>')}</div>`).join('')}</div>`:'';
+}
+function resumeBtnHtml(rec, projId){
+  const used=usedChatTurns(rec.chat);
+  return (rec.cards&&rec.cards.length&&rec.interp&&used<CHAT_LIMIT)
+    ? `<button class="btn btn-sm" style="margin:0" onclick="event.stopPropagation();resumeChat(${rec.id}${projId!=null?','+projId:''})">${L(`💬 繼續追問（還剩 ${CHAT_LIMIT-used} 次）`,`💬 Continue asking (${CHAT_LIMIT-used} left)`)}</button>` : '';
 }
 // 最後一問失敗（使用者的話＋失敗的回答都標了 failed）時，回傳那句話；否則 null
 function chatResendText(){
@@ -2913,7 +2959,8 @@ function saveReading(silent, skipProject, st=S){ // st：預設存目前這局�
   // AI 還在跑時先按了儲存：快照也記下 id，晚回來的結果才會更新同一筆、不會多出一筆
   if(st===S && S.aiSnap && isCurrentReading(S.aiSnap)) S.aiSnap.currentReadingId = id;
   // 更新既有記錄時保留原本的占卜日期（補解析不應改到抽牌結果/日期）
-  const prev = safeParse('tr_full','[]').find(r=>r.id===id);
+  // 原本那筆：占卜記錄沒有（超過 60 筆被擠掉）就用專案裡的副本，日期才不會被改成今天
+  const prev = latestRec(id);
   const recDate = (prev && prev.date) ? prev.date : new Date().toLocaleString(LANG==='en'?'en-US':'zh-TW');
   const rec = {
     id, type:st.type, // type 供日後「用 AI 重新解析」重建牌局
@@ -3016,19 +3063,17 @@ function renderHistList(){
   });
   el.innerHTML=list.length
     ?list.map(r=>{
-        const full=fullMap[r.id]||{};
+        const full=latestRec(r.id, fullRecs)||fullMap[r.id]||{};
         const canAI = full.cards && full.cards.length; // 有牌面資料即可（type 缺漏會自動反推）
-        const usedT=usedChatTurns(full.chat);
-        const chatBtn=(canAI && full.interp && usedT<CHAT_LIMIT)
-          ? `<button class="btn btn-sm" style="margin:0" onclick="resumeChat(${r.id})">${L(`💬 繼續追問（還剩 ${CHAT_LIMIT-usedT} 次）`,`💬 Continue asking (${CHAT_LIMIT-usedT} left)`)}</button>` : '';
+        const chatBtn=canAI ? resumeBtnHtml(full) : '';
         const aiBtn = canAI ? `<button class="btn btn-sm btn-ghost" style="margin:0" onclick="analyzeWithAI(${r.id})">${full.interp?L('🔄 用 AI 重新解析','🔄 Re-analyze with AI'):L('✦ 用 AI 解析這次占卜','✦ Analyze with AI')}</button>` : '';
         // 已在專案裡的標出是哪個專案（點了去看）；還沒有的給「加入專案」
         const inProj=projectsOfReading(r.id);
         const projTag=inProj.length?`<div style="margin-top:7px;font-size:.74rem;color:var(--muted)">📁 ${L('專案：','Project: ')}${inProj.map(p=>`<a href="javascript:void(0)" onclick="viewProject(${p.id})" style="color:var(--gold);text-decoration:none;border-bottom:1px dashed rgba(212,175,55,.4)">${escHtml(p.name)}</a>`).join(L('、',', '))}</div>`:'';
         const projBtn=(canAI && !inProj.length)?`<button class="btn btn-sm btn-ghost" style="margin:0" onclick="openAddToProject(${r.id})">${L('📁 加入專案','📁 Add to project')}</button>`:'';
-        const btnRow=(chatBtn||aiBtn||projBtn)?`<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">${chatBtn}${aiBtn}${projBtn}</div>`:'';
+        const btnRow=`<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">${chatBtn}${aiBtn}${projBtn}${copyBtnsHtml(r.id, !!full.interp)}</div>`;
         const interpHtml=full.interp?`<div style="margin-top:10px;font-size:.82rem;color:var(--muted);line-height:1.7;border-top:1px solid rgba(212,175,55,.12);padding-top:10px">${escHtml(full.interp).replace(/\n/g,'<br>')}</div>`:'';
-        const chatHtml=(full.chat&&full.chat.length)?`<div style="margin-top:10px;border-top:1px solid rgba(212,175,55,.1);padding-top:10px">${full.chat.map(m=>m.role==='user'?`<div style="font-size:.78rem;color:var(--gold);margin-bottom:4px">▶ ${escHtml(m.text)}</div>`:`<div style="font-size:.78rem;color:var(--muted);margin-bottom:8px;line-height:1.6">${escHtml(m.text).replace(/\n/g,'<br>')}</div>`).join('')}</div>`:'';
+        const chatHtml=chatLogHtml(full.chat);
         return `<div style="border:1px solid rgba(212,175,55,.18);background:rgba(42,22,96,.18);padding:18px 20px;margin-bottom:12px;position:relative">
           <button onclick="deleteReading(${r.id})" title="${L('刪除這筆記錄','Delete this record')}"
             style="position:absolute;top:10px;right:10px;background:none;border:1px solid rgba(224,85,85,.3);color:rgba(224,85,85,.7);width:26px;height:26px;border-radius:50%;cursor:pointer;font-size:.8rem;line-height:1;transition:all .2s"
@@ -3488,7 +3533,7 @@ async function submitReport(){
 }
 // 一次性公告（沒看過的人會看到一次，關閉後不再跳；要發新公告換新的 ANNOUNCE_ID 即可）
 // 注意：App 內瀏覽器（LINE/FB）可能每次清除儲存，這類用戶每次開啟仍會視為「第一次」看到一次
-const ANNOUNCE_ID = '2026-11-19-project-move';
+const ANNOUNCE_ID = '2026-11-20-copy-cards';
 const ANNOUNCE_EXPIRES = new Date('2027-02-28T00:00:00'); // 到期日：讓第一次來的訪客持續看得到
 // 儲存三層備援：localStorage（跨次）→ sessionStorage（LINE/FB 等 App 內瀏覽器常清 localStorage）
 // → 記憶體（隱私模式下兩者都可能不可用），確保同一次瀏覽絕不重複跳出
@@ -3645,6 +3690,9 @@ function toggleAiInfo(){
 //  更新紀錄 CHANGELOG（新項目加在最上面；中英務必同步）
 // ══════════════════════════════════════════
 const CHANGELOG = [
+  { date:'2026-11-20',
+    zh:['「複製抽牌結果」：只複製問題、牌陣和抽到的每一張牌（都標正位或逆位），不含解讀。解讀頁牌面下方、「占卜記錄」每一筆、專案裡每一筆點開後都有','專案裡的占卜看得到追問了：每一筆會寫還可以追問幾次，點開能看之前的追問、按「繼續追問」接著問（事後加入專案的也一樣），也可以複製全文','「複製全文」裡抽到的牌改成一張一行，並加上牌陣名稱'],
+    en:['"Copy cards": copies just the question, the spread and every card drawn (each marked upright or reversed), without the reading. Find it under the cards on the reading page, on every History entry, and on every project entry once opened','Follow-ups now show inside projects: each entry says how many follow-ups are left; open it to see earlier follow-ups, tap "Continue asking" to pick up where you left off (readings added to a project later too), or copy the full reading','"Copy full reading" now lists the cards one per line and includes the spread name'] },
   { date:'2026-11-19',
     zh:['單獨占卜可以事後「加入專案」：解讀頁最下面和「占卜記錄」裡還沒進專案的記錄都有「加入專案」，選既有專案或當場開新的；牌、解讀和追問原樣放進專案，不用重抽。已經在專案裡的記錄會標出是哪個專案','放錯專案可以「移出專案」：進專案後每一筆右上角都有，移出後占卜本身還留在「占卜記錄」，可以再加到別的專案（占卜記錄滿 60 筆又放不回去時，會先跟你確認）','上方多了「⌂ 首頁」：看完解讀或翻記錄翻到很下面，不用滑到最底，左上角一按就回首頁','占卜結果多了「複製全文」：問題、抽到的牌、整體解讀和追問的一問一答一次複製；每則追問回答下面也有「複製這則」','追問失敗時，錯誤訊息下面多一顆「重送」，按了直接用同一句再問一次，不用複製貼上','問公司、上班、離職這類職場問題，主題判斷比以前準，單牌解析多半會聚焦在「事業」的牌義；以前題目裡沒寫到「工作」「事業」又剛好有「他／她」，會被當成感情題'],
     en:['Add a reading to a project afterwards: "Add to Project" is at the bottom of the reading and on History entries that are not in a project yet — pick an existing project or start a new one. The cards, reading and follow-ups move in as they are, no redraw. Entries already in a project show which one','Put a reading in the wrong project? Each entry inside a project now has "Remove" — the reading itself stays in History and can be added to another project (if History is full at 60 and it cannot go back, you are asked first)','New "⌂ Home" button at the top: after a long reading or deep in History, one tap on the top-left takes you home — no scrolling to the bottom','Readings now have "Copy full reading": the question, cards, overall reading and every follow-up in one copy; each follow-up answer also has its own Copy button','When a follow-up fails, the error message now has a "Resend" button that asks the same question again — no more copy and paste','Workplace questions (a company, a job, resigning) are recognised better, so the card-by-card reading usually focuses on the "career" meanings; previously, a question without the word "work" or "career" that mentioned "he/she" was treated as a love question'] },
