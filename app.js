@@ -1090,8 +1090,8 @@ async function removeFromProject(projId, rid) {
 function removeFromProjectNow(projId, rid) {
   const proj = S.projects.find(p => p.id === projId); // 同步後 S.projects 是新的一份，要重新找
   if (!proj) return;
-  const rec = proj.readings.find(r => r.id === rid);
-  if (!rec) { redrawAfterSync(); return; } // 同步後發現別台已經移出了
+  if (!proj.readings.some(r => r.id === rid)) { redrawAfterSync(); return; } // 同步後發現別台已經移出了
+  const rec = latestRec(rid) || proj.readings.find(r => r.id === rid); // 記錄和各專案副本裡最新的那份
   // 占卜記錄只留最近 60 筆。這筆不在記錄裡、記錄又滿了 → 放不回去，移出就等於刪掉，要先講清楚
   let fullRecs = safeParse('tr_full','[]');
   const inHistory = fullRecs.some(r => r && r.id === rid) && S.readings.some(r => r.id === rid);
@@ -1099,12 +1099,12 @@ function removeFromProjectNow(projId, rid) {
   if (!confirm(canRestore
     ? L('把這次占卜移出專案？占卜本身會留在「占卜記錄」裡。','Remove this reading from the project? The reading itself stays in History.')
     : L('「占卜記錄」只留最近 60 筆，已經滿了，這次占卜放不回去。移出專案後它會整筆消失，確定要移出嗎？','History only keeps the latest 60 readings and is full, so this one cannot go back there. Removing it from the project deletes it for good — continue?'))) return;
-  if (canRestore && !inHistory) {
-    // 占卜記錄裡沒有這筆（之前被刪掉）→ 先放回去，移出才不會變成整筆不見
-    if (!fullRecs.some(r => r && r.id === rid)) {
-      fullRecs.push(rec); fullRecs.sort((a,b) => (b.id||0) - (a.id||0));
-      localStorage.setItem('tr_full', JSON.stringify(fullRecs));
-    }
+  if (canRestore) {
+    // 占卜記錄留最新的那份：記錄裡沒有（之前被刪掉）就放回去；有但比專案副本舊（別台追問過、只同步到專案那份）就換成新的。
+    // 不然移出後畫面會退回舊的解讀和追問
+    fullRecs = fullRecs.filter(r => r && r.id !== rid);
+    fullRecs.push(rec); fullRecs.sort((a,b) => (b.id||0) - (a.id||0));
+    localStorage.setItem('tr_full', JSON.stringify(fullRecs));
     if (!S.readings.some(r => r.id === rid)) {
       S.readings.push({id: rid, date: rec.date, q: rec.q, spread: rec.spread, cards: (rec.cards||[]).map((c,i) => ({name: cardName(c.cid), pos: (rec.pos||[])[i], rev: c.rev}))});
       S.readings.sort((a,b) => (b.id||0) - (a.id||0));
