@@ -1345,11 +1345,19 @@ function saveStale(snap, add){
   const msgs=add.msgs||[];
   // 以訊息 id upsert（等待期間手動存檔可能已存過問題；失敗時要把 failed 帶過去，才不會被算進追問次數）
   const upsert=(arr,m)=>{ const x=arr.find(x=>x===m||(m.mid&&x.mid===m.mid)); if(!x) arr.push(m); else if(x!==m) Object.assign(x,m); };
+  // add.drop：重送時被取代的舊失敗問答，從最新記錄裡拿掉（有 mid 比 mid；舊記錄沒 mid 就比「失敗＋同角色＋同文字」，取最後一筆）
+  const drop=(arr,m)=>{
+    let i=arr.findIndex(x=>x===m||(m.mid&&x.mid===m.mid));
+    if(i<0&&!m.mid) for(let k=arr.length-1;k>=0;k--){ const x=arr[k]; if(x.failed&&x.role===m.role&&x.text===m.text){ i=k; break; } }
+    if(i>=0) arr.splice(i,1);
+  };
+  (add.drop||[]).forEach(m=>drop(st.chatHistory,m));
   msgs.forEach(m=>upsert(st.chatHistory,m));
   // 同一筆正開在畫面上：記憶體裡的對話也補上，不然下次存檔又把它蓋掉
   const open=document.querySelector('.screen.on');
   if(S.currentReadingId===id && open && open.id==='s-reading'){
     if(!S.chatHistory) S.chatHistory=[];
+    (add.drop||[]).forEach(m=>drop(S.chatHistory,m));
     msgs.forEach(m=>upsert(S.chatHistory,m));
     updateChatRemaining();
     if(st.lastInterpText!==(cur.interp||'')) S.lastInterpText=st.lastInterpText;
@@ -2639,7 +2647,7 @@ async function sendChat(resendText){
   CHAT_PENDING.delete(userMsg);
   if(retried) retried.forEach(m=>{ CHAT_RETRYING.delete(m); const i=snap.chatHistory.indexOf(m); if(i>=0) snap.chatHistory.splice(i,1); });
   if(!isCurrentReading(snap)){
-    if(snap.currentReadingId) saveStale(snap, {msgs:[userMsg, ansMsg].filter(Boolean)}); // 只併這次的一問一答
+    if(snap.currentReadingId) saveStale(snap, {msgs:[userMsg, ansMsg].filter(Boolean), drop:retried||[]}); // 只併這次的一問一答
     return;
   }
   renderChat();
