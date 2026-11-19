@@ -2569,13 +2569,14 @@ async function sendChat(resendText){
     return;
   }
   if(!S.chatHistory) S.chatHistory=[];
-  let retried=null;
+  let retried=null, resendKey=null;
   if(resend){
     // 失敗的那一問一答先只是「畫面上藏起來」，等這次有結果（成功或再失敗）才真的拿掉、跟新的一起存檔。
     // 中途重新整理／關掉：存檔沒動過，舊的失敗訊息和重送鈕都還在，問題不會不見
     if(chatResendText()!==resendText) return;
     retried=S.chatHistory.slice(-2);
     retried.forEach(m=>CHAT_RETRYING.add(m));
+    resendKey=chatResendKey(resendText); CHAT_RESENDING.add(resendKey);
   } else { input.value=''; input.style.height='auto'; }
   const mid=Date.now()+'-'+Math.random().toString(36).slice(2,8);
   const userMsg={role:'user',text:q,mid};
@@ -2645,6 +2646,7 @@ async function sendChat(resendText){
         +L('（這次不計入追問次數，可以再試一次）',' (this attempt doesn\'t count toward your limit — feel free to retry)')});
   }
   CHAT_PENDING.delete(userMsg);
+  if(resendKey) CHAT_RESENDING.delete(resendKey);
   if(retried) retried.forEach(m=>{ CHAT_RETRYING.delete(m); const i=snap.chatHistory.indexOf(m); if(i>=0) snap.chatHistory.splice(i,1); });
   if(!isCurrentReading(snap)){
     if(snap.currentReadingId) saveStale(snap, {msgs:[userMsg, ansMsg].filter(Boolean), drop:retried||[]}); // 只併這次的一問一答
@@ -2653,6 +2655,8 @@ async function sendChat(resendText){
   renderChat();
   if(S.currentReadingId) saveReading(true, true); // 追問後即時入檔：網頁重整/自動刷新也不會遺失對話與剩餘額度
 }
+var CHAT_RESENDING=new Set(); // 正在重送的「牌局|原句」：同一題還沒回來前不給再按一次（離開再從記錄打開也一樣）
+function chatResendKey(text){ return (S.currentReadingId||('seq'+S.readingSeq))+'|'+text; }
 var CHAT_PENDING=new Set(); // 重送後還在等回答的新問題（不進存檔）
 var CHAT_RETRYING=new Set(); // 正在重送的舊失敗問答（只在記憶體裡，不進存檔）
 var CHAT_BTN_STYLE='display:block;margin-top:10px;padding:7px 16px;border:1px solid rgba(212,175,55,.55);border-radius:18px;background:rgba(212,175,55,.12);color:var(--gold,#d4af37);font:inherit;font-size:.85rem;cursor:pointer';
@@ -2696,7 +2700,8 @@ function copyReadingAll(){
 // 最後一問失敗（使用者的話＋失敗的回答都標了 failed）時，回傳那句話；否則 null
 function chatResendText(){
   const h=S.chatHistory||[]; const a=h[h.length-1], u=h[h.length-2];
-  return (a&&u&&a.role==='ai'&&a.failed&&u.role==='user'&&u.failed&&u.text) ? u.text : null;
+  if(!(a&&u&&a.role==='ai'&&a.failed&&u.role==='user'&&u.failed&&u.text)) return null;
+  return CHAT_RESENDING.has(chatResendKey(u.text)) ? null : u.text;
 }
 // 重送：用同一句重新送出（失敗的本來就不計次數）。送不出去（沒登入、次數用完…）時失敗訊息和重送鈕都留著
 function resendChat(){
