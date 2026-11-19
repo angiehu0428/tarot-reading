@@ -1987,11 +1987,12 @@ function kwIsHeavy(kws){
 function detectTopic(q){
   q=(q==null)?'':String(q);
   // 英文字前後加邊界（her 不會命中 mother）；financ／invest／stud 這類字根只加前邊界
+  // work 是多義字：「Will my relationship work?」「work out」不算職場，只有 at work、my／his／her… work 這種寫法才算
   const rules=[
     ['health',/健康|身體|生病|手術|睡眠|體力|療養|\b(?:health|body|sick|illness|surgery|sleep|wellness|fitness)\b/i],
     ['study',/學業|考試|讀書|學校|論文|證照|升學|成績|\b(?:study|studies|exams?|tests?|school|thesis|degree|grades?|college|class(?:es)?)\b/i],
     ['money',/金錢|錢|財運|財務|投資|股票|收入|買房|負債|薪水|薪資|\b(?:money|financ\w*|invest\w*|stocks?|income|salary|wealth|debts?|cash|wages?|budget)\b/i],
-    ['career',/工作|事業|職場|職涯|老闆|同事|面試|轉職|創業|升遷|專案|案子|生意|客戶|合作|\b(?:career|jobs?|work|boss|colleagues?|interviews?|business|promotion|projects?|clients?|startup)\b/i],
+    ['career',/工作|事業|職場|職涯|老闆|同事|面試|轉職|創業|升遷|專案|案子|生意|客戶|合作|公司|企業|上班|離職|辭職|裁員|執行長|董事|主管|員工|團隊|職位|\b(?:career|jobs?|at work|(?:my|his|her|their|your|our|new) work(?!\s+out\b)|workplace|coworkers?|boss|colleagues?|interviews?|business|promotion|projects?|clients?|startup|company|companies|ceo|employers?|employees?|resign\w*|layoffs?)\b/i],
     ['love',/感情|愛情|戀愛|喜歡|曖昧|關係|對方|復合|結婚|脫單|告白|分手|桃花|\b(?:love|relationship|dating|crush|romance|partner|marriage|breakup|ex|boyfriend|girlfriend|spouse)\b/i]
   ];
   // 問題裡直接寫出主題名稱（感情、事業…）就以它為準；寫了好幾個，取最先出現的。
@@ -2010,8 +2011,9 @@ function detectTopic(q){
   // （舊寫法比到第一個中的就停，感情問題只要帶到「工作」就被判成事業）
   let top=null;
   for(const [k,re] of rules){
-    const g=new RegExp(re.source,'gi'); let n=0, at=-1, m;
-    while((m=g.exec(q))){ n++; at=m.index; if(!m[0]) g.lastIndex++; }
+    // 緊貼在一起的不同字（「公司同事」「公司主管」）算一次，不然「公司同事喜歡我嗎」會被兩個職場字壓過去；同一個字重複（「喜歡喜歡」）照算
+    const g=new RegExp(re.source,'gi'); let n=0, at=-1, end=-1, prev='', m;
+    while((m=g.exec(q))){ if(m.index!==end||m[0]===prev) n++; at=m.index; end=m.index+m[0].length; prev=m[0]; if(!m[0]) g.lastIndex++; }
     if(n&&(!top||n>top.n||(n===top.n&&at>top.at))) top={k,n,at};
   }
   if(top) return top.k;
@@ -3363,6 +3365,9 @@ function toggleAiInfo(){
 //  更新紀錄 CHANGELOG（新項目加在最上面；中英務必同步）
 // ══════════════════════════════════════════
 const CHANGELOG = [
+  { date:'2026-11-19',
+    zh:['問公司、上班、離職這類問題時，單牌解析會聚焦在「事業」的牌義；以前題目裡沒寫到「工作」「事業」又剛好有「他／她」，會被當成感情題'],
+    en:['Questions about a company, a job or resigning now focus the card-by-card reading on the "career" meanings; previously, a question without the word "work" or "career" that mentioned "he/she" was treated as a love question'] },
   { date:'2026-11-15',
     zh:['訂閱解鎖改成「Email 收驗證碼」登入：以前只要知道你的 email 就能用你的額度、看你的雲端占卜記錄，現在要收到信裡的 6 位數驗證碼才行。已驗證過的用戶會被請求再驗證一次，之後同一台裝置半年內不用再驗','Gumroad 付款完成自動轉回本站時照樣直接解鎖，不用再收驗證信'],
     en:['Subscriber unlock now signs in with an emailed code: previously anyone who knew your email could use your quota and read your cloud readings; now the 6-digit code from your inbox is required. Already-verified users will be asked to verify once more, then the device stays signed in for 6 months','Returning from Gumroad checkout still unlocks automatically — no code needed'] },
