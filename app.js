@@ -1987,12 +1987,12 @@ function kwIsHeavy(kws){
 function detectTopic(q){
   q=(q==null)?'':String(q);
   // 英文字前後加邊界（her 不會命中 mother）；financ／invest／stud 這類字根只加前邊界
-  // work 是多義字：「Will my relationship work?」「work out」不算職場，只有 at work／my work 或後面還接著字才算
+  // work 是多義字：「Will my relationship work?」「work out」不算職場，只有 at work、my／his／her… work 這種寫法才算
   const rules=[
     ['health',/健康|身體|生病|手術|睡眠|體力|療養|\b(?:health|body|sick|illness|surgery|sleep|wellness|fitness)\b/i],
     ['study',/學業|考試|讀書|學校|論文|證照|升學|成績|\b(?:study|studies|exams?|tests?|school|thesis|degree|grades?|college|class(?:es)?)\b/i],
     ['money',/金錢|錢|財運|財務|投資|股票|收入|買房|負債|薪水|薪資|\b(?:money|financ\w*|invest\w*|stocks?|income|salary|wealth|debts?|cash|wages?|budget)\b/i],
-    ['career',/工作|事業|職場|職涯|老闆|同事|面試|轉職|創業|升遷|專案|案子|生意|客戶|合作|公司|企業|上班|離職|辭職|裁員|執行長|董事|主管|員工|團隊|職位|\b(?:career|jobs?|at work|my work|work(?!\s*(?:out\b|\?|$))|boss|colleagues?|interviews?|business|promotion|projects?|clients?|startup|company|companies|ceo|employers?|employees?|resign\w*|layoffs?)\b/i],
+    ['career',/工作|事業|職場|職涯|老闆|同事|面試|轉職|創業|升遷|專案|案子|生意|客戶|合作|公司|企業|上班|離職|辭職|裁員|執行長|董事|主管|員工|團隊|職位|\b(?:career|jobs?|at work|(?:my|his|her|their|your|our|new) work(?!\s+out\b)|workplace|coworkers?|boss|colleagues?|interviews?|business|promotion|projects?|clients?|startup|company|companies|ceo|employers?|employees?|resign\w*|layoffs?)\b/i],
     ['love',/感情|愛情|戀愛|喜歡|曖昧|關係|對方|復合|結婚|脫單|告白|分手|桃花|\b(?:love|relationship|dating|crush|romance|partner|marriage|breakup|ex|boyfriend|girlfriend|spouse)\b/i]
   ];
   // 問題裡直接寫出主題名稱（感情、事業…）就以它為準；寫了好幾個，取最先出現的。
