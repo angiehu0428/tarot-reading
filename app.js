@@ -1070,11 +1070,22 @@ function addToNewProject() {
 }
 const HIST_MAX = 60; // 占卜記錄保存筆數上限（saveReading、雲端合併都是 60）
 // 從專案移出：占卜本身留在「占卜記錄」，只是不再算在這個專案裡
-function removeFromProject(projId, rid) {
-  const proj = S.projects.find(p => p.id === projId);
+let removingFromProject = false;
+async function removeFromProject(projId, rid) {
+  if (removingFromProject) return; // 等同步時連點兩下只算一次
+  removingFromProject = true;
+  try {
+    // 有雲端同步的用戶：先把雲端的記錄合併進來再判斷放不放得回去
+    // （本機沒滿、但合併雲端後滿 60 筆的話，補回去的舊占卜下次同步會被裁掉）
+    if (isVerified()) await syncPull();
+    removeFromProjectNow(projId, rid);
+  } finally { removingFromProject = false; }
+}
+function removeFromProjectNow(projId, rid) {
+  const proj = S.projects.find(p => p.id === projId); // 同步後 S.projects 是新的一份，要重新找
   if (!proj) return;
   const rec = proj.readings.find(r => r.id === rid);
-  if (!rec) return;
+  if (!rec) { redrawAfterSync(); return; } // 同步後發現別台已經移出了
   // 占卜記錄只留最近 60 筆。這筆不在記錄裡、記錄又滿了 → 放不回去，移出就等於刪掉，要先講清楚
   let fullRecs = safeParse('tr_full','[]');
   const inHistory = fullRecs.some(r => r && r.id === rid) && S.readings.some(r => r.id === rid);
