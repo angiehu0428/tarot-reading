@@ -2526,9 +2526,11 @@ function autoGrowChat(el){
   el.style.height='auto';
   el.style.height=Math.min(el.scrollHeight,120)+'px';
 }
-async function sendChat(){
+// resendText：按「重送」時帶進來的原句（不動輸入框裡還沒送出的草稿）
+async function sendChat(resendText){
   const input=document.getElementById('chat-input');
-  const q=input.value.trim().replace(/[<>]/g,'');
+  const resend=typeof resendText==='string';
+  const q=(resend?resendText:input.value).trim().replace(/[<>]/g,'');
   if(!q)return;
   const key=getApiKey();
   const proxyEmail=isVerified()?getVerifiedEmail():null;
@@ -2549,6 +2551,7 @@ async function sendChat(){
   }
   // 付費 AI 暫停中（且無自備 key）→ 不呼叫，回覆暫停訊息
   if(AI_PAUSED && proxyEmail && !key){
+    if(resend){ toast(L('AI 解牌暫停服務中，請稍後再試 🙏','AI readings are paused — please try again later 🙏')); return; }
     input.value=''; input.style.height='auto';
     if(!S.chatHistory) S.chatHistory=[];
     S.chatHistory.push({role:'user',text:q,failed:true});
@@ -2557,8 +2560,13 @@ async function sendChat(){
     if(S.currentReadingId) saveReading(true, true); // 追問也即時入檔，網頁重整不遺失
     return;
   }
-  input.value=''; input.style.height='auto';
   if(!S.chatHistory) S.chatHistory=[];
+  if(resend){
+    // 確定送得出去才拿掉失敗的那一問一答，並立刻存檔（不然等回答時離開這局，舊存檔裡失敗的那組會被併回來）
+    if(chatResendText()!==resendText) return;
+    S.chatHistory.splice(-2,2);
+    if(S.currentReadingId) saveReading(true, true);
+  } else { input.value=''; input.style.height='auto'; }
   const mid=Date.now()+'-'+Math.random().toString(36).slice(2,8);
   const userMsg={role:'user',text:q,mid};
   let ansMsg=null;
@@ -2658,8 +2666,8 @@ function readingFullText(){
     return (S.pos[i]?S.pos[i]+L('：',': '):'')+cardName(c.cid)+(c.rev?L('（逆位）',' (reversed)'):L('（正位）',' (upright)'));
   }).filter(Boolean);
   if(cards.length) lines.push(L('牌：','Cards: ')+cards.join(L('、',', ')));
-  const el=document.getElementById('interp-main');
-  const interp=((el&&el.innerText)||S.lastInterpText||'').trim();
+  // 用存檔的那份解讀文字，不讀畫面：畫面上可能混著「AI 暫停」「解鎖」之類的提示和按鈕
+  const interp=String(S.lastInterpText||'').replace(/\*\*(.+?)\*\*/g,'$1').replace(/\*(.+?)\*/g,'$1').replace(/[*#`_~]/g,'').trim();
   if(interp) lines.push(L('【整體解讀】','[Overall reading]')+'\n'+interp);
   const chat=(S.chatHistory||[]).filter(m=>!m.failed&&m.text);
   if(chat.length) lines.push(L('【追問】','[Follow-ups]')+'\n'+chat.map(m=>(m.role==='user'?L('問：','Q: '):L('答：','A: '))+m.text).join('\n\n'));
@@ -2675,14 +2683,10 @@ function chatResendText(){
   const h=S.chatHistory||[]; const a=h[h.length-1], u=h[h.length-2];
   return (a&&u&&a.role==='ai'&&a.failed&&u.role==='user'&&u.failed&&u.text) ? u.text : null;
 }
-// 重送：拿掉失敗的那一問一答，用同一句重新送出（失敗的本來就不計次數）
+// 重送：用同一句重新送出（失敗的本來就不計次數）。送不出去（沒登入、次數用完…）時失敗訊息和重送鈕都留著
 function resendChat(){
   const q=chatResendText(); if(q===null) return;
-  const input=document.getElementById('chat-input'); if(!input) return;
-  S.chatHistory.splice(-2,2);
-  renderChat();
-  input.value=q;
-  sendChat();
+  sendChat(q);
 }
 function renderChat(){
   const el=document.getElementById('chat-msgs');
