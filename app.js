@@ -3206,7 +3206,14 @@ function promptRelogin(){
 }
 
 // ── 跨裝置歷史同步（付費驗證 email 專屬） ──
-async function syncPush(){
+// 上傳一律排隊、一次送一份：後端是整份覆寫，兩次上傳同時在路上時，先出發的舊資料晚到會把新的蓋掉
+// （例如移出專案前的同步推了一次、移出後又推一次）。排隊後每次送出當下的最新資料，晚排的一定晚到
+let syncPushChain=Promise.resolve();
+function syncPush(){
+  syncPushChain=syncPushChain.then(doSyncPush, doSyncPush);
+  return syncPushChain;
+}
+async function doSyncPush(){
   if(!isVerified())return;
   try{
     const r=await fetch(WORKER_URL+'/sync',{method:'POST',headers:authHeaders(),
