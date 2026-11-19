@@ -2573,6 +2573,7 @@ async function sendChat(resendText){
   const userMsg={role:'user',text:q,mid};
   let ansMsg=null;
   S.chatHistory.push(userMsg);
+  if(retried) CHAT_PENDING.add(userMsg);
   renderChat();
   const snap=readingSnap(); // 等回答時使用者可能已去占下一題（或重開同一筆）：回答只併進這局
   const msgsEl=document.getElementById('chat-msgs');
@@ -2635,6 +2636,7 @@ async function sendChat(resendText){
       text:L('抱歉，發生錯誤：','Sorry, an error occurred: ')+friendlyApiErr(e.message)
         +L('（這次不計入追問次數，可以再試一次）',' (this attempt doesn\'t count toward your limit — feel free to retry)')});
   }
+  CHAT_PENDING.delete(userMsg);
   if(retried) retried.forEach(m=>{ CHAT_RETRYING.delete(m); const i=snap.chatHistory.indexOf(m); if(i>=0) snap.chatHistory.splice(i,1); });
   if(!isCurrentReading(snap)){
     if(snap.currentReadingId) saveStale(snap, {msgs:[userMsg, ansMsg].filter(Boolean)}); // 只併這次的一問一答
@@ -2643,6 +2645,7 @@ async function sendChat(resendText){
   renderChat();
   if(S.currentReadingId) saveReading(true, true); // 追問後即時入檔：網頁重整/自動刷新也不會遺失對話與剩餘額度
 }
+var CHAT_PENDING=new Set(); // 重送後還在等回答的新問題（不進存檔）
 var CHAT_RETRYING=new Set(); // 正在重送的舊失敗問答（只在記憶體裡，不進存檔）
 var CHAT_BTN_STYLE='display:block;margin-top:10px;padding:7px 16px;border:1px solid rgba(212,175,55,.55);border-radius:18px;background:rgba(212,175,55,.12);color:var(--gold,#d4af37);font:inherit;font-size:.85rem;cursor:pointer';
 // 複製文字到剪貼簿；舊瀏覽器或不給權限時退回用隱藏文字框
@@ -2760,7 +2763,8 @@ function saveReading(silent, skipProject, st=S){ // st：預設存目前這局�
     q:st.q, spread:spreadName, pos:st.pos,
     cards:st.picked.map(di=>({cid:st.deck[di].cid, rev:st.deck[di].rev})),
     interp: st.lastInterpText,
-    chat: st.chatHistory ? [...st.chatHistory] : []
+    // 重送等回答中的那句新問題先不存：這時存檔仍是「舊的失敗問答＋重送鈕」，重新整理後還能再按重送
+    chat: st.chatHistory ? st.chatHistory.filter(m=>!CHAT_PENDING.has(m)) : []
   };
   const lite = {id, date:rec.date, q:rec.q, spread:spreadName, cards:st.picked.map((di,i)=>({name:cardName(st.deck[di].cid),pos:st.pos[i],rev:st.deck[di].rev}))};
   // 以 id upsert（去重，避免自動保存 + 手動保存 重複）
