@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 const src = readFileSync(new URL('../app.js', import.meta.url), 'utf8');
 const cut = (from, to) => src.slice(src.indexOf(from), src.indexOf(to));
 const endSan = src.indexOf('\n', src.indexOf('function sanitizeRecs('));
-const body = src.slice(src.indexOf('function sanitizeRec('), endSan) + '\n' + cut('function recContentKey(', 'async function syncPull');
+const body = src.slice(src.indexOf('function sanitizeRec('), endSan) + '\n' + cut('function projRemoved(', 'async function syncPull');
 const { mergeProjects, recContentKey } = new Function(body + '; return { mergeProjects, recContentKey };')();
 
 const rec = (id, interp = '', chat = []) => ({ id, q: 'q', cards: [{ cid: 0, rev: false }], pos: [], interp, chat });
@@ -74,4 +74,38 @@ test('舊副本沒改內容再存一次（upd 不變）→ 不會蓋掉另一台
   const stale = recU(10, 1000, '舊解讀', chat2);       // B 裝置：只是再按一次儲存，upd 沿用 1000
   const fresh = recU(10, 2000, '重新解析的新解讀');   // A 裝置：重新解析
   assert.equal(mergeProjects([proj(1, [stale])], [proj(1, [fresh])])[0].readings[0].interp, '重新解析的新解讀');
+});
+
+// 加入／移出紀錄（mv）
+const projMv = (id, readings, mv) => ({ ...proj(id, readings), mv });
+
+test('本機移出、雲端還留著舊副本 → 合併後不會被補回來', () => {
+  const out = mergeProjects([projMv(1, [], { 10: { t: 2000, in: 0 } })], [proj(1, [rec(10, 'a'), rec(11, 'b')])]);
+  assert.deepEqual(out[0].readings.map(r => r.id), [11]);
+  assert.equal(out[0].mv[10].in, 0);
+});
+
+test('雲端說移出、本機還沒更新 → 合併後也移出', () => {
+  const out = mergeProjects([proj(1, [rec(10, 'a')])], [projMv(1, [], { 10: { t: 2000, in: 0 } })]);
+  assert.equal(out[0].readings.length, 0);
+});
+
+test('移出後又加回來（比較新的動作是加入）→ 留在專案裡，兩個方向都一樣', () => {
+  const readd = projMv(1, [rec(10, 'a')], { 10: { t: 3000, in: 1 } });
+  const removed = projMv(1, [], { 10: { t: 2000, in: 0 } });
+  assert.equal(mergeProjects([readd], [removed])[0].readings.length, 1);
+  assert.equal(mergeProjects([removed], [readd])[0].readings.length, 1);
+});
+
+test('加入後又移出（比較新的動作是移出）→ 不在專案裡', () => {
+  const added = projMv(1, [rec(10, 'a')], { 10: { t: 1000, in: 1 } });
+  const removed = projMv(1, [], { 10: { t: 2000, in: 0 } });
+  assert.equal(mergeProjects([added], [removed])[0].readings.length, 0);
+  assert.equal(mergeProjects([removed], [added])[0].readings.length, 0);
+});
+
+test('沒有 mv 的舊專案照舊聯集，也不會長出空的 mv', () => {
+  const out = mergeProjects([proj(1, [rec(10, 'a')])], [proj(1, [rec(11, 'b')])]);
+  assert.equal(out[0].readings.length, 2);
+  assert.equal('mv' in out[0], false);
 });
