@@ -2859,6 +2859,7 @@ function saveReading(silent, skipProject, st=S){ // st：預設存目前這局�
     q:st.q, spread:spreadName, pos:st.pos,
     cards:st.picked.map(di=>({cid:st.deck[di].cid, rev:st.deck[di].rev})),
     interp: st.lastInterpText,
+    upd: Date.now(), // 最後更新時間：跨裝置合併時同一筆留比較新的（重新解析、重送後的內容不會被另一台的舊副本蓋回去）
     // 重送等回答中的那句新問題先不存：這時存檔仍是「舊的失敗問答＋重送鈕」，重新整理後還能再按重送
     chat: st.chatHistory ? st.chatHistory.filter(m=>!CHAT_PENDING.has(m)) : []
   };
@@ -3150,15 +3151,17 @@ async function syncPush(){
     if(r&&r.ok) localStorage.setItem('tr_last_sync', new Date().toISOString());
   }catch(e){/* 靜默失敗，本地仍保留 */}
 }
-// 同一筆占卜兩邊都有時留內容比較完整的：有解讀 > 追問多 > 解讀長；一樣就留後來的（本機）
-// （單獨占卜可能在 AI 還沒回來時就加入專案，另一台會先拿到空解讀的副本，不能讓它蓋掉完整的）
+// 同一筆占卜兩邊都有時，a 要不要取代 b：
+// 有更新時間（upd，2026-11-19 起每次存檔都會寫）就留比較新的；只有一邊有 upd → 那邊是新版存的，留它；
+// 兩邊都沒有（舊資料）才退回比完整度：有解讀 > 追問多 > 解讀長；一樣就留後來的（本機）
 function recRicher(a, b){
+  const ua=+a.upd||0, ub=+b.upd||0;
+  if(ua||ub){ if(ua!==ub) return ua>ub; return true; }
   const sc=r=>[(r.interp?1:0), (r.chat||[]).length, (r.interp||'').length];
   const x=sc(a), y=sc(b);
   for(let i=0;i<3;i++){ if(x[i]!==y[i]) return x[i]>y[i]; }
   return true;
 }
-function projReadingCount(arr){ return (Array.isArray(arr)?arr:[]).reduce((n,p)=>n+((p&&Array.isArray(p.readings))?p.readings.length:0),0); }
 // 專案合併：cloud 先、local 後（同 id 時 local 的名稱/描述/顏色優先），readings 依 id 聯集
 function mergeProjects(local, cloud){
   const map={};
@@ -3197,19 +3200,26 @@ async function syncPull(){
     const beforeR=S.readings.length;
     const localFull=safeParse('tr_full','[]');
     S.readings=sanitizeRecs(mergeById(S.readings, cloud.readings));
-    const mergedFull=sanitizeRecs(mergeById(localFull, cloud.full||[]));
+    // 完整記錄同一筆兩邊都有 → 跟專案副本用同一套判斷（比較新的留下），不再一律讓雲端蓋本機
+    const fm={};
+    sanitizeRecs(cloud.full||[]).forEach(x=>{ fm[x.id]=x; });
+    sanitizeRecs(localFull.slice()).forEach(x=>{ if(!fm[x.id] || recRicher(x, fm[x.id])) fm[x.id]=x; });
+    const mergedFull=Object.values(fm).sort((x,y)=>y.id-x.id).slice(0,60);
+    const localFullJson=JSON.stringify(localFull), cloudFullJson=JSON.stringify(sanitizeRecs(cloud.full||[]).sort((x,y)=>y.id-x.id).slice(0,60));
     localStorage.setItem('tr_readings',JSON.stringify(S.readings));
     localStorage.setItem('tr_full',JSON.stringify(mergedFull));
     // 專案同步合併：以專案 id 聯集；同 id 時名稱/顏色以本機為準，各自的占卜記錄以 id 聯集
-    const beforeP=S.projects.length, beforePR=projReadingCount(S.projects);
+    const beforeP=S.projects.length, beforePJson=JSON.stringify(S.projects);
     S.projects=mergeProjects(S.projects, cloud.projects||[]);
     saveProjects();
     // 專案內容跟雲端不一樣（含專案裡多了占卜、或同一筆本機比較完整）→ 也要推回，另一台才收得到完整的聯集
     const projDiffers=JSON.stringify(mergeProjects([], cloud.projects||[]))!==JSON.stringify(S.projects);
     // 本地有、雲端還沒有的記錄 → 推回讓雲端收斂（另一台裝置下次才拉得到）
-    if(S.readings.length>cloud.readings.length || mergedFull.length>(cloud.full||[]).length || S.projects.length>(cloud.projects||[]).length || projDiffers) syncPush();
+    if(S.readings.length>cloud.readings.length || mergedFull.length>(cloud.full||[]).length || S.projects.length>(cloud.projects||[]).length || projDiffers || JSON.stringify(mergedFull)!==cloudFullJson) syncPush();
     // 本地因雲端而新增 → 回報 true，供呼叫端重繪 / 提示（無新增則免重繪）
-    return S.readings.length>beforeR || mergedFull.length>localFull.length || S.projects.length>beforeP || projReadingCount(S.projects)>beforePR;
+    // 筆數沒變但內容變了（同一筆從空解讀變成完整解讀）也要重繪
+    return S.readings.length>beforeR || mergedFull.length>localFull.length || S.projects.length>beforeP
+      || JSON.stringify(S.projects)!==beforePJson || JSON.stringify(mergedFull)!==localFullJson;
   }catch(e){return false;}
 }
 // 手動同步：明確上傳 + 拉回合併，並回報結果（讓使用者看得到同步有在運作）

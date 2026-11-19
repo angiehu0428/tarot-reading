@@ -7,7 +7,7 @@ const src = readFileSync(new URL('../app.js', import.meta.url), 'utf8');
 const cut = (from, to) => src.slice(src.indexOf(from), src.indexOf(to));
 const endSan = src.indexOf('\n', src.indexOf('function sanitizeRecs('));
 const body = src.slice(src.indexOf('function sanitizeRec('), endSan) + '\n' + cut('function recRicher(', 'async function syncPull');
-const { mergeProjects, projReadingCount } = new Function(body + '; return { mergeProjects, projReadingCount };')();
+const { mergeProjects } = new Function(body + '; return { mergeProjects };')();
 
 const rec = (id, interp = '', chat = []) => ({ id, q: 'q', cards: [{ cid: 0, rev: false }], pos: [], interp, chat });
 const proj = (id, readings, name = 'P') => ({ id, name, desc: '', color: '#fff', createdAt: 'x', readings });
@@ -15,7 +15,6 @@ const proj = (id, readings, name = 'P') => ({ id, name, desc: '', color: '#fff',
 test('兩台各自把不同占卜加入同一專案 → 聯集、照 id 排序', () => {
   const out = mergeProjects([proj(1, [rec(20, 'b')])], [proj(1, [rec(10, 'a')])]);
   assert.deepEqual(out[0].readings.map(r => r.id), [10, 20]);
-  assert.equal(projReadingCount(out), 2);
 });
 
 test('同一筆：雲端是空解讀、本機有解讀 → 留本機', () => {
@@ -39,4 +38,27 @@ test('一樣完整 → 留本機；專案名稱以本機為準', () => {
   const out = mergeProjects([proj(1, [rec(10, '本機版')], '新名字')], [proj(1, [rec(10, '雲端版')], '舊名字')]);
   assert.equal(out[0].readings[0].interp, '本機版');
   assert.equal(out[0].name, '新名字');
+});
+
+// 有更新時間（upd）的記錄：留比較新的，不看誰比較長
+const recU = (id, upd, interp, chat = []) => ({ ...rec(id, interp, chat), upd });
+const chat2 = [{ role: 'user', text: 'a' }, { role: 'model', text: 'b' }];
+
+test('重新解析後（新解讀、追問清空）不會被另一台追問比較多的舊副本蓋回去', () => {
+  const fresh = recU(10, 2000, '重新解析的新解讀');
+  const stale = recU(10, 1000, '舊解讀比較長比較長比較長', chat2);
+  assert.equal(mergeProjects([proj(1, [fresh])], [proj(1, [stale])])[0].readings[0].interp, '重新解析的新解讀');
+  assert.equal(mergeProjects([proj(1, [stale])], [proj(1, [fresh])])[0].readings[0].interp, '重新解析的新解讀');
+});
+
+test('重送成功的回答比較短，也不會被舊的失敗問答蓋回去', () => {
+  const ok = recU(10, 3000, 'x', [{ role: 'user', text: 'q' }, { role: 'model', text: '好' }]);
+  const failed = recU(10, 1000, 'x', [{ role: 'user', text: 'q' }, { role: 'model', text: '連線失敗，請再試一次，這段很長很長' }, { role: 'user', text: 'q' }]);
+  const out = mergeProjects([proj(1, [failed])], [proj(1, [ok])]);
+  assert.equal(out[0].readings[0].chat[1].text, '好');
+});
+
+test('一邊是舊資料（沒有 upd）、一邊有 upd → 留有 upd 的', () => {
+  const out = mergeProjects([proj(1, [rec(10, '舊資料很長很長很長', chat2)])], [proj(1, [recU(10, 500, '新版存的')])]);
+  assert.equal(out[0].readings[0].interp, '新版存的');
 });
