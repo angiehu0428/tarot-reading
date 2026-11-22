@@ -422,10 +422,9 @@ async function handleWebhook(request, env) {
   const packKey = productKeys.find(k => creditMap[k] > 0);
   if (packKey) {
     const pack = creditMap[packKey];
-    // 同一筆 sale 只入帳一次、只退一次（Gumroad ping 可能重送）：在帳本裡用 sale_id 去重
-    // （2026-11 以前是 KV `csale:<sale_id>`；那時入帳過的舊單如果現在重送，帳本會先看那個標記）
-    if (!refunded && saleId && await env.TAROT_KV.get(`csale:${saleId}`)) return new Response('OK');
-    await ledger(env, email, 'credit_add', { n: refunded ? -pack : pack, idem: saleId ? `${refunded ? 'refund' : 'sale'}:${saleId}` : undefined });
+    // 同一筆 sale 只入帳一次、只退一次，退款比購買先到也算得對（Gumroad ping 可能重送、可能倒序）：帳本照訂單狀態算
+    if (saleId) await ledger(env, email, 'credit_order', { id: saleId, kind: refunded ? 'refund' : 'buy', n: pack });
+    else await ledger(env, email, 'credit_add', { n: refunded ? -pack : pack }); // 沒有 sale_id 的通知（理論上不會有）
     return new Response('OK');
   }
 
@@ -563,31 +562,40 @@ export class AuthGate {
         return out({ h: p && p.exp >= now ? p.h : null });
       }
       // ── 點數帳本（每個 email 一個物件 `credit:<email>`）：餘額只以這裡為準 ──
-      // KV 是最終一致（跨地區可能讀到舊值），擋不住同時進來的扣點／加點；這裡單執行緒，讀了再寫是原子的。
-      // seed=KV 裡舊的餘額（`credits:<email>`）：這個帳本第一次用到時帶進來，之後就不再看 KV。
-      // idem=這筆加點是哪來的（好友碼、Gumroad 訂單），同一筆只入帳一次；重送、重試都不會加兩次。
-      // reserve=AI 呼叫前先預扣 1 點，成功 commit、失敗 refund；預扣超過 10 分鐘沒結果（請求當掉）自動退回。
-      case 'credit_get': case 'credit_add': case 'credit_reserve': case 'credit_commit': case 'credit_refund': {
-        let bal = await st.get('bal');
-        if (bal === undefined) bal = Math.max(0, parseInt(a.seed, 10) || 0);
-        const holds = (await st.get('holds')) || {};
-        for (const [k, h] of Object.entries(holds)) if (h.exp < now) { bal += 1; delete holds[k]; } // 當掉的預扣退回
-        const idems = (await st.get('idems')) || {};
-        let res = {};
+      // 2026-11-22 以前點數存在 KV `credits:<email>`（最終一致，擋不住同時扣點／加點）；搬過來時正式 KV 裡 0 筆點數，
+      // 所以帳本從 0 開始、不從 KV 帶舊值。整本帳存在一個 key、一次寫完：不會只寫到一半。
+      //   add     {n, idem}          加減點；idem=去重鍵（好友碼），同一個只入帳一次
+      //   order   {id, kind, n}      Gumroad 買點數／退款：照訂單狀態算，退款先到、重送、交錯都只算一次
+      //   reserve {owner}            AI 呼叫前預扣 1 點（扣不到 none）；commit 確認、refund 退回
+      //   預扣超過 CREDIT_HOLD_MS 沒結果（請求當掉）自動退回；之後才到的 commit 回 expired（答案不給，也不扣點）
+      case 'credit_get': case 'credit_add': case 'credit_order': case 'credit_reserve': case 'credit_commit': case 'credit_refund': {
+        const L = (await st.get('ledger')) || { bal: 0, holds: {}, orders: {}, idems: {} };
+        let changed = a.op !== 'credit_get';
+        for (const [k, h] of Object.entries(L.holds)) if (h.exp < now) { L.bal += 1; delete L.holds[k]; changed = true; }
+        let res = { ok: true };
         if (a.op === 'credit_add') {
-          if (a.idem && idems[a.idem]) res = { dup: true };
-          else { bal = Math.max(0, bal + a.n); if (a.idem) idems[a.idem] = now; res = { ok: true }; }
+          if (a.idem && L.idems[a.idem]) res = { dup: true };
+          else { L.bal = Math.max(0, L.bal + a.n); if (a.idem) L.idems[a.idem] = now; }
+        } else if (a.op === 'credit_order') {
+          const o = L.orders[a.id] || { bought: !!a.legacyBought, refunded: false };
+          if (a.kind === 'buy') {
+            if (o.bought) res = { dup: true };
+            else { o.bought = true; if (!o.refunded) L.bal += a.n; }
+          } else {
+            if (o.refunded) res = { dup: true };
+            else { o.refunded = true; if (o.bought) L.bal = Math.max(0, L.bal - a.n); }
+          }
+          L.orders[a.id] = o;
         } else if (a.op === 'credit_reserve') {
-          if (bal < 1) res = { none: true };
-          else { bal -= 1; holds[a.owner] = { exp: now + CREDIT_HOLD_MS }; res = { ok: true }; }
+          if (L.bal < 1) res = { none: true };
+          else { L.bal -= 1; L.holds[a.owner] = { exp: now + CREDIT_HOLD_MS }; }
         } else if (a.op === 'credit_commit') {
-          delete holds[a.owner]; res = { ok: true };
+          if (L.holds[a.owner]) delete L.holds[a.owner]; else res = { expired: true };
         } else if (a.op === 'credit_refund') {
-          if (holds[a.owner]) { bal += 1; delete holds[a.owner]; }
-          res = { ok: true };
+          if (L.holds[a.owner]) { L.bal += 1; delete L.holds[a.owner]; }
         }
-        await st.put('bal', bal); await st.put('holds', holds); await st.put('idems', idems);
-        return out({ ...res, bal });
+        if (changed) await st.put('ledger', L);
+        return out({ ...res, bal: L.bal });
       }
       case 'redeem_take': {
         const key = `sale:${a.h}`;
@@ -626,13 +634,10 @@ function normEmail(v) { return String(v || '').toLowerCase().trim().slice(0, 254
 async function accessRecord(env, e) {
   return (await env.TAROT_KV.get(`email:${e}`)) || (await env.TAROT_KV.get(`friend:${e}`));
 }
-// 點數一律走帳本（AuthGate `credit:<email>`，見 credit_* 操作）；KV `credits:<email>` 只是給舊版讀的副本
+// 點數一律走帳本（AuthGate `credit:<email>`，見 credit_* 操作）。KV `credits:<email>` 已停用
 const CREDIT_HOLD_MS = 10 * 60 * 1000; // AI 呼叫預扣的點數，這麼久沒結果就自動退回
 async function ledger(env, e, op, extra = {}) {
-  const seed = parseInt((await env.TAROT_KV.get(`credits:${e}`)) || '0', 10) || 0;
-  const r = await gate(env, `credit:${e}`, { op, seed, ...extra });
-  if (typeof r.bal === 'number') { try { await env.TAROT_KV.put(`credits:${e}`, String(r.bal)); } catch (err) {} }
-  return r;
+  return gate(env, `credit:${e}`, { op, ...extra });
 }
 function safeJson(raw) { try { return JSON.parse(raw); } catch (e) { return null; } }
 function randomHex(bytes) {
@@ -1194,8 +1199,10 @@ async function geminiCall(request, env, s, geminiBody, spend, hold) {
   // 只在「成功」時才計入用量與扣點（失敗 / 重試不浪費額度與點數）
   if (hold) {
     if (resp.ok && !data.error) {
-      await ledger(env, e, 'credit_commit', { owner: hold.owner });
-      data.__creditBalance = hold.bal; // 讓前端即時更新餘額顯示（預扣後的餘額）
+      const c = await ledger(env, e, 'credit_commit', { owner: hold.owner });
+      // 拖太久、預扣已經自動退回了：這次不扣點，答案也不給（不然就是免費拿到回答），請她再問一次
+      if (c.expired) return json({ error: 'AI 這次回答太久，已經退回點數，請再問一次 / The AI took too long — your credit was returned, please ask again', expiredHold: true }, 504, request);
+      data.__creditBalance = c.bal; // 讓前端即時更新餘額顯示
     } else await refund();
   }
   if (resp.ok && !data.error) {
