@@ -102,6 +102,9 @@ export default {
     if (url.pathname === '/check' && request.method === 'POST') {
       return handleCheck(request, env);
     }
+    if (url.pathname === '/friend/redeem' && request.method === 'POST') {
+      return handleFriendRedeem(request, env);
+    }
     // Login: email one-time code → session token（付費端點都要帶這個 token，光知道 email 不夠）
     if (url.pathname === '/auth/start' && request.method === 'POST') {
       return handleAuthStart(request, env);
@@ -551,6 +554,12 @@ export class AuthGate {
         await st.put(key, { exp: now + a.ttlMs, used: false });
         return out({ ok: true });
       }
+      case 'friend_take': { // 好友碼：一碼一人。同一個人再兌一次=沒事（不重複加點），別人來兌=已被用掉
+        const by = await st.get('usedBy');
+        if (by) return out(by === a.email ? { ok: true, again: true } : { taken: true });
+        await st.put('usedBy', a.email);
+        return out({ ok: true });
+      }
       case 'redeem_take': {
         const key = `sale:${a.h}`;
         const r = await st.get(key);
@@ -747,6 +756,47 @@ async function handleCheck(request, env) {
   }
   // 沒 token 就不回答「這個 email 有沒有付費」（以前是個查詢機）
   return json({ verified: false, needLogin: true }, 200, request);
+}
+
+// ── 好友碼（Angie 送朋友的免費體驗）──────────────────────────
+// Angie 用 scripts/friend-codes.mjs 產碼：KV `fcode:<碼的雜湊>` = { credits, exp }（碼本身不存，KV 裡只有雜湊）。
+// 朋友在設定輸入 email＋好友碼 → 這裡兌換：碼對、沒過期、沒被別人用過 → 這個 email 拿到
+//   ① 付費記錄 { plan: 'friend' }（才能用驗證碼登入）② credits 加 N 點
+// 好友帳號沒有每日免費次數：每一次 AI 回答（解牌、追問）都扣 1 點，扣完就停（見 handleGemini）。
+// 兌換期限=碼的 exp；兌換後的點數不會過期。已經是付費會員的人兌換=只加點數，不動原本的會員資格。
+// 「一碼一人」在 AuthGate（每個碼一個物件）裡做：兩個人同時兌同一個碼，只有一個會成功。
+const FRIEND_CODE_RE = /^[A-Z0-9]{4,32}$/;
+function normFriendCode(c) { return String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 40); }
+async function handleFriendRedeem(request, env) {
+  const missing = gateMissing(env, request); if (missing) return missing;
+  const { email, code } = await request.json().catch(() => ({}));
+  const e = normEmail(email);
+  const c = normFriendCode(code);
+  if (!e || !EMAIL_RE.test(e)) return json({ error: '請輸入正確的 Email / Please enter a valid email' }, 400, request);
+  if (!FRIEND_CODE_RE.test(c)) return json({ error: '好友碼不對，請再確認一次 / That friend code doesn\'t look right', badCode: true }, 400, request);
+  if (!(await ipAllow(env, request, 'friend', AUTH_IP_HOURLY_CAP))) {
+    return json({ error: '嘗試太多次，請一小時後再試 / Too many attempts, please try again in an hour', rateLimited: true }, 429, request);
+  }
+  const h = await sha256Hex(`fcode:${c}`);
+  const def = safeJson((await env.TAROT_KV.get(`fcode:${h}`)) || '');
+  if (!def || !(def.credits > 0)) return json({ error: '好友碼不對，請再確認一次 / That friend code doesn\'t look right', badCode: true }, 400, request);
+  if (def.exp && Date.now() > def.exp) return json({ error: '這個好友碼已經過期了 / This friend code has expired', expired: true }, 400, request);
+  const g = await gate(env, `fcode:${h}`, { op: 'friend_take', email: e });
+  if (g.taken) return json({ error: '這個好友碼已經被用過了 / This friend code has already been used', taken: true }, 409, request);
+  if (!g.ok) return json({ error: '兌換失敗，請稍後再試 / Could not redeem, please try again' }, 500, request);
+  if (!g.again) {
+    const ck = `credits:${e}`;
+    const bal = parseInt((await env.TAROT_KV.get(ck)) || '0', 10);
+    await env.TAROT_KV.put(ck, String(bal + def.credits));
+    if (!(await env.TAROT_KV.get(`email:${e}`))) {
+      await env.TAROT_KV.put(
+        `email:${e}`,
+        JSON.stringify({ verified: true, date: new Date().toISOString(), plan: 'friend', code: h.slice(0, 12) }),
+        { expirationTtl: LIFETIME_TTL }
+      );
+    }
+  }
+  return json({ ok: true, credits: def.credits }, 200, request);
 }
 
 // ── History sync (paid users only) ───────────────────────────
@@ -1013,12 +1063,15 @@ async function handleGemini(request, env) {
     return json({ error: 'AI 解牌暫停服務：API 配額已滿，請稍後再試 / AI readings are paused: quota reached, please try again later.', paused: true }, 503, request);
   }
 
-  const { body: geminiBody, spend } = await request.json().catch(() => ({}));
+  const { body: geminiBody, spend: spendAsked } = await request.json().catch(() => ({}));
 
   // 身分看 session token（/auth/verify 發的），body 裡的 email 不再採信
   const s = await requirePaidSession(request, env);
   if (s.error) return s.error;
   const e = s.email;
+  // 好友帳號（好友碼兌換來的）沒有每日免費次數：每次都扣點
+  const friendOnly = (safeJson(s.record) || {}).plan === 'friend';
+  const spend = !!spendAsked || friendOnly;
 
   if (!geminiBody) return json({ error: '缺少請求內容' }, 400, request);
 
@@ -1029,7 +1082,9 @@ async function handleGemini(request, env) {
   if (spend) {
     creditBalance = parseInt((await env.TAROT_KV.get(ck)) || '0', 10);
     if (creditBalance < 1) {
-      return json({ error: 'Credit 點數不足 / Not enough credits', noCredits: true, balance: 0 }, 402, request);
+      return json({ error: friendOnly
+        ? '好友體驗的次數用完了 🙏 想繼續的話，可以在「設定」訂閱或購買 AI 點數 / Your free friend readings are used up — subscribe or buy credits in Settings to continue'
+        : 'Credit 點數不足 / Not enough credits', noCredits: true, friend: friendOnly, balance: 0 }, 402, request);
     }
   }
 

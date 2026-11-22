@@ -310,3 +310,74 @@ test('Gumroad 重送同一筆購買通知：兌過的 sale_id 不會復活、期
     assert.deepEqual((await call(e2, '/check', { email: PAID, sale_id: SALE })).data, { verified: false, needLogin: true });
   } finally { Date.now = realNow; }
 });
+
+// ── 好友碼（Angie 送朋友免費體驗）──
+async function hashCode(c) {
+  const norm = String(c).toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`fcode:${norm}`));
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+async function seedFriendCode(kv, code, over = {}) {
+  await kv.put(`fcode:${await hashCode(code)}`, JSON.stringify({ credits: 10, exp: Date.now() + 86400000, ...over }));
+}
+const FRIEND = 'friend@example.com';
+const ASK = { body: { contents: [{ parts: [{ text: 'hi' }] }] } };
+
+test('好友碼：兌換 → 能登入 → 每次 AI（不帶 spend）都扣 1 次，10 次用完回 402 且不再打 Gemini', async () => {
+  const kv = fakeKV(); const net = fakeNet(); const e = env(kv);
+  await seedFriendCode(kv, 'FRIEND-AB12-CD34');
+  const r = await call(e, '/friend/redeem', { email: FRIEND, code: 'friend-ab12-cd34 ' }); // 小寫、多空白也認得
+  assert.equal(r.status, 200, JSON.stringify(r.data)); assert.equal(r.data.credits, 10);
+  assert.equal(JSON.parse(kv.m.get(`email:${FRIEND}`)).plan, 'friend');
+  const tok = await login(e, net, FRIEND);
+  for (let i = 9; i >= 0; i--) {
+    const g = await call(e, '/gemini', ASK, tok);
+    assert.equal(g.status, 200); assert.equal(g.data.__creditBalance, i);
+  }
+  const before = net.gemini;
+  const over = await call(e, '/gemini', ASK, tok);
+  assert.equal(over.status, 402); assert.equal(over.data.friend, true); assert.match(over.data.error, /好友體驗的次數用完了/);
+  assert.equal(net.gemini, before);
+});
+
+test('好友碼一碼一人：兩個人同時兌同一個碼，只有一個成功、點數只發一次', async () => {
+  const kv = fakeKV(); fakeNet(); const e = env(kv);
+  await seedFriendCode(kv, 'FRIEND-ONLY-ONCE');
+  const [a, b] = await Promise.all([
+    call(e, '/friend/redeem', { email: 'a@example.com', code: 'FRIEND-ONLY-ONCE' }),
+    call(e, '/friend/redeem', { email: 'b@example.com', code: 'FRIEND-ONLY-ONCE' }),
+  ]);
+  assert.deepEqual([a.status, b.status].sort(), [200, 409]);
+  const winner = a.status === 200 ? 'a@example.com' : 'b@example.com';
+  const loser = a.status === 200 ? 'b@example.com' : 'a@example.com';
+  assert.equal(kv.m.get(`credits:${winner}`), '10');
+  assert.equal(kv.m.get(`credits:${loser}`), undefined);
+  assert.equal(kv.m.get(`email:${loser}`), undefined);
+});
+
+test('好友碼：同一個人再兌一次不會重複加點；過期、錯的碼什麼都不給', async () => {
+  const kv = fakeKV(); fakeNet(); const e = env(kv);
+  await seedFriendCode(kv, 'FRIEND-TWICE');
+  assert.equal((await call(e, '/friend/redeem', { email: FRIEND, code: 'FRIEND-TWICE' })).status, 200);
+  assert.equal((await call(e, '/friend/redeem', { email: FRIEND, code: 'FRIEND-TWICE' })).status, 200);
+  assert.equal(kv.m.get(`credits:${FRIEND}`), '10');
+
+  await seedFriendCode(kv, 'FRIEND-OLD', { exp: Date.now() - 1000 });
+  const old = await call(e, '/friend/redeem', { email: 'x@example.com', code: 'FRIEND-OLD' });
+  assert.equal(old.status, 400); assert.equal(old.data.expired, true);
+  const bad = await call(e, '/friend/redeem', { email: 'x@example.com', code: 'FRIEND-NOPE' });
+  assert.equal(bad.status, 400); assert.equal(bad.data.badCode, true);
+  assert.equal(kv.m.get('email:x@example.com'), undefined); assert.equal(kv.m.get('credits:x@example.com'), undefined);
+});
+
+test('付費會員兌好友碼：只加點數，會員資格不變、照樣有每日免費次數（不帶 spend 不扣點）', async () => {
+  const kv = fakeKV(); const net = fakeNet(); const e = env(kv);
+  await seedPaid(kv); await seedFriendCode(kv, 'FRIEND-PAID');
+  assert.equal((await call(e, '/friend/redeem', { email: PAID, code: 'FRIEND-PAID' })).status, 200);
+  assert.equal(JSON.parse(kv.m.get(`email:${PAID}`)).plan, 'lifetime');
+  assert.equal(kv.m.get(`credits:${PAID}`), '10');
+  const tok = await login(e, net);
+  const g = await call(e, '/gemini', ASK, tok);
+  assert.equal(g.status, 200); assert.equal(g.data.__creditBalance, undefined);
+  assert.equal(kv.m.get(`credits:${PAID}`), '10');
+});

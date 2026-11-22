@@ -206,6 +206,9 @@ Object.assign(T, {
   'set.buy.note':{zh:'以購買 / 訂閱時填寫的 email 驗證解鎖',en:'Unlock by verifying with your checkout email'},
   'set.buy.label':{zh:'已訂閱？輸入訂閱時的 Email，我們會寄一組驗證碼給你',en:'Already subscribed? Enter your checkout email and we\'ll send you a code'},
   'set.buy.verify':{zh:'寄驗證碼',en:'Send code'},
+  'set.friend.toggle':{zh:'🎁 有好友碼？',en:'🎁 Have a friend code?'},
+  'set.friend.label':{zh:'輸入好友碼和你的 Email（填在上面那格），兌換後會寄驗證碼給你',en:'Enter the friend code and your email (in the box above) — we\'ll send you a sign-in code'},
+  'set.friend.btn':{zh:'兌換',en:'Redeem'},
   'set.buy.code':{zh:'確認驗證碼',en:'Confirm code'},
   'set.buy.clear':{zh:'清除驗證',en:'Clear'},
   'set.buy.sync':{zh:'☁ 立即同步歷史記錄',en:'☁ Sync history now'},
@@ -2767,7 +2770,7 @@ async function sendChat(resendText){
       if(!r.ok){
         if(r.status===401){ sessionLost(); throw new Error(L('登入已失效，請到「設定」重新驗證 Email','Session expired — please re-verify your email in Settings')); }
         if(r.status===403){ localStorage.removeItem('tr_verified_email'); if(typeof updateApiStatus==='function') updateApiStatus(); throw new Error(L('訂閱已到期或未生效，請續訂以繼續使用 AI 解牌','Your subscription has lapsed — please resubscribe to keep using AI readings')); }
-        if(r.status===402){ CREDITS=0; renderCreditUI(); updateChatRemaining(); throw new Error(L('AI 點數不足，可到「設定」儲值 ⚡','Not enough credits — top up in Settings ⚡')); }
+        if(r.status===402){ CREDITS=0; renderCreditUI(); updateChatRemaining(); throw new Error(data.friend ? extractErrMsg(data.error, 'No credits') : L('AI 點數不足，可到「設定」儲值 ⚡','Not enough credits — top up in Settings ⚡')); }
         if(r.status===429 && key){ ownK=true; toast(L('今日訂閱額度已滿，已自動改用你的 API Key 🔑','Daily subscription limit reached — switched to your own API key 🔑')); }
         else throw new Error(extractErrMsg(data.error, `Worker ${r.status}`));
       } else {
@@ -3146,7 +3149,7 @@ function showUnlockCodeStep(show){
   if(show && inp){ inp.value=''; inp.focus(); }
 }
 // 第一步：寄驗證碼到購買時的 Email
-async function verifyEmail(){
+async function verifyEmail(sentMsg){
   const email=document.getElementById('unlock-input').value.trim().toLowerCase();
   if(!email){toast(L('請輸入 Email','Please enter your email'));return;}
   if(!WORKER_URL){toast(L('⚠ 管理員尚未設定 Worker URL','⚠ Worker URL not configured'));return;}
@@ -3159,10 +3162,39 @@ async function verifyEmail(){
       // worker 不會說這個 email 有沒有購買記錄（防掃描），所以提示要同時講到兩種情況
       localStorage.setItem('tr_pending_email',email);
       showUnlockCodeStep(true);
-      ubar.textContent=L('✉ 如果 '+email+' 有購買記錄，驗證碼已寄出，請貼到下面（10 分鐘內有效）。沒收到：翻翻垃圾郵件、確認是 Gumroad 購買時填的 Email，1 分鐘後可再寄','✉ If '+email+' has a purchase, a code is on its way — paste it below (valid 10 min). Nothing arrived? Check spam, make sure it\'s your Gumroad checkout email, and resend after a minute');
+      ubar.textContent=(typeof sentMsg==='string'&&sentMsg)?sentMsg:L('✉ 如果 '+email+' 有購買記錄，驗證碼已寄出，請貼到下面（10 分鐘內有效）。沒收到：翻翻垃圾郵件、確認是 Gumroad 購買時填的 Email，1 分鐘後可再寄','✉ If '+email+' has a purchase, a code is on its way — paste it below (valid 10 min). Nothing arrived? Check spam, make sure it\'s your Gumroad checkout email, and resend after a minute');
     } else {
       showUnlockCodeStep(false);
       ubar.textContent='✗ '+extractErrMsg(d.error, L('寄不出驗證碼，請稍後再試','Could not send the code, please try later'));
+    }
+  }catch(e){ubar.textContent=L('✗ 無法連線，請稍後再試：','✗ Connection failed, please try again: ')+e.message.slice(0,60);}
+}
+// 好友碼：先兌換（email 拿到好友點數＋可以登入），再走一般的寄驗證碼登入
+function toggleFriendBox(show){
+  const box=document.getElementById('friend-box'); const btn=document.getElementById('friend-toggle');
+  if(box) box.style.display=show?'block':'none';
+  if(btn) btn.style.display=show?'none':'block';
+  if(show){ const inp=document.getElementById('unlock-input'); const fc=document.getElementById('friend-code');
+    if(inp && !inp.value) inp.focus(); else if(fc) fc.focus(); }
+}
+async function redeemFriendCode(){
+  const email=document.getElementById('unlock-input').value.trim().toLowerCase();
+  const code=(document.getElementById('friend-code').value||'').trim();
+  const ubar=document.getElementById('unlock-status-bar');
+  if(!email){ toast(L('先在上面那格填你的 Email','Enter your email in the box above first')); document.getElementById('unlock-input').focus(); return; }
+  if(!code){ toast(L('請輸入好友碼','Please enter the friend code')); return; }
+  if(!WORKER_URL){toast(L('⚠ 管理員尚未設定 Worker URL','⚠ Worker URL not configured'));return;}
+  ubar.style.display='block';ubar.className='api-status api-none';ubar.textContent=L('兌換中...','Redeeming...');
+  try{
+    const r=await fetch(WORKER_URL+'/friend/redeem',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,code})});
+    const d=await r.json().catch(()=>({}));
+    if(r.ok && d.ok){
+      document.getElementById('friend-code').value='';
+      toggleFriendBox(false);
+      await verifyEmail(L('🎁 兌換成功！送你 '+d.credits+' 次 AI 解讀（解牌、追問每次扣 1 次）。驗證碼已寄到 '+email+'，貼到下面就能開始（10 分鐘內有效，沒收到請翻垃圾郵件）',
+        '🎁 Redeemed! You have '+d.credits+' AI answers (each reading or follow-up uses 1). A sign-in code was sent to '+email+' — paste it below (valid 10 min; check spam if it\'s not there)'));
+    } else {
+      ubar.textContent='✗ '+extractErrMsg(d.error, L('兌換失敗，請稍後再試','Could not redeem, please try later'));
     }
   }catch(e){ubar.textContent=L('✗ 無法連線，請稍後再試：','✗ Connection failed, please try again: ')+e.message.slice(0,60);}
 }
@@ -3542,6 +3574,7 @@ function announceGet(k){ try{ if(localStorage.getItem(k)) return true; }catch(e)
 function announceSet(k){ announceSeen=true; try{ localStorage.setItem(k,'1'); }catch(e){} try{ sessionStorage.setItem(k,'1'); }catch(e){} }
 function showAnnounce(){
   if(!ANNOUNCE_ID) return; // 沒有進行中的公告
+  if(window.__trFriendLink) return; // 點好友碼連結進來的新朋友：先別用「八件更新」蓋住兌換畫面（下次來再看）
   if(new Date() >= ANNOUNCE_EXPIRES) return; // 公告已過期
   if(announceGet('tr_announce_'+ANNOUNCE_ID)) return;
   const m=document.getElementById('announce-modal'); if(m) m.classList.add('on');
@@ -3690,6 +3723,9 @@ function toggleAiInfo(){
 //  更新紀錄 CHANGELOG（新項目加在最上面；中英務必同步）
 // ══════════════════════════════════════════
 const CHANGELOG = [
+  { date:'2026-11-22',
+    zh:['好友碼：收到朋友給的好友碼，在「設定」按「🎁 有好友碼？」，填好碼和 Email 就能免費用 AI 解讀（點朋友給的連結會自動填好碼）'],
+    en:['Friend codes: got one from a friend? Open Settings → "🎁 Have a friend code?", enter the code and your email to get free AI readings (the link your friend sends fills the code in for you)'] },
   { date:'2026-11-20',
     zh:['兩顆複製鈕改名，一眼看得出差別：「複製牌（不含解讀）」只有問題、牌陣和每張牌的正逆位；「複製牌＋解讀」再加上整篇解讀和追問','「複製牌（不含解讀）」：只複製問題、牌陣和抽到的每一張牌（都標正位或逆位），不含解讀。解讀頁牌面下方、「占卜記錄」每一筆、專案裡每一筆點開後都有','專案裡的占卜看得到追問了：每一筆會寫還可以追問幾次，點開能看之前的追問、按「繼續追問」接著問（事後加入專案的也一樣），也可以複製牌＋解讀','「複製牌＋解讀」裡抽到的牌改成一張一行，並加上牌陣名稱'],
     en:['The two copy buttons are renamed so the difference is obvious: "Copy cards only" gives the question, spread and each card with its orientation; "Copy cards + reading" adds the full reading and follow-ups','"Copy cards only": copies just the question, the spread and every card drawn (each marked upright or reversed), without the reading. Find it under the cards on the reading page, on every History entry, and on every project entry once opened','Follow-ups now show inside projects: each entry says how many follow-ups are left; open it to see earlier follow-ups, tap "Continue asking" to pick up where you left off (readings added to a project later too), or copy the full reading','"Copy cards + reading" now lists the cards one per line and includes the spread name'] },
@@ -3912,6 +3948,27 @@ if(isVerified()){
     const bar=document.getElementById('unlock-status-bar');
     if(bar){ bar.style.display='block'; bar.className='api-status api-none';
       bar.textContent=L('輸入你購買時填寫的 Email 即可解鎖 ✦','Enter the email you used at checkout to unlock ✦'); }
+  }, 300);
+})();
+
+// ── 好友碼連結（?friend=碼）：Angie 傳給朋友的網址，點進來直接打開設定、好友碼已填好 ──
+(function deepLinkFriend(){
+  const p=new URLSearchParams(location.search);
+  const code=(p.get('friend')||'').trim();
+  if(!code) return;
+  window.__trFriendLink=true;
+  const am=document.getElementById('announce-modal'); if(am) am.classList.remove('on'); // 公告已經跳出來的話先收起來（不記成看過）
+  history.replaceState(null,'',location.pathname); // 碼不要留在網址列（分享畫面時才不會被看到）
+  setTimeout(()=>{
+    if(typeof openSettings!=='function') return;
+    openSettings();
+    toggleFriendBox(true);
+    const fc=document.getElementById('friend-code'); if(fc) fc.value=code;
+    const inp=document.getElementById('unlock-input'); if(inp && !isVerified()){ inp.value=''; inp.focus(); }
+    const bar=document.getElementById('unlock-status-bar');
+    if(bar){ bar.style.display='block'; bar.className='api-status api-none';
+      bar.textContent=L('🎁 朋友送你免費的 AI 塔羅解讀！在下面填你的 Email，按「兌換」','🎁 A friend gave you free AI tarot readings! Enter your email below and tap "Redeem"'); }
+    const box=document.getElementById('friend-box'); if(box) box.scrollIntoView({block:'center'});
   }, 300);
 })();
 
