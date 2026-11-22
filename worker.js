@@ -422,18 +422,10 @@ async function handleWebhook(request, env) {
   const packKey = productKeys.find(k => creditMap[k] > 0);
   if (packKey) {
     const pack = creditMap[packKey];
-    if (refunded) {
-      const r = await withCreditLock(env, email, () => addCredits(env, email, -pack), { wait: true });
-      return new Response(r.busy ? 'busy' : 'OK', { status: r.busy ? 503 : 200 }); // 忙線回 503，Gumroad 會重送
-    }
-    // 同一筆 sale 只入帳一次（Gumroad ping 可能重送）
-    if (saleId) {
-      const seen = await env.TAROT_KV.get(`csale:${saleId}`);
-      if (seen) return new Response('OK');
-    }
-    const r = await withCreditLock(env, email, () => addCredits(env, email, pack), { wait: true });
-    if (r.busy) return new Response('busy', { status: 503 });
-    if (saleId) await env.TAROT_KV.put(`csale:${saleId}`, '1', { expirationTtl: 60 * 60 * 24 * 90 });
+    // 同一筆 sale 只入帳一次、只退一次（Gumroad ping 可能重送）：在帳本裡用 sale_id 去重
+    // （2026-11 以前是 KV `csale:<sale_id>`；那時入帳過的舊單如果現在重送，帳本會先看那個標記）
+    if (!refunded && saleId && await env.TAROT_KV.get(`csale:${saleId}`)) return new Response('OK');
+    await ledger(env, email, 'credit_add', { n: refunded ? -pack : pack, idem: saleId ? `${refunded ? 'refund' : 'sale'}:${saleId}` : undefined });
     return new Response('OK');
   }
 
@@ -464,8 +456,8 @@ async function handleWebhook(request, env) {
 async function handleCredits(request, env) {
   const s = await requirePaidSession(request, env);
   if (s.error) return s.error;
-  const bal = parseInt((await env.TAROT_KV.get(`credits:${s.email}`)) || '0', 10);
-  return json({ balance: bal }, 200, request);
+  const r = await ledger(env, s.email, 'credit_get');
+  return json({ balance: r.bal }, 200, request);
 }
 
 // ── Credit manual adjust (private; for support/testing) ──────
@@ -478,9 +470,8 @@ async function handleCreditsAdmin(request, env) {
   const e = (email || '').toLowerCase().trim();
   const d = parseInt(delta, 10);
   if (!e || isNaN(d)) return json({ error: 'bad request' }, 400, request);
-  const r = await withCreditLock(env, e, () => addCredits(env, e, d), { wait: true });
-  if (r.busy) return json({ error: 'busy, try again' }, 503, request);
-  return json({ ok: true, balance: r.value }, 200, request);
+  const r = await ledger(env, e, 'credit_add', { n: d });
+  return json({ ok: true, balance: r.bal }, 200, request);
 }
 
 // ── Login / session ──────────────────────────────────────────
@@ -571,18 +562,32 @@ export class AuthGate {
         if (p) await st.delete('friendPending');
         return out({ h: p && p.exp >= now ? p.h : null });
       }
-      // ── 每個 email 一個物件：點數的鎖。扣點／加點要「讀了再寫」，KV 擋不住同時進來的請求，
-      //    所以先在這裡拿鎖（同一時間只有一個），拿不到就請對方等一下。owner 防止別人解到我的鎖；ttl 防當掉的請求永遠鎖著 ──
-      case 'lock': {
-        const l = await st.get('lock');
-        if (l && l.exp > now) return out({ busy: true });
-        await st.put('lock', { owner: a.owner, exp: now + a.ttlMs });
-        return out({ ok: true });
-      }
-      case 'unlock': {
-        const l = await st.get('lock');
-        if (l && l.owner === a.owner) await st.delete('lock');
-        return out({ ok: true });
+      // ── 點數帳本（每個 email 一個物件 `credit:<email>`）：餘額只以這裡為準 ──
+      // KV 是最終一致（跨地區可能讀到舊值），擋不住同時進來的扣點／加點；這裡單執行緒，讀了再寫是原子的。
+      // seed=KV 裡舊的餘額（`credits:<email>`）：這個帳本第一次用到時帶進來，之後就不再看 KV。
+      // idem=這筆加點是哪來的（好友碼、Gumroad 訂單），同一筆只入帳一次；重送、重試都不會加兩次。
+      // reserve=AI 呼叫前先預扣 1 點，成功 commit、失敗 refund；預扣超過 10 分鐘沒結果（請求當掉）自動退回。
+      case 'credit_get': case 'credit_add': case 'credit_reserve': case 'credit_commit': case 'credit_refund': {
+        let bal = await st.get('bal');
+        if (bal === undefined) bal = Math.max(0, parseInt(a.seed, 10) || 0);
+        const holds = (await st.get('holds')) || {};
+        for (const [k, h] of Object.entries(holds)) if (h.exp < now) { bal += 1; delete holds[k]; } // 當掉的預扣退回
+        const idems = (await st.get('idems')) || {};
+        let res = {};
+        if (a.op === 'credit_add') {
+          if (a.idem && idems[a.idem]) res = { dup: true };
+          else { bal = Math.max(0, bal + a.n); if (a.idem) idems[a.idem] = now; res = { ok: true }; }
+        } else if (a.op === 'credit_reserve') {
+          if (bal < 1) res = { none: true };
+          else { bal -= 1; holds[a.owner] = { exp: now + CREDIT_HOLD_MS }; res = { ok: true }; }
+        } else if (a.op === 'credit_commit') {
+          delete holds[a.owner]; res = { ok: true };
+        } else if (a.op === 'credit_refund') {
+          if (holds[a.owner]) { bal += 1; delete holds[a.owner]; }
+          res = { ok: true };
+        }
+        await st.put('bal', bal); await st.put('holds', holds); await st.put('idems', idems);
+        return out({ ...res, bal });
       }
       case 'redeem_take': {
         const key = `sale:${a.h}`;
@@ -621,24 +626,13 @@ function normEmail(v) { return String(v || '').toLowerCase().trim().slice(0, 254
 async function accessRecord(env, e) {
   return (await env.TAROT_KV.get(`email:${e}`)) || (await env.TAROT_KV.get(`friend:${e}`));
 }
-// 點數的讀了再寫，一律包在這個鎖裡（見 AuthGate 的 lock）。wait=拿不到鎖時要不要等一下再試（加點的要等，扣點的直接回忙碌）
-const CREDIT_LOCK_MS = 120 * 1000; // 要涵蓋一次 Gemini 呼叫（含重試、備用模型）
-async function withCreditLock(env, e, fn, { wait = false } = {}) {
-  const owner = randomHex(8);
-  for (let i = 0; ; i++) {
-    const r = await gate(env, `credit:${e}`, { op: 'lock', owner, ttlMs: CREDIT_LOCK_MS });
-    if (r.ok) break;
-    if (!wait || i >= 20) return { busy: true };
-    await new Promise(res => setTimeout(res, 250 * (i + 1)));
-  }
-  try { return { value: await fn() }; }
-  finally { try { await gate(env, `credit:${e}`, { op: 'unlock', owner }); } catch (err) {} }
-}
-async function addCredits(env, e, n) {
-  const ck = `credits:${e}`;
-  const bal = Math.max(0, parseInt((await env.TAROT_KV.get(ck)) || '0', 10) + n);
-  await env.TAROT_KV.put(ck, String(bal));
-  return bal;
+// 點數一律走帳本（AuthGate `credit:<email>`，見 credit_* 操作）；KV `credits:<email>` 只是給舊版讀的副本
+const CREDIT_HOLD_MS = 10 * 60 * 1000; // AI 呼叫預扣的點數，這麼久沒結果就自動退回
+async function ledger(env, e, op, extra = {}) {
+  const seed = parseInt((await env.TAROT_KV.get(`credits:${e}`)) || '0', 10) || 0;
+  const r = await gate(env, `credit:${e}`, { op, seed, ...extra });
+  if (typeof r.bal === 'number') { try { await env.TAROT_KV.put(`credits:${e}`, String(r.bal)); } catch (err) {} }
+  return r;
 }
 function safeJson(raw) { try { return JSON.parse(raw); } catch (e) { return null; } }
 function randomHex(bytes) {
@@ -784,7 +778,6 @@ async function handleAuthVerify(request, env) {
     if (r.taken && !(await accessRecord(env, e))) {
       return json({ error: '這個好友碼剛剛被別人用掉了 / This friend code was just used by someone else', taken: true }, 409, request);
     }
-    if (r.busy) return json({ error: '系統忙線，請重新兌換一次 / Busy — please redeem again' }, 503, request);
     if (r.credits) friendCredits = r.credits;
   }
   const record = await accessRecord(env, e);
@@ -868,8 +861,8 @@ async function grantFriendCode(env, e, h) {
     verified: true, plan: 'friend', date: prev.date || new Date().toISOString(),
     codes: [...new Set([...(prev.codes || []), h.slice(0, 12)])],
   }));
-  const r = await withCreditLock(env, e, () => addCredits(env, e, credits), { wait: true });
-  if (r.busy) return { busy: true };
+  // 用好友碼當去重鍵：這一步重來幾次、同時來幾個，都只加一次
+  await ledger(env, e, 'credit_add', { n: credits, idem: `fcode:${h}` });
   await gate(env, `fcode:${h}`, { op: 'friend_done' });
   return { credits };
 }
@@ -1148,32 +1141,31 @@ async function handleGemini(request, env) {
   const friendOnly = (safeJson(s.record) || {}).plan === 'friend';
   const spend = !!spendAsked || friendOnly;
   if (!geminiBody) return json({ error: '缺少請求內容' }, 400, request);
+  // 扣點的呼叫：先在帳本預扣 1 點（同時來幾個都各扣各的，扣不到就 402），成功才確認、失敗退回
+  let hold = null;
   if (spend) {
-    // 扣點的呼叫：整段（查餘額 → 呼叫 Gemini → 扣點）拿著這個人的點數鎖，同時送好幾個也不會只扣到一次
-    const r = await withCreditLock(env, e, () => geminiCall(request, env, s, geminiBody, true, friendOnly));
-    if (r.busy) return json({ error: '上一個 AI 回答還在跑，等它好了再問 / Your previous AI answer is still running — please wait for it', busy: true }, 409, request);
-    return r.value;
-  }
-  return geminiCall(request, env, s, geminiBody, false, friendOnly);
-}
-
-async function geminiCall(request, env, s, geminiBody, spend, friendOnly) {
-  const e = s.email;
-
-  if (!geminiBody) return json({ error: '缺少請求內容' }, 400, request);
-
-  // Credit 扣點模式：超出免費額度的呼叫（追問超過每次上限 / 當日次數用完）。
-  // 有餘額 → 略過每日上限檢查，成功後才扣 1 點；無餘額 → 402。
-  const ck = `credits:${e}`;
-  let creditBalance = null;
-  if (spend) {
-    creditBalance = parseInt((await env.TAROT_KV.get(ck)) || '0', 10);
-    if (creditBalance < 1) {
+    const owner = randomHex(8);
+    const r = await ledger(env, e, 'credit_reserve', { owner });
+    if (r.none) {
       return json({ error: friendOnly
         ? '好友體驗的次數用完了 🙏 想繼續的話，可以在「設定」訂閱或購買 AI 點數 / Your free friend readings are used up — subscribe or buy credits in Settings to continue'
         : 'Credit 點數不足 / Not enough credits', noCredits: true, friend: friendOnly, balance: 0 }, 402, request);
     }
+    hold = { owner, bal: r.bal };
   }
+  let settled = false;
+  try {
+    const res = await geminiCall(request, env, s, geminiBody, spend, hold);
+    settled = true;
+    return res;
+  } finally {
+    if (hold && !settled) { try { await ledger(env, e, 'credit_refund', { owner: hold.owner }); } catch (err) {} } // 中途丟錯：退回預扣
+  }
+}
+
+async function geminiCall(request, env, s, geminiBody, spend, hold) {
+  const e = s.email;
+  const refund = async () => { if (hold) await ledger(env, e, 'credit_refund', { owner: hold.owner }); };
 
   // 全站成本總閘（扣點呼叫已付費，不受總閘限制）
   const dk = todayKey();
@@ -1185,7 +1177,7 @@ async function geminiCall(request, env, s, geminiBody, spend, friendOnly) {
   const uk = userDayKey(e);
   const uUsed = parseInt((await env.TAROT_KV.get(uk)) || '0', 10);
   if (!spend && uUsed >= USER_DAILY_CAP) {
-    const bal = parseInt((await env.TAROT_KV.get(ck)) || '0', 10);
+    const bal = (await ledger(env, e, 'credit_get')).bal;
     return json({ error: `你今天的 AI 解牌已達上限（${USER_DAILY_CAP} 次），明天會重置；想立即使用可在設定改用自己的 API Key。/ You've reached today's AI reading limit (${USER_DAILY_CAP}); it resets tomorrow. You can use your own API key to continue now.`, capped: true, userCapped: true, balance: bal }, 429, request);
   }
 
@@ -1196,13 +1188,15 @@ async function geminiCall(request, env, s, geminiBody, spend, friendOnly) {
     const colo = (request.cf && request.cf.colo) || '?';
     const country = (request.cf && request.cf.country) || '?';
     await alertGeoBlock(env, colo, country);
+    await refund();
     return json({ ...data, __geoBlocked: true, __colo: colo }, resp.status, request);
   }
   // 只在「成功」時才計入用量與扣點（失敗 / 重試不浪費額度與點數）
-  if (resp.ok && !data.error && spend) {
-    const balNow = Math.max(0, parseInt((await env.TAROT_KV.get(ck)) || '0', 10) - 1);
-    await env.TAROT_KV.put(ck, String(balNow));
-    data.__creditBalance = balNow; // 讓前端即時更新餘額顯示
+  if (hold) {
+    if (resp.ok && !data.error) {
+      await ledger(env, e, 'credit_commit', { owner: hold.owner });
+      data.__creditBalance = hold.bal; // 讓前端即時更新餘額顯示（預扣後的餘額）
+    } else await refund();
   }
   if (resp.ok && !data.error) {
     await env.TAROT_KV.put(dk, String(used + 1), { expirationTtl: 60 * 60 * 24 * 3 });

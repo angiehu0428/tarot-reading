@@ -356,11 +356,11 @@ test('好友帳號剩最後 1 次，同時送 3 個：只有 1 個拿到回答�
   const kv = fakeKV(); const net = fakeNet(); const e = env(kv);
   await seedFriendCode(kv, 'FRIEND-LAST');
   const tok = (await redeem(e, net, FRIEND, 'FRIEND-LAST')).data.token;
-  await kv.put(`credits:${FRIEND}`, '1');
+  for (let i = 0; i < 9; i++) assert.equal((await call(e, '/gemini', ASK, tok)).status, 200); // 用到剩 1 次
   const before = net.gemini;
   const rs = await Promise.all([1, 2, 3].map(() => call(e, '/gemini', ASK, tok)));
   assert.equal(rs.filter(r => r.status === 200).length, 1, JSON.stringify(rs.map(r => r.status)));
-  assert.ok(rs.every(r => [200, 402, 409].includes(r.status)));
+  assert.ok(rs.every(r => [200, 402].includes(r.status)));
   assert.equal(net.gemini - before, 1);
   assert.equal(kv.m.get(`credits:${FRIEND}`), '0');
 });
@@ -430,4 +430,34 @@ test('付費會員兌好友碼：只加點、照樣有每日免費；訂閱到�
   const g2 = await call(e, '/gemini', ASK, tok);
   assert.equal(g2.status, 200); assert.equal(g2.data.__creditBalance, 9);
   assert.equal((await call(e, '/auth/start', { email: PAID })).status, 200);
+});
+
+test('點數帳本以 Durable Object 為準：KV 副本是舊值（跨地區還沒同步）也不會多用', async () => {
+  const kv = fakeKV(); const net = fakeNet(); const e = env(kv);
+  await seedFriendCode(kv, 'FRIEND-STALE');
+  const tok = (await redeem(e, net, FRIEND, 'FRIEND-STALE')).data.token;
+  for (let i = 0; i < 10; i++) assert.equal((await call(e, '/gemini', ASK, tok)).status, 200);
+  await kv.put(`credits:${FRIEND}`, '10'); // 假裝這個地區的 KV 還是舊的 10 點
+  assert.equal((await call(e, '/gemini', ASK, tok)).status, 402);
+  assert.equal((await call(e, '/credits', {}, tok)).data.balance, 0);
+});
+
+test('帳本：同一筆加點（同一個好友碼）同時送兩次只入帳一次；預扣後當掉，10 分鐘後自動退回', async () => {
+  const kv = fakeKV(); fakeNet(); const e = env(kv);
+  const led = (payload) => e.AUTH_GATE.get(e.AUTH_GATE.idFromName(`credit:${FRIEND}`)).fetch('https://auth-gate/', { method: 'POST', body: JSON.stringify({ seed: 0, ...payload }) }).then(r => r.json());
+  await Promise.all([led({ op: 'credit_add', n: 10, idem: 'fcode:x' }), led({ op: 'credit_add', n: 10, idem: 'fcode:x' })]);
+  assert.equal((await led({ op: 'credit_get' })).bal, 10);
+  assert.equal((await led({ op: 'credit_reserve', owner: 'o1' })).bal, 9);
+  const realNow = Date.now; Date.now = () => realNow() + 11 * 60 * 1000;
+  try { assert.equal((await led({ op: 'credit_get' })).bal, 10); } finally { Date.now = realNow; }
+  assert.equal((await led({ op: 'credit_refund', owner: 'o1' })).bal, 10); // 已經自動退過，不會再退
+});
+
+test('Gumroad 同一筆買點數通知同時到兩次、退款重送兩次：只加一次、只退一次', async () => {
+  const kv = fakeKV(); fakeNet(); const e = env(kv, { CREDIT_PRODUCTS: 'tarotcredits100:100' });
+  const buy = { email: 'buyer@example.com', sale_id: 'S1', permalink: 'tarotcredits100' };
+  await Promise.all([webhook(e, buy), webhook(e, buy)]);
+  assert.equal(kv.m.get('credits:buyer@example.com'), '100');
+  await Promise.all([webhook(e, { ...buy, refunded: 'true' }), webhook(e, { ...buy, refunded: 'true' })]);
+  assert.equal(kv.m.get('credits:buyer@example.com'), '0');
 });
