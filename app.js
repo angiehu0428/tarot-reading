@@ -348,8 +348,8 @@ Object.assign(T, {
   'rd.head':{zh:'✦ 神諭解讀 ✦',en:'✦ The Oracle Speaks ✦'},
   'w.guide':{zh:'📖 第一次玩？看教學',en:'📖 New to tarot? Quick guide'},
   'howto.sum':{zh:'📖 看不懂？怎麼看這一頁',en:'📖 Not sure what you\'re looking at? Read this'},
-  'howto.body':{zh:'<b>上面的牌</b>：每張牌上方寫了它的位置（例如三張牌陣是「過去・現在・未來」），位置決定這張牌在回答你問題的哪一部分。<br><b>正位／逆位</b>：牌是正的叫正位，意思正常發揮；倒過來叫逆位，通常表示卡住、不足，或往反方向走。<br><b>先看哪裡</b>：先看「整體解讀」裡的「關鍵結論」那段就好，那是給你的答案；往下是每張牌的細節，想深入再看。<br><b>看不懂的詞</b>：牌名、星座、元素是塔羅的術語，跳過也不影響理解。<br><b>AI 解讀</b>：解鎖後（或用朋友給的好友碼）AI 會針對你的問題寫成白話，還能追問。',
-    en:'<b>The cards above</b>: each card sits in a position written above it (for a three-card spread: Past · Present · Future). The position tells you which part of your question that card answers.<br><b>Upright / reversed</b>: an upright card works as its usual meaning; a reversed (upside-down) card usually means blocked, lacking, or going the opposite way.<br><b>Where to start</b>: read the "Key conclusion" in the Overall Reading first — that\'s your answer. Below are details for each card if you want to go deeper.<br><b>Unfamiliar words</b>: card names, zodiac signs and elements are tarot terms; you can skip them.<br><b>AI reading</b>: once unlocked (or with a friend code), the AI explains everything in plain words for your question, and you can ask follow-ups.'},
+  'howto.body':{zh:'<b>下面的牌</b>：每張牌上方寫了它的位置（例如三張牌陣是「過去・現在・未來」），位置決定這張牌在回答你問題的哪一部分。<br><b>正位／逆位</b>：牌是正的叫正位，意思正常發揮；倒過來叫逆位，通常表示卡住、不足，或往反方向走。<br><b>先看哪裡</b>：先看「整體解讀」裡的「關鍵結論」那段就好，那是給你的答案；往下是每張牌的細節，想深入再看。<br><b>看不懂的詞</b>：牌名、星座、元素是塔羅的術語，跳過也不影響理解。<br><b>AI 解讀</b>：解鎖後（或用朋友給的好友碼）AI 會針對你的問題寫成白話，還能追問。',
+    en:'<b>The cards below</b>: each card sits in a position written above it (for a three-card spread: Past · Present · Future). The position tells you which part of your question that card answers.<br><b>Upright / reversed</b>: an upright card works as its usual meaning; a reversed (upside-down) card usually means blocked, lacking, or going the opposite way.<br><b>Where to start</b>: read the "Key Verdict" in the Overall Reading first — that\'s your answer. Below are details for each card if you want to go deeper.<br><b>Unfamiliar words</b>: card names, zodiac signs and elements are tarot terms; you can skip them.<br><b>AI reading</b>: once unlocked (or with a friend code), the AI explains everything in plain words for your question, and you can ask follow-ups.'},
   // ── Pick ──
   'pick.title':{zh:'選擇牌卡',en:'Choose Your Cards'},
   'pick.left.pre':{zh:'以直覺選擇，還需選擇 ',en:'Choose intuitively — '},
@@ -848,7 +848,9 @@ function _showScreen(id) {
     const backIsHome = !readingBackToSpread() && (!navStack.length || navStack[navStack.length-1] === 's-welcome');
     navHome.style.display = (id === 's-welcome' || backIsHome) ? 'none' : 'block';
   }
-  if (typeof updateGuideSteps === 'function') updateGuideSteps(id); // 新手教學：跟著走的人，每一步上面多一句提示
+  // 新手教學：回首頁（不管按返回還是首頁）、進專案、看歷史記錄＝不跟著教學走了
+  if (id === 's-welcome' || id === 's-projects' || id === 's-history') S.guided = false;
+  if (typeof updateGuideSteps === 'function') updateGuideSteps(id); // 跟著走的人，每一步上面多一句提示
   if (id === 's-projects') renderProjectList();
   if (id === 's-project-new') renderColorSwatches();
 }
@@ -3589,7 +3591,7 @@ function announceGet(k){ try{ if(localStorage.getItem(k)) return true; }catch(e)
 function announceSet(k){ announceSeen=true; try{ localStorage.setItem(k,'1'); }catch(e){} try{ sessionStorage.setItem(k,'1'); }catch(e){} }
 function showAnnounce(){
   if(!ANNOUNCE_ID) return; // 沒有進行中的公告
-  if(!(S.readings&&S.readings.length) && !announceGet('tr_guide_done')) return; // 第一次來的人：首頁有新手教學卡，先別再疊一則「更新公告」
+  if(isFirstVisit()) return; // 第一次來的人：首頁有新手教學卡，先別再疊一則「更新公告」
   if(window.__trFriendLink) return; // 點好友碼連結進來的新朋友：先別用「八件更新」蓋住兌換畫面（下次來再看）
   if(new Date() >= ANNOUNCE_EXPIRES) return; // 公告已過期
   if(announceGet('tr_announce_'+ANNOUNCE_ID)) return;
@@ -3741,7 +3743,7 @@ function toggleAiInfo(){
 const CHANGELOG = [
   { date:'2026-11-22',
     zh:['新手教學：首頁「📖 第一次玩？看教學」三步講完怎麼占卜，按「帶我走一次」會在每一步上面提示要做什麼；第一次來的人會自動看到','解讀頁多了「看不懂？怎麼看這一頁」：位置是什麼、正位逆位是什麼、先看「關鍵結論」'],
-    en:['Beginner guide: "📖 New to tarot?" on the home page explains a reading in three steps; "Walk me through it" shows a hint at each step. First-time visitors see it automatically','The reading page now has "Not sure what you\'re looking at?": what positions mean, upright vs reversed, and to start with the "Key conclusion"'] },
+    en:['Beginner guide: "📖 New to tarot?" on the home page explains a reading in three steps; "Walk me through it" shows a hint at each step. First-time visitors see it automatically','The reading page now has "Not sure what you\'re looking at?": what positions mean, upright vs reversed, and to start with the "Key Verdict"'] },
   { date:'2026-11-22',
     zh:['好友碼：收到朋友給的好友碼，在「設定」按「🎁 有好友碼？」，填好碼和 Email 就能免費用 AI 解讀（點朋友給的連結會自動填好碼）'],
     en:['Friend codes: got one from a friend? Open Settings → "🎁 Have a friend code?", enter the code and your email to get free AI readings (the link your friend sends fills the code in for you)'] },
@@ -3995,6 +3997,14 @@ if(isVerified()){
 // 首頁：第一次來（沒占卜過、沒關過教學）自動出現三步說明卡；「帶我走一次」＝跟著教學走一次三張牌，
 // 每一步上方多一句提示（S.guided）；解讀頁「怎麼看這一頁」對所有人都在，跟著教學走的人預設打開。
 const GUIDE_LS='tr_guide_done';
+// 真的第一次來：沒占卜記錄、沒關過教學、沒看過任何舊公告、沒登入過、沒選過語言／字級（任何一個有＝用過的人）
+function isFirstVisit(){
+  if(S.readings&&S.readings.length) return false;
+  try{
+    for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i)||''; if(/^tr_(announce_|guide_done|verified_email|session|lang|fontlvl|projects)/.test(k)) return false; }
+  }catch(e){ return false; } // 讀不到 localStorage 就當老用戶（公告照跳，不會漏看）
+  return true;
+}
 function guideDone(){ try{return !!localStorage.getItem(GUIDE_LS);}catch(e){return false;} }
 function renderGuideCard(){
   const el=document.getElementById('guide-card'); if(!el) return;
@@ -4003,13 +4013,13 @@ function renderGuideCard(){
     <ol>
       <li>${L('<b>想一件你想知道的事</b>，寫成一句問題。例如「我下個月換工作順利嗎？」','<b>Think of something you want to know</b> and write it as one question, e.g. "Will my job change next month go well?"')}</li>
       <li>${L('<b>抽牌</b>：不知道選哪種牌陣就選「三張牌陣」，憑直覺點牌，沒有對錯。','<b>Draw cards</b>: if unsure, choose the Three-Card spread and pick by instinct — there\'s no wrong choice.')}</li>
-      <li>${L('<b>看解讀</b>：先看「關鍵結論」那一段，那就是答案；其他是細節，想深入再看。','<b>Read the answer</b>: start with the "Key conclusion" — that\'s your answer. The rest is detail.')}</li>
+      <li>${L('<b>看解讀</b>：先看「關鍵結論」那一段，那就是答案；其他是細節，想深入再看。','<b>Read the answer</b>: start with the "Key Verdict" — that\'s your answer. The rest is detail.')}</li>
     </ol>
     <div class="g-acts"><button class="btn btn-sm" onclick="startGuided()">${L('✦ 帶我走一次','✦ Walk me through it')}</button><button class="btn btn-ghost btn-sm" onclick="closeGuide()">${L('我會了','Got it')}</button></div>`;
 }
 function showGuideCardIfNew(){
   const el=document.getElementById('guide-card'); if(!el) return;
-  const fresh=!guideDone() && !(S.readings&&S.readings.length);
+  const fresh=!guideDone() && isFirstVisit();
   renderGuideCard(); el.style.display=fresh?'block':'none';
 }
 function openGuide(){ const el=document.getElementById('guide-card'); if(!el) return; renderGuideCard(); el.style.display='block'; el.scrollIntoView({block:'center',behavior:'smooth'}); }
@@ -4025,7 +4035,7 @@ function updateGuideSteps(id){
   if(id==='s-pick') step('gs-pick',3,'憑直覺點牌，點到選滿為止，沒有對錯。懶得選就按「一鍵快速抽牌」。','Tap cards by instinct until you have enough — there\'s no wrong choice. Or tap "Quick Draw".');
   if(id==='s-reading'){
     const h=document.getElementById('rd-howto'); if(h&&S.guided) h.open=true;
-    if(S.guided){ toast(L('第 4 步：先看「關鍵結論」，看不懂就點「怎麼看這一頁」 ✦','Step 4: read the "Key conclusion" first; tap "Read this" if confused ✦')); S.guided=false; }
+    if(S.guided){ toast(L('第 4 步：先看「關鍵結論」，看不懂就點「怎麼看這一頁」 ✦','Step 4: read the "Key Verdict" first; tap "Read this" if confused ✦')); S.guided=false; }
   }
 }
 showGuideCardIfNew();
