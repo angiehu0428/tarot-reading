@@ -423,8 +423,11 @@ async function handleWebhook(request, env) {
   if (packKey) {
     const pack = creditMap[packKey];
     // 同一筆 sale 只入帳一次、只退一次，退款比購買先到也算得對（Gumroad ping 可能重送、可能倒序）：帳本照訂單狀態算
-    if (saleId) await ledger(env, email, 'credit_order', { id: saleId, kind: refunded ? 'refund' : 'buy', n: pack });
-    else await ledger(env, email, 'credit_add', { n: refunded ? -pack : pack }); // 沒有 sale_id 的通知（理論上不會有）
+    if (!saleId) { // 沒有訂單編號就沒辦法去重：不入帳，通知站長手動處理
+      await alertOnce(env, `nosale:${email}`, `⚠️ 塔羅：收到沒有 sale_id 的點數包通知（${refunded ? '退款' : '購買'}，${pack} 點），沒入帳，請手動確認`);
+      return new Response('OK');
+    }
+    await ledger(env, email, 'credit_order', { id: saleId, kind: refunded ? 'refund' : 'buy', n: pack });
     return new Response('OK');
   }
 
@@ -571,7 +574,8 @@ export class AuthGate {
       case 'credit_get': case 'credit_add': case 'credit_order': case 'credit_reserve': case 'credit_commit': case 'credit_refund': {
         const L = (await st.get('ledger')) || { bal: 0, holds: {}, orders: {}, idems: {} };
         let changed = a.op !== 'credit_get';
-        for (const [k, h] of Object.entries(L.holds)) if (h.exp < now) { L.bal += 1; delete L.holds[k]; changed = true; }
+        // 預扣逾時自動退回；被退款作廢的預扣（void）不退
+        for (const [k, h] of Object.entries(L.holds)) if (h.exp < now) { if (!h.void) L.bal += 1; delete L.holds[k]; changed = true; }
         let res = { ok: true };
         if (a.op === 'credit_add') {
           if (a.idem && L.idems[a.idem]) res = { dup: true };
@@ -583,7 +587,15 @@ export class AuthGate {
             else { o.bought = true; if (!o.refunded) L.bal += a.n; }
           } else {
             if (o.refunded) res = { dup: true };
-            else { o.refunded = true; if (o.bought) L.bal = Math.max(0, L.bal - a.n); }
+            else {
+              o.refunded = true;
+              if (o.bought) {
+                // 先從餘額扣；不夠的話，預扣中的點數也作廢（不然 AI 失敗退回那 1 點，退款的人又多了一點可以用）
+                let need = a.n;
+                const take = Math.min(L.bal, need); L.bal -= take; need -= take;
+                for (const h of Object.values(L.holds)) { if (need <= 0) break; if (!h.void) { h.void = true; need -= 1; } }
+              }
+            }
           }
           L.orders[a.id] = o;
         } else if (a.op === 'credit_reserve') {
@@ -592,7 +604,7 @@ export class AuthGate {
         } else if (a.op === 'credit_commit') {
           if (L.holds[a.owner]) delete L.holds[a.owner]; else res = { expired: true };
         } else if (a.op === 'credit_refund') {
-          if (L.holds[a.owner]) { L.bal += 1; delete L.holds[a.owner]; }
+          if (L.holds[a.owner]) { if (!L.holds[a.owner].void) L.bal += 1; delete L.holds[a.owner]; }
         }
         if (changed) await st.put('ledger', L);
         return out({ ...res, bal: L.bal });

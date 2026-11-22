@@ -485,3 +485,20 @@ test('Gumroad 買點數：同一筆同時到兩次只加一次、退款重送只
   assert.equal(await webhook(e, b2), 200);
   assert.equal(await balOf(e, 'late@example.com'), 0);
 });
+
+test('退款跟 AI 預扣交錯：預扣中的點數一起作廢，AI 失敗或逾時都不會退回多的那 1 點；成功也不會多', async () => {
+  const kv = fakeKV(); fakeNet(); const e = env(kv);
+  const B = 'r@example.com';
+  for (const end of ['refund', 'expire', 'commit']) {
+    const id = `S-${end}`;
+    await led(e, B, { op: 'credit_order', id, kind: 'buy', n: 100 });
+    const start = await balOf(e, B);
+    for (let i = 0; i < start - 1; i++) { await led(e, B, { op: 'credit_reserve', owner: `x${end}${i}` }); await led(e, B, { op: 'credit_commit', owner: `x${end}${i}` }); } // 用到剩 1 點
+    assert.equal((await led(e, B, { op: 'credit_reserve', owner: end })).bal, 0);
+    await led(e, B, { op: 'credit_order', id, kind: 'refund', n: 100 });
+    if (end === 'refund') await led(e, B, { op: 'credit_refund', owner: end });
+    if (end === 'commit') await led(e, B, { op: 'credit_commit', owner: end });
+    if (end === 'expire') { const realNow = Date.now; Date.now = () => realNow() + 11 * 60 * 1000; try { await balOf(e, B); } finally { Date.now = realNow; } }
+    assert.equal(await balOf(e, B), 0, end);
+  }
+});
