@@ -82,6 +82,11 @@ async function call(e, path, body, token, ip = '9.9.9.9') {
   const res = await worker.fetch(new Request(W + path, { method: 'POST', headers, body: JSON.stringify(body || {}) }), e);
   return { status: res.status, data: await res.json().catch(() => ({})), res };
 }
+// 點數帳本（AuthGate `credit:<email>`）：讀餘額、直接加減（取代以前讀寫 KV credits:）
+async function led(e, email, payload) {
+  return e.AUTH_GATE.get(e.AUTH_GATE.idFromName(`credit:${email}`)).fetch('https://auth-gate/', { method: 'POST', body: JSON.stringify(payload) }).then(r => r.json());
+}
+async function balOf(e, email) { return (await led(e, email, { op: 'credit_get' })).bal; }
 function codeFrom(mail) { return /(\d{6})/.exec(mail.subject)[1]; }
 function otherCode(code) { return code === '000000' ? '111111' : '000000'; }
 async function login(e, net, email = PAID) {
@@ -144,7 +149,7 @@ test('驗證碼登入：寄碼 → 錯碼被擋 → 對碼拿 token → 付費�
   assert.equal(push.status, 200);
   assert.ok(kv.m.has(`hist:${PAID}`)); assert.ok(!kv.m.has('hist:victim@example.com'));
   assert.equal((await call(e, '/sync', { action: 'pull' }, tok)).data.readings.length, 1);
-  await kv.put(`credits:${PAID}`, '7');
+  await led(e, PAID, { op: 'credit_add', n: 7 });
   assert.equal((await call(e, '/credits', {}, tok)).data.balance, 7);
   const g = await call(e, '/gemini', { body: { contents: [{ parts: [{ text: 'hi' }] }] } }, tok);
   assert.equal(g.status, 200); assert.equal(net.gemini, 1);
@@ -309,4 +314,207 @@ test('Gumroad 重送同一筆購買通知：兌過的 sale_id 不會復活、期
     assert.equal(await webhook(e2, { email: PAID, sale_id: SALE }), 200);
     assert.deepEqual((await call(e2, '/check', { email: PAID, sale_id: SALE })).data, { verified: false, needLogin: true });
   } finally { Date.now = realNow; }
+});
+
+// ── 好友碼（Angie 送朋友免費體驗）──
+async function hashCode(c) {
+  const norm = String(c).toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`fcode:${norm}`));
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+async function seedFriendCode(kv, code, over = {}) {
+  await kv.put(`fcode:${await hashCode(code)}`, JSON.stringify({ credits: 10, exp: Date.now() + 86400000, ...over }));
+}
+const FRIEND = 'friend@example.com';
+const ASK = { body: { contents: [{ parts: [{ text: 'hi' }] }] } };
+// 兌換（寄驗證碼）→ 貼驗證碼，回 verify 的結果
+async function redeem(e, net, email, code) {
+  e.AUTH_GATE.objs.get(`email:${email}`)?.store.delete('cooldownUntil'); // 測試裡不等那 1 分鐘
+  const r = await call(e, '/friend/redeem', { email, code });
+  assert.equal(r.status, 200, JSON.stringify(r.data)); assert.equal(r.data.sent, true);
+  const mail = net.emails.filter(m => [].concat(m.to).includes(email)).at(-1);
+  return call(e, '/auth/verify', { email, code: codeFrom(mail) });
+}
+
+test('好友碼：兌換只寄驗證碼，驗證碼對了才發點；之後每次 AI（不帶 spend）都扣 1 次，10 次用完回 402、不再打 Gemini', async () => {
+  const kv = fakeKV(); const net = fakeNet(); const e = env(kv);
+  await seedFriendCode(kv, 'FRIEND-AB12-CD34');
+  const r = await call(e, '/friend/redeem', { email: FRIEND, code: 'friend-ab12-cd34 ' }); // 小寫、多空白也認得
+  assert.equal(r.status, 200, JSON.stringify(r.data)); assert.equal(r.data.credits, 10);
+  assert.equal(kv.m.get(`friend:${FRIEND}`), undefined); assert.equal(await balOf(e, FRIEND), 0); // 還沒驗證：什麼都沒給
+  const v = await call(e, '/auth/verify', { email: FRIEND, code: codeFrom(net.emails.at(-1)) });
+  assert.equal(v.status, 200, JSON.stringify(v.data)); assert.equal(v.data.friendCredits, 10);
+  assert.equal(JSON.parse(kv.m.get(`friend:${FRIEND}`)).plan, 'friend');
+  assert.equal(kv.m.get(`email:${FRIEND}`), undefined); // 好友記錄跟付費記錄分開
+  const tok = v.data.token;
+  for (let i = 9; i >= 0; i--) {
+    const g = await call(e, '/gemini', ASK, tok);
+    assert.equal(g.status, 200); assert.equal(g.data.__creditBalance, i);
+  }
+  const before = net.gemini;
+  const over = await call(e, '/gemini', ASK, tok);
+  assert.equal(over.status, 402); assert.equal(over.data.friend, true); assert.match(over.data.error, /好友體驗的次數用完了/);
+  assert.equal(net.gemini, before);
+});
+
+test('好友帳號剩最後 1 次，同時送 3 個：只有 1 個拿到回答、只扣 1 次', async () => {
+  const kv = fakeKV(); const net = fakeNet(); const e = env(kv);
+  await seedFriendCode(kv, 'FRIEND-LAST');
+  const tok = (await redeem(e, net, FRIEND, 'FRIEND-LAST')).data.token;
+  for (let i = 0; i < 9; i++) assert.equal((await call(e, '/gemini', ASK, tok)).status, 200); // 用到剩 1 次
+  const before = net.gemini;
+  const rs = await Promise.all([1, 2, 3].map(() => call(e, '/gemini', ASK, tok)));
+  assert.equal(rs.filter(r => r.status === 200).length, 1, JSON.stringify(rs.map(r => r.status)));
+  assert.ok(rs.every(r => [200, 402].includes(r.status)));
+  assert.equal(net.gemini - before, 1);
+  assert.equal(await balOf(e, FRIEND), 0);
+});
+
+test('好友碼一碼一人：兩個人都收到驗證碼、同時貼上，只有一個拿到點數，另一個回「被別人用掉了」', async () => {
+  const kv = fakeKV(); const net = fakeNet(); const e = env(kv);
+  await seedFriendCode(kv, 'FRIEND-ONLY-ONCE');
+  for (const em of ['a@example.com', 'b@example.com']) assert.equal((await call(e, '/friend/redeem', { email: em, code: 'FRIEND-ONLY-ONCE' })).status, 200);
+  const codeOf = (em) => codeFrom(net.emails.filter(m => [].concat(m.to).includes(em)).at(-1));
+  const [a, b] = await Promise.all(['a@example.com', 'b@example.com'].map(em => call(e, '/auth/verify', { email: em, code: codeOf(em) })));
+  assert.deepEqual([a.status, b.status].sort(), [200, 409]);
+  const loser = a.status === 200 ? 'b@example.com' : 'a@example.com';
+  assert.equal(await balOf(e, loser), 0); assert.equal(kv.m.get(`friend:${loser}`), undefined);
+  // 用掉之後再來兌：連驗證碼都不寄
+  const n = net.emails.length;
+  assert.equal((await call(e, '/friend/redeem', { email: 'c@example.com', code: 'FRIEND-ONLY-ONCE' })).status, 409);
+  assert.equal(net.emails.length, n);
+});
+
+test('好友碼：email 打錯（沒驗證）碼不會廢；同一個人重兌不重複加點；過期、錯的碼什麼都不給也不寄信', async () => {
+  const kv = fakeKV(); const net = fakeNet(); const e = env(kv);
+  await seedFriendCode(kv, 'FRIEND-TYPO');
+  assert.equal((await call(e, '/friend/redeem', { email: 'frend@example.com', code: 'FRIEND-TYPO' })).status, 200); // 打錯、收不到信
+  assert.equal((await redeem(e, net, FRIEND, 'FRIEND-TYPO')).status, 200);                                         // 對的 email 照樣兌得到
+  assert.equal((await redeem(e, net, FRIEND, 'FRIEND-TYPO')).status, 200);
+  assert.equal(await balOf(e, FRIEND), 10);
+  // 1 分鐘內再按兌換：不重寄，告訴她用剛剛那封
+  const cd = await call(e, '/friend/redeem', { email: FRIEND, code: 'FRIEND-TYPO' });
+  assert.equal(cd.status, 200); assert.equal(cd.data.cooldown, true);
+
+  const n = net.emails.length;
+  await seedFriendCode(kv, 'FRIEND-OLD', { exp: Date.now() - 1000 });
+  const old = await call(e, '/friend/redeem', { email: 'x@example.com', code: 'FRIEND-OLD' });
+  assert.equal(old.status, 400); assert.equal(old.data.expired, true);
+  const bad = await call(e, '/friend/redeem', { email: 'x@example.com', code: 'FRIEND-NOPE' });
+  assert.equal(bad.status, 400); assert.equal(bad.data.badCode, true);
+  assert.equal(net.emails.length, n);
+  assert.equal(kv.m.get('friend:x@example.com'), undefined); assert.equal(await balOf(e, 'x@example.com'), 0);
+});
+
+test('好友碼發點中途失敗：再兌一次會補做，而且只加一次', async () => {
+  const kv = fakeKV(); const net = fakeNet(); const e = env(kv);
+  await seedFriendCode(kv, 'FRIEND-RETRY');
+  const put = kv.put; let failOnce = true;
+  kv.put = async (k, v) => { if (failOnce && k.startsWith('friend:')) { failOnce = false; throw new Error('KV down'); } return put(k, v); };
+  await assert.rejects(redeem(e, net, FRIEND, 'FRIEND-RETRY').then(r => { if (r.status !== 200) throw new Error(String(r.status)); }));
+  assert.equal(await balOf(e, FRIEND), 0);
+  const v = await redeem(e, net, FRIEND, 'FRIEND-RETRY');
+  assert.equal(v.status, 200, JSON.stringify(v.data)); assert.equal(v.data.friendCredits, 10);
+  assert.equal((await redeem(e, net, FRIEND, 'FRIEND-RETRY')).status, 200);
+  assert.equal(await balOf(e, FRIEND), 10);
+});
+
+test('付費會員兌好友碼：只加點、照樣有每日免費；訂閱到期後還能登入用完好友點數', async () => {
+  const kv = fakeKV(); const net = fakeNet(); const e = env(kv);
+  await seedPaid(kv); await seedFriendCode(kv, 'FRIEND-PAID');
+  const v = await redeem(e, net, PAID, 'FRIEND-PAID');
+  assert.equal(v.status, 200); assert.equal(v.data.friendCredits, 10);
+  assert.equal(JSON.parse(kv.m.get(`email:${PAID}`)).plan, 'lifetime');
+  const tok = v.data.token;
+  const g = await call(e, '/gemini', ASK, tok);
+  assert.equal(g.status, 200); assert.equal(g.data.__creditBalance, undefined);
+  assert.equal(await balOf(e, PAID), 10);
+  // 訂閱結束：付費記錄被刪，好友點數還在、還能用（每次扣點）
+  assert.equal(await webhook(e, { email: PAID, sale_id: SALE, subscription_ended_at: '2026-11-30' }), 200);
+  assert.equal(kv.m.get(`email:${PAID}`), undefined);
+  const g2 = await call(e, '/gemini', ASK, tok);
+  assert.equal(g2.status, 200); assert.equal(g2.data.__creditBalance, 9);
+  assert.equal((await call(e, '/auth/start', { email: PAID })).status, 200);
+});
+
+test('點數只看帳本：KV 裡殘留的舊 credits 值不算數', async () => {
+  const kv = fakeKV(); const net = fakeNet(); const e = env(kv);
+  await seedFriendCode(kv, 'FRIEND-STALE');
+  const tok = (await redeem(e, net, FRIEND, 'FRIEND-STALE')).data.token;
+  for (let i = 0; i < 10; i++) assert.equal((await call(e, '/gemini', ASK, tok)).status, 200);
+  await kv.put(`credits:${FRIEND}`, '10');
+  assert.equal((await call(e, '/gemini', ASK, tok)).status, 402);
+  assert.equal((await call(e, '/credits', {}, tok)).data.balance, 0);
+});
+
+test('AI 回答拖過預扣期限才回來：答案不給、點數不扣（已自動退回）', async () => {
+  const kv = fakeKV(); const net = fakeNet(); const e = env(kv);
+  await seedFriendCode(kv, 'FRIEND-SLOW');
+  const tok = (await redeem(e, net, FRIEND, 'FRIEND-SLOW')).data.token;
+  const realFetch = globalThis.fetch; const realNow = Date.now;
+  globalThis.fetch = async (u, i) => { if (String(u).startsWith('https://generativelanguage')) Date.now = () => realNow() + 11 * 60 * 1000; return realFetch(u, i); };
+  try {
+    const g = await call(e, '/gemini', ASK, tok);
+    assert.equal(g.status, 504); assert.equal(g.data.expiredHold, true); assert.equal(g.data.candidates, undefined);
+    assert.equal(await balOf(e, FRIEND), 10);
+  } finally { globalThis.fetch = realFetch; Date.now = realNow; }
+});
+
+test('帳本：同一筆加點（同一個好友碼）同時送兩次只入帳一次；預扣後當掉，10 分鐘後自動退回', async () => {
+  const kv = fakeKV(); fakeNet(); const e = env(kv);
+  const L = (payload) => led(e, FRIEND, payload);
+  await Promise.all([L({ op: 'credit_add', n: 10, idem: 'fcode:x' }), L({ op: 'credit_add', n: 10, idem: 'fcode:x' })]);
+  assert.equal((await L({ op: 'credit_get' })).bal, 10);
+  assert.equal((await L({ op: 'credit_reserve', owner: 'o1' })).bal, 9);
+  const realNow = Date.now; Date.now = () => realNow() + 11 * 60 * 1000;
+  try { assert.equal((await L({ op: 'credit_get' })).bal, 10); } finally { Date.now = realNow; }
+  assert.equal((await L({ op: 'credit_refund', owner: 'o1' })).bal, 10); // 已經自動退過，不會再退
+});
+
+test('Gumroad 買點數：同一筆同時到兩次只加一次、退款重送只退一次；退款比購買先到也不會留下點數', async () => {
+  const kv = fakeKV(); fakeNet(); const e = env(kv, { CREDIT_PRODUCTS: 'tarotcredits100:100' });
+  const buy = { email: 'buyer@example.com', sale_id: 'S1', permalink: 'tarotcredits100' };
+  await Promise.all([webhook(e, buy), webhook(e, buy)]);
+  assert.equal(await balOf(e, 'buyer@example.com'), 100);
+  await Promise.all([webhook(e, { ...buy, refunded: 'true' }), webhook(e, { ...buy, refunded: 'true' })]);
+  assert.equal(await balOf(e, 'buyer@example.com'), 0);
+  // 倒序：退款通知先到，之後購買通知才到 → 0 點
+  const b2 = { email: 'late@example.com', sale_id: 'S2', permalink: 'tarotcredits100' };
+  assert.equal(await webhook(e, { ...b2, refunded: 'true' }), 200);
+  assert.equal(await webhook(e, b2), 200);
+  assert.equal(await webhook(e, b2), 200);
+  assert.equal(await balOf(e, 'late@example.com'), 0);
+});
+
+test('退款跟 AI 預扣交錯：預扣中的點數一起作廢，AI 失敗或逾時都不會退回多的那 1 點；成功也不會多', async () => {
+  const kv = fakeKV(); fakeNet(); const e = env(kv);
+  const B = 'r@example.com';
+  for (const end of ['refund', 'expire', 'commit']) {
+    const id = `S-${end}`;
+    await led(e, B, { op: 'credit_order', id, kind: 'buy', n: 100 });
+    const start = await balOf(e, B);
+    for (let i = 0; i < start - 1; i++) { await led(e, B, { op: 'credit_reserve', owner: `x${end}${i}` }); await led(e, B, { op: 'credit_commit', owner: `x${end}${i}` }); } // 用到剩 1 點
+    assert.equal((await led(e, B, { op: 'credit_reserve', owner: end })).bal, 0);
+    await led(e, B, { op: 'credit_order', id, kind: 'refund', n: 100 });
+    if (end === 'refund') await led(e, B, { op: 'credit_refund', owner: end });
+    if (end === 'commit') await led(e, B, { op: 'credit_commit', owner: end });
+    if (end === 'expire') { const realNow = Date.now; Date.now = () => realNow() + 11 * 60 * 1000; try { await balOf(e, B); } finally { Date.now = realNow; } }
+    assert.equal(await balOf(e, B), 0, end);
+  }
+});
+
+test('沒有 sale_id 的點數包通知：不入帳，購買、退款每一則都通知站長', async () => {
+  const kv = fakeKV(); const net = fakeNet(); const e = env(kv, { CREDIT_PRODUCTS: 'tarotcredits100:100', TG_BOT_TOKEN: 't', TG_CHAT_ID: 'c' });
+  const n = { email: 'nosale@example.com', permalink: 'tarotcredits100' };
+  assert.equal(await webhook(e, n), 200);
+  assert.equal(await webhook(e, { ...n, refunded: 'true' }), 200);
+  assert.equal(await balOf(e, 'nosale@example.com'), 0);
+  assert.equal(net.telegram.filter(t => /沒有 sale_id/.test(t)).length, 2);
+  assert.equal([...kv.m.keys()].filter(k => k.startsWith('nosale:')).length, 2); // Telegram 沒送到也查得到
+  // KV 寫不進去：回 500 讓 Gumroad 重送，不會默默吞掉
+  const put = kv.put; kv.put = async () => { throw new Error('KV down'); };
+  try {
+    // 錯往外丟＝Workers 回 500（不會回 200 讓 Gumroad 以為處理好了）
+    await assert.rejects(worker.fetch(new Request(W + '/webhook', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ seller_id: SELLER, ...n }).toString() }), e), /KV down/);
+  } finally { kv.put = put; }
 });

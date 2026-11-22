@@ -102,6 +102,9 @@ export default {
     if (url.pathname === '/check' && request.method === 'POST') {
       return handleCheck(request, env);
     }
+    if (url.pathname === '/friend/redeem' && request.method === 'POST') {
+      return handleFriendRedeem(request, env);
+    }
     // Login: email one-time code → session token（付費端點都要帶這個 token，光知道 email 不夠）
     if (url.pathname === '/auth/start' && request.method === 'POST') {
       return handleAuthStart(request, env);
@@ -419,19 +422,15 @@ async function handleWebhook(request, env) {
   const packKey = productKeys.find(k => creditMap[k] > 0);
   if (packKey) {
     const pack = creditMap[packKey];
-    const ck = `credits:${email}`;
-    const bal = parseInt((await env.TAROT_KV.get(ck)) || '0', 10);
-    if (refunded) {
-      await env.TAROT_KV.put(ck, String(Math.max(0, bal - pack)));
+    // 同一筆 sale 只入帳一次、只退一次，退款比購買先到也算得對（Gumroad ping 可能重送、可能倒序）：帳本照訂單狀態算
+    if (!saleId) { // 沒有訂單編號就沒辦法去重：不入帳，通知站長手動處理
+      // 理論上不會發生，發生了要人看：先寫進 KV 留底（`nosale:` 前綴，寫不進去就丟錯回 500，Gumroad 會重送），
+      // 再每一則都發 Telegram（不節流：購買跟退款是不同的事）。Telegram 沒送到也還有 KV 那筆可以查
+      await env.TAROT_KV.put(`nosale:${new Date().toISOString()}:${randomHex(4)}`, JSON.stringify({ email, refunded, pack, product: packKey }));
+      await sendTelegram(env, `⚠️ 塔羅：收到沒有 sale_id 的點數包通知（${refunded ? '退款' : '購買'}，${pack} 點，${email}），帳本沒動，請手動用 /credits-admin 處理（KV 前綴 nosale: 有紀錄）`);
       return new Response('OK');
     }
-    // 同一筆 sale 只入帳一次（Gumroad ping 可能重送）
-    if (saleId) {
-      const seen = await env.TAROT_KV.get(`csale:${saleId}`);
-      if (seen) return new Response('OK');
-      await env.TAROT_KV.put(`csale:${saleId}`, '1', { expirationTtl: 60 * 60 * 24 * 90 });
-    }
-    await env.TAROT_KV.put(ck, String(bal + pack));
+    await ledger(env, email, 'credit_order', { id: saleId, kind: refunded ? 'refund' : 'buy', n: pack });
     return new Response('OK');
   }
 
@@ -462,8 +461,8 @@ async function handleWebhook(request, env) {
 async function handleCredits(request, env) {
   const s = await requirePaidSession(request, env);
   if (s.error) return s.error;
-  const bal = parseInt((await env.TAROT_KV.get(`credits:${s.email}`)) || '0', 10);
-  return json({ balance: bal }, 200, request);
+  const r = await ledger(env, s.email, 'credit_get');
+  return json({ balance: r.bal }, 200, request);
 }
 
 // ── Credit manual adjust (private; for support/testing) ──────
@@ -476,10 +475,8 @@ async function handleCreditsAdmin(request, env) {
   const e = (email || '').toLowerCase().trim();
   const d = parseInt(delta, 10);
   if (!e || isNaN(d)) return json({ error: 'bad request' }, 400, request);
-  const ck = `credits:${e}`;
-  const bal = Math.max(0, parseInt((await env.TAROT_KV.get(ck)) || '0', 10) + d);
-  await env.TAROT_KV.put(ck, String(bal));
-  return json({ ok: true, balance: bal }, 200, request);
+  const r = await ledger(env, e, 'credit_add', { n: d });
+  return json({ ok: true, balance: r.bal }, 200, request);
 }
 
 // ── Login / session ──────────────────────────────────────────
@@ -551,6 +548,70 @@ export class AuthGate {
         await st.put(key, { exp: now + a.ttlMs, used: false });
         return out({ ok: true });
       }
+      // ── 好友碼（每個碼一個物件）：一碼一人 ──
+      case 'friend_peek': { // 兌換前先看：被別人用掉了就不必寄驗證碼
+        const by = await st.get('usedBy');
+        return out({ taken: !!by && by !== a.email });
+      }
+      case 'friend_take': { // 驗證碼對了才真的綁：同一個人再來=照樣 ok（done 表示點數已經發過），別人=已被用掉
+        const by = await st.get('usedBy');
+        if (by && by !== a.email) return out({ taken: true });
+        if (!by) await st.put('usedBy', a.email);
+        return out({ ok: true, done: !!(await st.get('done')) });
+      }
+      case 'friend_done': { await st.put('done', true); return out({ ok: true }); }
+      // ── 每個 email 一個物件：兌換時寄出的驗證碼，順便記「這次要兌哪個好友碼」──
+      case 'friend_pending_put': { await st.put('friendPending', { h: a.h, exp: now + a.ttlMs }); return out({ ok: true }); }
+      case 'friend_pending_take': {
+        const p = await st.get('friendPending');
+        if (p) await st.delete('friendPending');
+        return out({ h: p && p.exp >= now ? p.h : null });
+      }
+      // ── 點數帳本（每個 email 一個物件 `credit:<email>`）：餘額只以這裡為準 ──
+      // 2026-11-22 以前點數存在 KV `credits:<email>`（最終一致，擋不住同時扣點／加點）；搬過來時正式 KV 裡 0 筆點數，
+      // 所以帳本從 0 開始、不從 KV 帶舊值。整本帳存在一個 key、一次寫完：不會只寫到一半。
+      //   add     {n, idem}          加減點；idem=去重鍵（好友碼），同一個只入帳一次
+      //   order   {id, kind, n}      Gumroad 買點數／退款：照訂單狀態算，退款先到、重送、交錯都只算一次
+      //   reserve {owner}            AI 呼叫前預扣 1 點（扣不到 none）；commit 確認、refund 退回
+      //   預扣超過 CREDIT_HOLD_MS 沒結果（請求當掉）自動退回；之後才到的 commit 回 expired（答案不給，也不扣點）
+      case 'credit_get': case 'credit_add': case 'credit_order': case 'credit_reserve': case 'credit_commit': case 'credit_refund': {
+        const L = (await st.get('ledger')) || { bal: 0, holds: {}, orders: {}, idems: {} };
+        let changed = a.op !== 'credit_get';
+        // 預扣逾時自動退回；被退款作廢的預扣（void）不退
+        for (const [k, h] of Object.entries(L.holds)) if (h.exp < now) { if (!h.void) L.bal += 1; delete L.holds[k]; changed = true; }
+        let res = { ok: true };
+        if (a.op === 'credit_add') {
+          if (a.idem && L.idems[a.idem]) res = { dup: true };
+          else { L.bal = Math.max(0, L.bal + a.n); if (a.idem) L.idems[a.idem] = now; }
+        } else if (a.op === 'credit_order') {
+          const o = L.orders[a.id] || { bought: !!a.legacyBought, refunded: false };
+          if (a.kind === 'buy') {
+            if (o.bought) res = { dup: true };
+            else { o.bought = true; if (!o.refunded) L.bal += a.n; }
+          } else {
+            if (o.refunded) res = { dup: true };
+            else {
+              o.refunded = true;
+              if (o.bought) {
+                // 先從餘額扣；不夠的話，預扣中的點數也作廢（不然 AI 失敗退回那 1 點，退款的人又多了一點可以用）
+                let need = a.n;
+                const take = Math.min(L.bal, need); L.bal -= take; need -= take;
+                for (const h of Object.values(L.holds)) { if (need <= 0) break; if (!h.void) { h.void = true; need -= 1; } }
+              }
+            }
+          }
+          L.orders[a.id] = o;
+        } else if (a.op === 'credit_reserve') {
+          if (L.bal < 1) res = { none: true };
+          else { L.bal -= 1; L.holds[a.owner] = { exp: now + CREDIT_HOLD_MS }; }
+        } else if (a.op === 'credit_commit') {
+          if (L.holds[a.owner]) delete L.holds[a.owner]; else res = { expired: true };
+        } else if (a.op === 'credit_refund') {
+          if (L.holds[a.owner]) { if (!L.holds[a.owner].void) L.bal += 1; delete L.holds[a.owner]; }
+        }
+        if (changed) await st.put('ledger', L);
+        return out({ ...res, bal: L.bal });
+      }
       case 'redeem_take': {
         const key = `sale:${a.h}`;
         const r = await st.get(key);
@@ -583,6 +644,16 @@ function gateMissing(env, request) {
 }
 
 function normEmail(v) { return String(v || '').toLowerCase().trim().slice(0, 254); }
+// 能不能登入、用 AI：付費記錄（email:）優先；沒有（從沒付過、或訂閱到期被 webhook 刪掉）就看好友記錄（friend:）。
+// 兩個分開存，訂閱到期不會連好友兌換來的點數都用不了。
+async function accessRecord(env, e) {
+  return (await env.TAROT_KV.get(`email:${e}`)) || (await env.TAROT_KV.get(`friend:${e}`));
+}
+// 點數一律走帳本（AuthGate `credit:<email>`，見 credit_* 操作）。KV `credits:<email>` 已停用
+const CREDIT_HOLD_MS = 10 * 60 * 1000; // AI 呼叫預扣的點數，這麼久沒結果就自動退回
+async function ledger(env, e, op, extra = {}) {
+  return gate(env, `credit:${e}`, { op, ...extra });
+}
 function safeJson(raw) { try { return JSON.parse(raw); } catch (e) { return null; } }
 function randomHex(bytes) {
   const a = new Uint8Array(bytes); crypto.getRandomValues(a);
@@ -608,7 +679,7 @@ async function readSession(request, env) {
   const sess = safeJson((await env.TAROT_KV.get(`sess:${token}`)) || '');
   const email = sess && normEmail(sess.email);
   if (!email) return null;
-  const record = await env.TAROT_KV.get(`email:${email}`);
+  const record = await accessRecord(env, email);
   return { email, record, token };
 }
 // 付費端點共用：回 { email } 或 { error: Response }
@@ -683,20 +754,24 @@ async function handleAuthStart(request, env) {
   if (!(await ipAllow(env, request, 'start', AUTH_IP_HOURLY_CAP))) {
     return json({ error: '嘗試太多次，請一小時後再試 / Too many attempts, please try again in an hour', rateLimited: true }, 429, request);
   }
-  const record = await env.TAROT_KV.get(`email:${e}`);
+  const record = await accessRecord(env, e);
   if (!record) return json(START_GENERIC, 200, request);
+  const failed = await startOtp(env, e);
+  if (failed && !failed.cooldown) return json(failed, 503, request);
+  return json(START_GENERIC, 200, request); // 冷卻中也回一樣的內容（不透露有沒有付費）
+}
+// 產碼、寄出；寄不出去回錯誤內容（給 503），寄出回 null，60 秒內已寄過（不再寄）回 { cooldown: true }
+async function startOtp(env, e) {
   const code = String(crypto.getRandomValues(new Uint32Array(1))[0] % 1000000).padStart(6, '0');
   const g = await gate(env, `email:${e}`, { op: 'otp_start', h: await sha256Hex(`${e}:${code}`), ttlMs: OTP_TTL_MS, cooldownMs: OTP_RESEND_COOLDOWN_MS });
-  if (g.cooldown) return json(START_GENERIC, 200, request); // 60 秒內已寄過：不再寄，回應也長一樣
+  if (g.cooldown) return { cooldown: true };
   const sent = await sendLoginCode(env, e, code);
-  if (!sent.ok) {
-    await gate(env, `email:${e}`, { op: 'otp_cancel' }); // 沒寄出去就撤掉，讓用戶能馬上重試
-    const msg = sent.reason === 'unconfigured'
-      ? '寄信服務尚未設定，暫時無法登入，請聯絡站長 / Sign-in email is not set up yet — please contact support'
-      : '驗證碼寄不出去，請稍後再試 / Could not send the code, please try again later';
-    return json({ error: msg, mailFailed: true }, 503, request);
-  }
-  return json(START_GENERIC, 200, request);
+  if (sent.ok) return null;
+  await gate(env, `email:${e}`, { op: 'otp_cancel' }); // 沒寄出去就撤掉，讓用戶能馬上重試
+  const msg = sent.reason === 'unconfigured'
+    ? '寄信服務尚未設定，暫時無法登入，請聯絡站長 / Sign-in email is not set up yet — please contact support'
+    : '驗證碼寄不出去，請稍後再試 / Could not send the code, please try again later';
+  return { error: msg, mailFailed: true };
 }
 
 async function handleAuthVerify(request, env) {
@@ -715,10 +790,20 @@ async function handleAuthVerify(request, env) {
   }
   if (g.wrong) return json({ error: '驗證碼不對 / Wrong code', wrong: true, left: g.left }, 401, request);
   if (!g.ok) return json({ error: '驗證失敗 / Verification failed' }, 401, request);
-  const record = await env.TAROT_KV.get(`email:${e}`);
+  // 這次的驗證碼是兌換好友碼時寄的 → 驗證碼對了（= 確定 email 是她的）才真的把碼綁給她、發點數
+  let friendCredits;
+  const pending = await gate(env, `email:${e}`, { op: 'friend_pending_take' });
+  if (pending.h) {
+    const r = await grantFriendCode(env, e, pending.h);
+    if (r.taken && !(await accessRecord(env, e))) {
+      return json({ error: '這個好友碼剛剛被別人用掉了 / This friend code was just used by someone else', taken: true }, 409, request);
+    }
+    if (r.credits) friendCredits = r.credits;
+  }
+  const record = await accessRecord(env, e);
   if (!record) return json({ error: 'no purchase', verified: false }, 403, request);
   const token = await issueSession(env, e);
-  return json({ ok: true, verified: true, token, email: e }, 200, request);
+  return json({ ok: true, verified: true, token, email: e, ...(friendCredits ? { friendCredits } : {}) }, 200, request);
 }
 
 async function handleAuthLogout(request, env) {
@@ -740,13 +825,66 @@ async function handleCheck(request, env) {
   if (e && sid && env.AUTH_GATE) {
     if (!(await ipAllow(env, request, 'check', AUTH_IP_HOURLY_CAP))) return json({ verified: false, rateLimited: true }, 429, request);
     const r = await gate(env, `email:${e}`, { op: 'redeem_take', h: await sha256Hex(`sale:${sid}`) });
-    if (r.ok && await env.TAROT_KV.get(`email:${e}`)) {
+    if (r.ok && await accessRecord(env, e)) {
       const token = await issueSession(env, e);
       return json({ verified: true, token, email: e }, 200, request);
     }
   }
   // 沒 token 就不回答「這個 email 有沒有付費」（以前是個查詢機）
   return json({ verified: false, needLogin: true }, 200, request);
+}
+
+// ── 好友碼（Angie 送朋友的免費體驗）──────────────────────────
+// Angie 用 scripts/friend-codes.mjs 產碼：KV `fcode:<碼的雜湊>` = { credits, exp }（碼本身不存，KV 裡只有雜湊）。
+// 流程：朋友填 email＋好友碼 → /friend/redeem 檢查碼、寄驗證碼到那個 email（先不綁）
+//      → /auth/verify 驗證碼對了（確定 email 是她的）才把碼綁給她：KV `friend:<email>`（能登入）＋ credits 加 N 點
+// email 打錯＝收不到驗證碼，碼還在，換對的 email 再兌就好。
+// 好友帳號沒有每日免費次數：每一次 AI 回答（解牌、追問）都扣 1 點，扣完就停（見 handleGemini）。
+// 兌換期限=碼的 exp；兌換後的點數不會過期。付費會員也能兌（只是多了點數）；訂閱到期後還能用好友點數（accessRecord）。
+const FRIEND_CODE_RE = /^[A-Z0-9]{4,32}$/;
+const FRIEND_PENDING_MS = OTP_TTL_MS;
+function normFriendCode(c) { return String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 40); }
+const BAD_FRIEND_CODE = '好友碼不對，請再確認一次 / That friend code doesn\'t look right';
+async function handleFriendRedeem(request, env) {
+  const missing = gateMissing(env, request); if (missing) return missing;
+  const { email, code } = await request.json().catch(() => ({}));
+  const e = normEmail(email);
+  const c = normFriendCode(code);
+  if (!e || !EMAIL_RE.test(e)) return json({ error: '請輸入正確的 Email / Please enter a valid email' }, 400, request);
+  if (!FRIEND_CODE_RE.test(c)) return json({ error: BAD_FRIEND_CODE, badCode: true }, 400, request);
+  if (!(await ipAllow(env, request, 'friend', AUTH_IP_HOURLY_CAP))) {
+    return json({ error: '嘗試太多次，請一小時後再試 / Too many attempts, please try again in an hour', rateLimited: true }, 429, request);
+  }
+  const h = await sha256Hex(`fcode:${c}`);
+  const def = safeJson((await env.TAROT_KV.get(`fcode:${h}`)) || '');
+  if (!def || !(def.credits > 0)) return json({ error: BAD_FRIEND_CODE, badCode: true }, 400, request);
+  if (def.exp && Date.now() > def.exp) return json({ error: '這個好友碼已經過期了 / This friend code has expired', expired: true }, 400, request);
+  if ((await gate(env, `fcode:${h}`, { op: 'friend_peek', email: e })).taken) {
+    return json({ error: '這個好友碼已經被用過了 / This friend code has already been used', taken: true }, 409, request);
+  }
+  await gate(env, `email:${e}`, { op: 'friend_pending_put', h, ttlMs: FRIEND_PENDING_MS });
+  const failed = await startOtp(env, e);
+  if (failed && failed.cooldown) return json({ sent: true, cooldown: true, credits: def.credits }, 200, request); // 1 分鐘內剛寄過：用剛剛那封的碼
+  if (failed) return json(failed, 503, request);
+  return json({ sent: true, credits: def.credits }, 200, request);
+}
+// 驗證碼對了之後：綁碼、發點數。中途失敗可以重來（再兌一次）：碼已經綁給她但還沒標 done，就會補做；
+// 標了 done 就不再加點（同一個人重兌不會重複加）。
+async function grantFriendCode(env, e, h) {
+  const t = await gate(env, `fcode:${h}`, { op: 'friend_take', email: e });
+  if (t.taken) return { taken: true };
+  if (t.done) return { again: true };
+  const def = safeJson((await env.TAROT_KV.get(`fcode:${h}`)) || '') || {};
+  const credits = def.credits > 0 ? def.credits : 0;
+  const prev = safeJson((await env.TAROT_KV.get(`friend:${e}`)) || '') || {};
+  await env.TAROT_KV.put(`friend:${e}`, JSON.stringify({
+    verified: true, plan: 'friend', date: prev.date || new Date().toISOString(),
+    codes: [...new Set([...(prev.codes || []), h.slice(0, 12)])],
+  }));
+  // 用好友碼當去重鍵：這一步重來幾次、同時來幾個，都只加一次
+  await ledger(env, e, 'credit_add', { n: credits, idem: `fcode:${h}` });
+  await gate(env, `fcode:${h}`, { op: 'friend_done' });
+  return { credits };
 }
 
 // ── History sync (paid users only) ───────────────────────────
@@ -1013,25 +1151,41 @@ async function handleGemini(request, env) {
     return json({ error: 'AI 解牌暫停服務：API 配額已滿，請稍後再試 / AI readings are paused: quota reached, please try again later.', paused: true }, 503, request);
   }
 
-  const { body: geminiBody, spend } = await request.json().catch(() => ({}));
+  const { body: geminiBody, spend: spendAsked } = await request.json().catch(() => ({}));
 
   // 身分看 session token（/auth/verify 發的），body 裡的 email 不再採信
   const s = await requirePaidSession(request, env);
   if (s.error) return s.error;
   const e = s.email;
-
+  // 好友帳號（好友碼兌換來的、而且沒有付費記錄）沒有每日免費次數：每次都扣點
+  const friendOnly = (safeJson(s.record) || {}).plan === 'friend';
+  const spend = !!spendAsked || friendOnly;
   if (!geminiBody) return json({ error: '缺少請求內容' }, 400, request);
-
-  // Credit 扣點模式：超出免費額度的呼叫（追問超過每次上限 / 當日次數用完）。
-  // 有餘額 → 略過每日上限檢查，成功後才扣 1 點；無餘額 → 402。
-  const ck = `credits:${e}`;
-  let creditBalance = null;
+  // 扣點的呼叫：先在帳本預扣 1 點（同時來幾個都各扣各的，扣不到就 402），成功才確認、失敗退回
+  let hold = null;
   if (spend) {
-    creditBalance = parseInt((await env.TAROT_KV.get(ck)) || '0', 10);
-    if (creditBalance < 1) {
-      return json({ error: 'Credit 點數不足 / Not enough credits', noCredits: true, balance: 0 }, 402, request);
+    const owner = randomHex(8);
+    const r = await ledger(env, e, 'credit_reserve', { owner });
+    if (r.none) {
+      return json({ error: friendOnly
+        ? '好友體驗的次數用完了 🙏 想繼續的話，可以在「設定」訂閱或購買 AI 點數 / Your free friend readings are used up — subscribe or buy credits in Settings to continue'
+        : 'Credit 點數不足 / Not enough credits', noCredits: true, friend: friendOnly, balance: 0 }, 402, request);
     }
+    hold = { owner, bal: r.bal };
   }
+  let settled = false;
+  try {
+    const res = await geminiCall(request, env, s, geminiBody, spend, hold);
+    settled = true;
+    return res;
+  } finally {
+    if (hold && !settled) { try { await ledger(env, e, 'credit_refund', { owner: hold.owner }); } catch (err) {} } // 中途丟錯：退回預扣
+  }
+}
+
+async function geminiCall(request, env, s, geminiBody, spend, hold) {
+  const e = s.email;
+  const refund = async () => { if (hold) await ledger(env, e, 'credit_refund', { owner: hold.owner }); };
 
   // 全站成本總閘（扣點呼叫已付費，不受總閘限制）
   const dk = todayKey();
@@ -1043,7 +1197,7 @@ async function handleGemini(request, env) {
   const uk = userDayKey(e);
   const uUsed = parseInt((await env.TAROT_KV.get(uk)) || '0', 10);
   if (!spend && uUsed >= USER_DAILY_CAP) {
-    const bal = parseInt((await env.TAROT_KV.get(ck)) || '0', 10);
+    const bal = (await ledger(env, e, 'credit_get')).bal;
     return json({ error: `你今天的 AI 解牌已達上限（${USER_DAILY_CAP} 次），明天會重置；想立即使用可在設定改用自己的 API Key。/ You've reached today's AI reading limit (${USER_DAILY_CAP}); it resets tomorrow. You can use your own API key to continue now.`, capped: true, userCapped: true, balance: bal }, 429, request);
   }
 
@@ -1054,13 +1208,17 @@ async function handleGemini(request, env) {
     const colo = (request.cf && request.cf.colo) || '?';
     const country = (request.cf && request.cf.country) || '?';
     await alertGeoBlock(env, colo, country);
+    await refund();
     return json({ ...data, __geoBlocked: true, __colo: colo }, resp.status, request);
   }
   // 只在「成功」時才計入用量與扣點（失敗 / 重試不浪費額度與點數）
-  if (resp.ok && !data.error && spend) {
-    const balNow = Math.max(0, parseInt((await env.TAROT_KV.get(ck)) || '0', 10) - 1);
-    await env.TAROT_KV.put(ck, String(balNow));
-    data.__creditBalance = balNow; // 讓前端即時更新餘額顯示
+  if (hold) {
+    if (resp.ok && !data.error) {
+      const c = await ledger(env, e, 'credit_commit', { owner: hold.owner });
+      // 拖太久、預扣已經自動退回了：這次不扣點，答案也不給（不然就是免費拿到回答），請她再問一次
+      if (c.expired) return json({ error: 'AI 這次回答太久，已經退回點數，請再問一次 / The AI took too long — your credit was returned, please ask again', expiredHold: true }, 504, request);
+      data.__creditBalance = c.bal; // 讓前端即時更新餘額顯示
+    } else await refund();
   }
   if (resp.ok && !data.error) {
     await env.TAROT_KV.put(dk, String(used + 1), { expirationTtl: 60 * 60 * 24 * 3 });
