@@ -424,7 +424,8 @@ async function handleWebhook(request, env) {
     const pack = creditMap[packKey];
     // 同一筆 sale 只入帳一次、只退一次，退款比購買先到也算得對（Gumroad ping 可能重送、可能倒序）：帳本照訂單狀態算
     if (!saleId) { // 沒有訂單編號就沒辦法去重：不入帳，通知站長手動處理
-      await alertOnce(env, `nosale:${email}`, `⚠️ 塔羅：收到沒有 sale_id 的點數包通知（${refunded ? '退款' : '購買'}，${pack} 點），沒入帳，請手動確認`);
+      // 每一則都發（不節流：購買跟退款是不同的事，不能被同一個鍵擋掉）；理論上不會發生，發生了要人看
+      await sendTelegram(env, `⚠️ 塔羅：收到沒有 sale_id 的點數包通知（${refunded ? '退款' : '購買'}，${pack} 點，${email}），帳本沒動，請手動用 /credits-admin 處理`);
       return new Response('OK');
     }
     await ledger(env, email, 'credit_order', { id: saleId, kind: refunded ? 'refund' : 'buy', n: pack });

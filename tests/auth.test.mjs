@@ -502,3 +502,12 @@ test('退款跟 AI 預扣交錯：預扣中的點數一起作廢，AI 失敗或�
     assert.equal(await balOf(e, B), 0, end);
   }
 });
+
+test('沒有 sale_id 的點數包通知：不入帳，購買、退款每一則都通知站長', async () => {
+  const kv = fakeKV(); const net = fakeNet(); const e = env(kv, { CREDIT_PRODUCTS: 'tarotcredits100:100', TG_BOT_TOKEN: 't', TG_CHAT_ID: 'c' });
+  const n = { email: 'nosale@example.com', permalink: 'tarotcredits100' };
+  assert.equal(await webhook(e, n), 200);
+  assert.equal(await webhook(e, { ...n, refunded: 'true' }), 200);
+  assert.equal(await balOf(e, 'nosale@example.com'), 0);
+  assert.equal(net.telegram.filter(t => /沒有 sale_id/.test(t)).length, 2);
+});
