@@ -510,4 +510,11 @@ test('沒有 sale_id 的點數包通知：不入帳，購買、退款每一則�
   assert.equal(await webhook(e, { ...n, refunded: 'true' }), 200);
   assert.equal(await balOf(e, 'nosale@example.com'), 0);
   assert.equal(net.telegram.filter(t => /沒有 sale_id/.test(t)).length, 2);
+  assert.equal([...kv.m.keys()].filter(k => k.startsWith('nosale:')).length, 2); // Telegram 沒送到也查得到
+  // KV 寫不進去：回 500 讓 Gumroad 重送，不會默默吞掉
+  const put = kv.put; kv.put = async () => { throw new Error('KV down'); };
+  try {
+    // 錯往外丟＝Workers 回 500（不會回 200 讓 Gumroad 以為處理好了）
+    await assert.rejects(worker.fetch(new Request(W + '/webhook', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ seller_id: SELLER, ...n }).toString() }), e), /KV down/);
+  } finally { kv.put = put; }
 });
