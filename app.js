@@ -3177,6 +3177,7 @@ function toggleFriendBox(show){
   if(show){ const inp=document.getElementById('unlock-input'); const fc=document.getElementById('friend-code');
     if(inp && !inp.value) inp.focus(); else if(fc) fc.focus(); }
 }
+// 兌換＝先寄驗證碼到這個 email；貼上驗證碼（verifyCode）時才真的把碼給她——email 打錯，碼不會被浪費
 async function redeemFriendCode(){
   const email=document.getElementById('unlock-input').value.trim().toLowerCase();
   const code=(document.getElementById('friend-code').value||'').trim();
@@ -3188,11 +3189,14 @@ async function redeemFriendCode(){
   try{
     const r=await fetch(WORKER_URL+'/friend/redeem',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,code})});
     const d=await r.json().catch(()=>({}));
-    if(r.ok && d.ok){
-      document.getElementById('friend-code').value='';
+    if(r.ok && d.sent){
+      localStorage.setItem('tr_pending_email',email);
       toggleFriendBox(false);
-      await verifyEmail(L('🎁 兌換成功！送你 '+d.credits+' 次 AI 解讀（解牌、追問每次扣 1 次）。驗證碼已寄到 '+email+'，貼到下面就能開始（10 分鐘內有效，沒收到請翻垃圾郵件）',
-        '🎁 Redeemed! You have '+d.credits+' AI answers (each reading or follow-up uses 1). A sign-in code was sent to '+email+' — paste it below (valid 10 min; check spam if it\'s not there)'));
+      showUnlockCodeStep(true);
+      if(d.cooldown) ubar.textContent=L('🎁 好友碼沒問題！1 分鐘內剛寄過驗證碼到 '+email+'：用剛剛那封信裡的碼；找不到的話，等一分鐘再按一次「兌換」',
+        '🎁 Code accepted! We just sent a code to '+email+' in the last minute — use that one, or wait a minute and tap "Redeem" again');
+      else ubar.textContent=L('🎁 好友碼沒問題！驗證碼已寄到 '+email+'，貼到下面就會拿到 '+d.credits+' 次 AI 解讀（解牌、追問每次用 1 次）。10 分鐘內有效，沒收到請翻垃圾郵件',
+        '🎁 Code accepted! A sign-in code was sent to '+email+' — paste it below to get '+d.credits+' AI answers (each reading or follow-up uses 1). Valid 10 min; check spam if it\'s not there');
     } else {
       ubar.textContent='✗ '+extractErrMsg(d.error, L('兌換失敗，請稍後再試','Could not redeem, please try later'));
     }
@@ -3213,10 +3217,13 @@ async function verifyCode(){
       localStorage.removeItem('tr_pending_email');
       showUnlockCodeStep(false);
       ubar.className='api-status api-ok';ubar.textContent=L('✓ 驗證成功！已解鎖 AI 解牌','✓ Verified! AI reading unlocked');
-      toast(L('✦ 驗證成功！AI 解牌已解鎖','✦ Verified! AI reading unlocked'));closeSettings();
+      toast(d.friendCredits ? L('🎁 好友碼兌換成功！你有 '+d.friendCredits+' 次 AI 解讀','🎁 Friend code redeemed! You have '+d.friendCredits+' AI answers') : L('✦ 驗證成功！AI 解牌已解鎖','✦ Verified! AI reading unlocked'));closeSettings();
       maybeRunAIAfterUnlock(); // 解鎖後立即解析當前這次抽牌
       // 驗證後拉回雲端歷史並合併，再推回（跨裝置同步）
       syncPull().then(merged=>{ if(merged){ toast(L('☁ 已同步雲端歷史記錄','☁ Cloud history synced')); redrawAfterSync(); } syncPush(); });
+    } else if(d.taken){
+      showUnlockCodeStep(false);
+      ubar.textContent='✗ '+extractErrMsg(d.error, L('這個好友碼已經被用掉了','This friend code has already been used'));
     } else if(d.expired){
       showUnlockCodeStep(false);
       ubar.textContent=L('✗ 驗證碼已失效，請再按一次「寄驗證碼」','✗ Code expired — tap "Send code" again');
