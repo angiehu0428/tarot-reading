@@ -173,6 +173,8 @@ function onLangChange(){
   if(cur.id==='s-projects' && typeof renderProjectList==='function') renderProjectList();
   if(cur.id==='s-changelog' && typeof showChangelog==='function') showChangelog();
   if(typeof updateProjectBanners==='function') updateProjectBanners();
+  { const g=document.getElementById('guide-card'); if(g && g.style.display!=='none' && typeof renderGuideCard==='function') renderGuideCard(); }
+  if(typeof updateGuideSteps==='function') updateGuideSteps(cur.id);
   if(typeof updateApiStatus==='function' && document.getElementById('settings-modal').classList.contains('on')) updateApiStatus();
   if(typeof renderFontBtns==='function') renderFontBtns(getFontLevel()); // 字級按鈕標籤隨語言更新
 }
@@ -258,8 +260,8 @@ Object.assign(T, {
   'set.font.head':{zh:'✦ 字級大小（看不清楚可調大）',en:'✦ Text size (make it bigger if hard to read)'},
   'font.lv0':{zh:'標準',en:'Normal'},'font.lv1':{zh:'大',en:'Large'},'font.lv2':{zh:'特大',en:'X-Large'},'font.lv3':{zh:'超大',en:'XX-Large'},
   'font.btn.title':{zh:'字級大小（點我放大）',en:'Text size (tap to enlarge)'},
-  'ann.title':{zh:'✦ 新功能：複製牌（不含解讀）、專案裡繼續追問 🔮',en:'✦ New: Copy Cards Only, Follow-ups Inside Projects 🔮'},
-  'ann.body':{zh:'🙏 <strong style="color:var(--gold)">這陣子更新了八件事：</strong><br><br><strong>✦ 新「複製牌（不含解讀）」</strong><br>只複製問題、牌陣和抽到的每一張牌（都標正位或逆位），不含解讀。解讀頁牌面下方、占卜記錄每一筆、專案裡每一筆點開後都有 ✦<br><br><strong>✦ 新 專案裡可以繼續追問</strong><br>專案裡每一筆會寫還可以追問幾次，點開能看之前的追問，按「繼續追問」接著問；事後加入專案的也一樣 ✦<br><br><strong>① 單獨占卜可以事後「加入專案」</strong><br>占完才想到要歸到某個專案也可以：在解讀頁最下面或「占卜記錄」按「加入專案」，選一個專案或當場開新的。牌、解讀和追問原樣放進去，不用重抽；之後在那個專案占卜，AI 會參考這一筆。放錯了，進專案按那一筆右上角的「移出專案」就好，占卜本身還留在占卜記錄 ✦<br><br><strong>② 上方多了「⌂ 首頁」</strong><br>看完長長的解讀不用滑到最底，左上角一按就回首頁 ✦<br><br><strong>③ 追問失敗可以「重送」</strong><br>AI 出錯或連線斷掉時，錯誤訊息下面有一顆「↻ 重送」，按了就用同一句再問一次，不用複製貼上（失敗的那次照樣不扣次數）✦<br><br><strong>④ 「複製牌＋解讀」</strong><br>整體解讀下面和頁面最底下都有，一次複製問題、抽到的牌、整體解讀和所有追問；每則追問回答也可以單獨複製 ✦<br><br><strong>⑤ 單牌解析更對題</strong><br>問公司、上班、離職這類職場問題，主題判斷比以前準，單牌解析多半會聚焦在「事業」的牌義，比較不會被當成感情題 ✦<br><br><strong>⑥ 訂閱改用 Email 驗證碼登入</strong><br>解鎖 AI 解牌要輸入信箱收到的 6 位數驗證碼，別人光知道你的 Email 用不了你的額度（剛付款完自動回到本站的不用輸入）。同一台裝置驗證一次，通常半年內不用再驗；清除瀏覽器資料後要再驗一次 ✦<br><br>💬 有任何問題都歡迎隨時回報 🙏',en:'🙏 <strong style="color:var(--gold)">Eight recent updates:</strong><br><br><strong>New: Copy cards only</strong><br>Copies just your question, the spread and every card drawn (each marked upright or reversed), without the reading. It is under the cards on the reading page, on every History entry, and on every project entry once opened ✦<br><br><strong>New: follow-ups inside projects</strong><br>Each project entry says how many follow-ups are left; open it to see earlier follow-ups and tap "Continue asking" to carry on — readings added to a project later too ✦<br><br><strong>1. Add a reading to a project afterwards</strong><br>Did a reading on its own and want it in a project after all? Tap "Add to Project" at the bottom of the reading or in History, then pick a project or start a new one. The cards, reading and follow-ups move in as they are — no redraw — and later readings in that project take it into account. Wrong project? Open it and tap "Remove" on that entry; the reading itself stays in History ✦<br><br><strong>2. "⌂ Home" at the top</strong><br>No more scrolling to the bottom of a long reading: the top-left button takes you straight home ✦<br><br><strong>3. Resend a failed follow-up</strong><br>If the AI errors or the connection drops, the error message now has a "↻ Resend" button that asks the same question again — no copy and paste (failed attempts still don\'t count) ✦<br><br><strong>4. Copy cards + reading</strong><br>Under the overall reading and at the bottom of the page: copies your question, the cards, the overall reading and every follow-up in one go. Each follow-up answer can also be copied on its own ✦<br><br><strong>5. Card-by-card meanings stay on topic</strong><br>Workplace questions (a company, a job, resigning) are recognised better, so the card-by-card reading usually focuses on the "career" meanings rather than treating them as love questions ✦<br><br><strong>6. Subscribers sign in with an emailed code</strong><br>Unlocking AI readings now needs the 6-digit code sent to your inbox, so knowing your email is not enough to use your quota (no code needed when you return straight from checkout). Verify once per device and you usually stay signed in for about 6 months; clearing your browser data means verifying again ✦<br><br>💬 Reports and feature wishes are always welcome 🙏'},
+  'ann.title':{zh:'✦ 新功能：新手教學、好友碼 🔮',en:'✦ New: Beginner Guide, Friend Codes 🔮'},
+  'ann.body':{zh:'🙏 <strong style="color:var(--gold)">這陣子更新了十件事：</strong><br><br><strong>✦ 新 新手教學</strong><br>首頁「📖 第一次玩？看教學」三步講完怎麼占卜，還能「帶我走一次」；解讀頁多了「看不懂？怎麼看這一頁」，講清楚位置、正位逆位、先看哪裡 ✦<br><br><strong>✦ 新 好友碼</strong><br>拿到朋友給的好友碼，到「設定」按「🎁 有好友碼？」就能免費用 AI 解讀 ✦<br><br><strong>✦ 新「複製牌（不含解讀）」</strong><br>只複製問題、牌陣和抽到的每一張牌（都標正位或逆位），不含解讀。解讀頁牌面下方、占卜記錄每一筆、專案裡每一筆點開後都有 ✦<br><br><strong>✦ 新 專案裡可以繼續追問</strong><br>專案裡每一筆會寫還可以追問幾次，點開能看之前的追問，按「繼續追問」接著問；事後加入專案的也一樣 ✦<br><br><strong>① 單獨占卜可以事後「加入專案」</strong><br>占完才想到要歸到某個專案也可以：在解讀頁最下面或「占卜記錄」按「加入專案」，選一個專案或當場開新的。牌、解讀和追問原樣放進去，不用重抽；之後在那個專案占卜，AI 會參考這一筆。放錯了，進專案按那一筆右上角的「移出專案」就好，占卜本身還留在占卜記錄 ✦<br><br><strong>② 上方多了「⌂ 首頁」</strong><br>看完長長的解讀不用滑到最底，左上角一按就回首頁 ✦<br><br><strong>③ 追問失敗可以「重送」</strong><br>AI 出錯或連線斷掉時，錯誤訊息下面有一顆「↻ 重送」，按了就用同一句再問一次，不用複製貼上（失敗的那次照樣不扣次數）✦<br><br><strong>④ 「複製牌＋解讀」</strong><br>整體解讀下面和頁面最底下都有，一次複製問題、抽到的牌、整體解讀和所有追問；每則追問回答也可以單獨複製 ✦<br><br><strong>⑤ 單牌解析更對題</strong><br>問公司、上班、離職這類職場問題，主題判斷比以前準，單牌解析多半會聚焦在「事業」的牌義，比較不會被當成感情題 ✦<br><br><strong>⑥ 訂閱改用 Email 驗證碼登入</strong><br>解鎖 AI 解牌要輸入信箱收到的 6 位數驗證碼，別人光知道你的 Email 用不了你的額度（剛付款完自動回到本站的不用輸入）。同一台裝置驗證一次，通常半年內不用再驗；清除瀏覽器資料後要再驗一次 ✦<br><br>💬 有任何問題都歡迎隨時回報 🙏',en:'🙏 <strong style="color:var(--gold)">Ten recent updates:</strong><br><br><strong>✦ New: Beginner guide</strong><br>"📖 New to tarot?" on the home page explains a reading in three steps, with "Walk me through it"; the reading page now has "Not sure what you\'re looking at?" covering positions, upright/reversed and where to start ✦<br><br><strong>✦ New: Friend codes</strong><br>Got a friend code? Settings → "🎁 Have a friend code?" for free AI readings ✦<br><br><strong>New: Copy cards only</strong><br>Copies just your question, the spread and every card drawn (each marked upright or reversed), without the reading. It is under the cards on the reading page, on every History entry, and on every project entry once opened ✦<br><br><strong>New: follow-ups inside projects</strong><br>Each project entry says how many follow-ups are left; open it to see earlier follow-ups and tap "Continue asking" to carry on — readings added to a project later too ✦<br><br><strong>1. Add a reading to a project afterwards</strong><br>Did a reading on its own and want it in a project after all? Tap "Add to Project" at the bottom of the reading or in History, then pick a project or start a new one. The cards, reading and follow-ups move in as they are — no redraw — and later readings in that project take it into account. Wrong project? Open it and tap "Remove" on that entry; the reading itself stays in History ✦<br><br><strong>2. "⌂ Home" at the top</strong><br>No more scrolling to the bottom of a long reading: the top-left button takes you straight home ✦<br><br><strong>3. Resend a failed follow-up</strong><br>If the AI errors or the connection drops, the error message now has a "↻ Resend" button that asks the same question again — no copy and paste (failed attempts still don\'t count) ✦<br><br><strong>4. Copy cards + reading</strong><br>Under the overall reading and at the bottom of the page: copies your question, the cards, the overall reading and every follow-up in one go. Each follow-up answer can also be copied on its own ✦<br><br><strong>5. Card-by-card meanings stay on topic</strong><br>Workplace questions (a company, a job, resigning) are recognised better, so the card-by-card reading usually focuses on the "career" meanings rather than treating them as love questions ✦<br><br><strong>6. Subscribers sign in with an emailed code</strong><br>Unlocking AI readings now needs the 6-digit code sent to your inbox, so knowing your email is not enough to use your quota (no code needed when you return straight from checkout). Verify once per device and you usually stay signed in for about 6 months; clearing your browser data means verifying again ✦<br><br>💬 Reports and feature wishes are always welcome 🙏'},
   'ann.feedback':{zh:'有問題或想許願新功能？點此回報 →',en:'Found a bug or have a feature wish? Tell us →'},
   'ann.ok':{zh:'我知道了',en:'Got it'},
   'report.title':{zh:'🐞 回報問題',en:'🐞 Report a Problem'},
@@ -344,6 +346,10 @@ Object.assign(T, {
   'pick.quick':{zh:'⚡ 一鍵快速抽牌（隨機）',en:'⚡ Quick draw (random)'},
   // ── Reading head ──
   'rd.head':{zh:'✦ 神諭解讀 ✦',en:'✦ The Oracle Speaks ✦'},
+  'w.guide':{zh:'📖 第一次玩？看教學',en:'📖 New to tarot? Quick guide'},
+  'howto.sum':{zh:'📖 看不懂？怎麼看這一頁',en:'📖 Not sure what you\'re looking at? Read this'},
+  'howto.body':{zh:'<b>下面的牌</b>：每張牌上方寫了它的位置（例如三張牌陣是「過去・現在・未來」），位置決定這張牌在回答你問題的哪一部分。<br><b>正位／逆位</b>：牌是正的叫正位，意思正常發揮；倒過來叫逆位，通常表示卡住、不足，或往反方向走。<br><b>先看哪裡</b>：先看「整體解讀」裡的「關鍵結論」那段就好，那是給你的答案；往下是每張牌的細節，想深入再看。<br><b>看不懂的詞</b>：牌名、星座、元素是塔羅的術語，跳過也不影響理解。<br><b>AI 解讀</b>：解鎖後（或用朋友給的好友碼）AI 會針對你的問題寫成白話，還能追問。',
+    en:'<b>The cards below</b>: each card sits in a position written above it (for a three-card spread: Past · Present · Future). The position tells you which part of your question that card answers.<br><b>Upright / reversed</b>: an upright card works as its usual meaning; a reversed (upside-down) card usually means blocked, lacking, or going the opposite way.<br><b>Where to start</b>: read the "Key Verdict" in the Overall Reading first — that\'s your answer. Below are details for each card if you want to go deeper.<br><b>Unfamiliar words</b>: card names, zodiac signs and elements are tarot terms; you can skip them.<br><b>AI reading</b>: once unlocked (or with a friend code), the AI explains everything in plain words for your question, and you can ask follow-ups.'},
   // ── Pick ──
   'pick.title':{zh:'選擇牌卡',en:'Choose Your Cards'},
   'pick.left.pre':{zh:'以直覺選擇，還需選擇 ',en:'Choose intuitively — '},
@@ -821,6 +827,7 @@ function goBack() {
 }
 // 上方「⌂ 首頁」：不管在哪一頁、滑到多下面，一按直接回首頁
 function goHome() {
+  S.guided = false; // 回首頁＝不跟著教學走了
   navStack.length = 0;
   _showScreen('s-welcome');
 }
@@ -841,6 +848,9 @@ function _showScreen(id) {
     const backIsHome = !readingBackToSpread() && (!navStack.length || navStack[navStack.length-1] === 's-welcome');
     navHome.style.display = (id === 's-welcome' || backIsHome) ? 'none' : 'block';
   }
+  // 新手教學：回首頁（不管按返回還是首頁）、進專案、看歷史記錄＝不跟著教學走了
+  if (id === 's-welcome' || id === 's-projects' || id === 's-history') S.guided = false;
+  if (typeof updateGuideSteps === 'function') updateGuideSteps(id); // 跟著走的人，每一步上面多一句提示
   if (id === 's-projects') renderProjectList();
   if (id === 's-project-new') renderColorSwatches();
 }
@@ -3572,7 +3582,7 @@ async function submitReport(){
 }
 // 一次性公告（沒看過的人會看到一次，關閉後不再跳；要發新公告換新的 ANNOUNCE_ID 即可）
 // 注意：App 內瀏覽器（LINE/FB）可能每次清除儲存，這類用戶每次開啟仍會視為「第一次」看到一次
-const ANNOUNCE_ID = '2026-11-20-copy-cards';
+const ANNOUNCE_ID = '2026-11-22-beginner-guide';
 const ANNOUNCE_EXPIRES = new Date('2027-02-28T00:00:00'); // 到期日：讓第一次來的訪客持續看得到
 // 儲存三層備援：localStorage（跨次）→ sessionStorage（LINE/FB 等 App 內瀏覽器常清 localStorage）
 // → 記憶體（隱私模式下兩者都可能不可用），確保同一次瀏覽絕不重複跳出
@@ -3581,6 +3591,7 @@ function announceGet(k){ try{ if(localStorage.getItem(k)) return true; }catch(e)
 function announceSet(k){ announceSeen=true; try{ localStorage.setItem(k,'1'); }catch(e){} try{ sessionStorage.setItem(k,'1'); }catch(e){} }
 function showAnnounce(){
   if(!ANNOUNCE_ID) return; // 沒有進行中的公告
+  if(isFirstVisit()) return; // 第一次來的人：首頁有新手教學卡，先別再疊一則「更新公告」
   if(window.__trFriendLink) return; // 點好友碼連結進來的新朋友：先別用「八件更新」蓋住兌換畫面（下次來再看）
   if(new Date() >= ANNOUNCE_EXPIRES) return; // 公告已過期
   if(announceGet('tr_announce_'+ANNOUNCE_ID)) return;
@@ -3730,6 +3741,9 @@ function toggleAiInfo(){
 //  更新紀錄 CHANGELOG（新項目加在最上面；中英務必同步）
 // ══════════════════════════════════════════
 const CHANGELOG = [
+  { date:'2026-11-22',
+    zh:['新手教學：首頁「📖 第一次玩？看教學」三步講完怎麼占卜，按「帶我走一次」會在每一步上面提示要做什麼；第一次來的人會自動看到','解讀頁多了「看不懂？怎麼看這一頁」：位置是什麼、正位逆位是什麼、先看「關鍵結論」'],
+    en:['Beginner guide: "📖 New to tarot?" on the home page explains a reading in three steps; "Walk me through it" shows a hint at each step. First-time visitors see it automatically','The reading page now has "Not sure what you\'re looking at?": what positions mean, upright vs reversed, and to start with the "Key Verdict"'] },
   { date:'2026-11-22',
     zh:['好友碼：收到朋友給的好友碼，在「設定」按「🎁 有好友碼？」，填好碼和 Email 就能免費用 AI 解讀（點朋友給的連結會自動填好碼）'],
     en:['Friend codes: got one from a friend? Open Settings → "🎁 Have a friend code?", enter the code and your email to get free AI readings (the link your friend sends fills the code in for you)'] },
@@ -3978,6 +3992,53 @@ if(isVerified()){
     const box=document.getElementById('friend-box'); if(box) box.scrollIntoView({block:'center'});
   }, 300);
 })();
+
+// ── 新手教學（Angie 2026-11-22：「完全不懂塔羅的人說不會用網站，不知道自己在看什麼」）──
+// 首頁：第一次來（沒占卜過、沒關過教學）自動出現三步說明卡；「帶我走一次」＝跟著教學走一次三張牌，
+// 每一步上方多一句提示（S.guided）；解讀頁「怎麼看這一頁」對所有人都在，跟著教學走的人預設打開。
+const GUIDE_LS='tr_guide_done';
+// 真的第一次來：沒占卜記錄、沒關過教學、沒看過任何舊公告、沒登入過、沒選過語言／字級（任何一個有＝用過的人）
+function isFirstVisit(){
+  if(S.readings&&S.readings.length) return false;
+  try{
+    for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i)||''; if(/^tr_(announce_|guide_done|verified_email|session|lang|fontlvl|projects)/.test(k)) return false; }
+  }catch(e){ return false; } // 讀不到 localStorage 就當老用戶（公告照跳，不會漏看）
+  return true;
+}
+function guideDone(){ try{return !!localStorage.getItem(GUIDE_LS);}catch(e){return false;} }
+function renderGuideCard(){
+  const el=document.getElementById('guide-card'); if(!el) return;
+  el.innerHTML=`<button class="g-x" onclick="closeGuide()" aria-label="${L('關閉','Close')}">×</button>
+    <h3>${L('✦ 第一次玩塔羅？三步就會','✦ New to tarot? Three steps')}</h3>
+    <ol>
+      <li>${L('<b>想一件你想知道的事</b>，寫成一句問題。例如「我下個月換工作順利嗎？」','<b>Think of something you want to know</b> and write it as one question, e.g. "Will my job change next month go well?"')}</li>
+      <li>${L('<b>抽牌</b>：不知道選哪種牌陣就選「三張牌陣」，憑直覺點牌，沒有對錯。','<b>Draw cards</b>: if unsure, choose the Three-Card spread and pick by instinct — there\'s no wrong choice.')}</li>
+      <li>${L('<b>看解讀</b>：先看「關鍵結論」那一段，那就是答案；其他是細節，想深入再看。','<b>Read the answer</b>: start with the "Key Verdict" — that\'s your answer. The rest is detail.')}</li>
+    </ol>
+    <div class="g-acts"><button class="btn btn-sm" onclick="startGuided()">${L('✦ 帶我走一次','✦ Walk me through it')}</button><button class="btn btn-ghost btn-sm" onclick="closeGuide()">${L('我會了','Got it')}</button></div>`;
+}
+function showGuideCardIfNew(){
+  const el=document.getElementById('guide-card'); if(!el) return;
+  const fresh=!guideDone() && isFirstVisit();
+  renderGuideCard(); el.style.display=fresh?'block':'none';
+}
+function openGuide(){ const el=document.getElementById('guide-card'); if(!el) return; renderGuideCard(); el.style.display='block'; el.scrollIntoView({block:'center',behavior:'smooth'}); }
+function closeGuide(){ try{localStorage.setItem(GUIDE_LS,'1');}catch(e){} const el=document.getElementById('guide-card'); if(el) el.style.display='none'; }
+function startGuided(){ closeGuide(); S.guided=true; startNoProject(); }
+function updateGuideSteps(id){
+  const step=(elId,n,zh,en)=>{const el=document.getElementById(elId); if(!el) return; el.style.display=S.guided?'block':'none'; if(S.guided) el.innerHTML=`<b>${L('第 '+n+' 步／共 4 步','Step '+n+' of 4')}</b>　${L(zh,en)}`;};
+  if(id==='s-spread'){
+    step('gs-spread',1,'選一種牌陣。不知道選哪個？選<b>亮起來的「三張牌陣」</b>就好：三張牌分別看過去、現在、未來。','Choose a spread. Not sure? Pick the <b>highlighted Three-Card spread</b>: past, present and future.');
+    document.querySelectorAll('.spread-opt').forEach((o,i)=>o.classList.toggle('guide-pick',!!S.guided&&i===0));
+  }
+  if(id==='s-question') step('gs-question',2,'把想知道的事寫成一句問題，越具體越好。不知道怎麼寫可以點下面的例子。寫好按「進入冥想」（冥想可以跳過）。','Write what you want to know as one question — the more specific the better. Tap an example below if stuck. Then tap "Enter Meditation" (you can skip it).');
+  if(id==='s-pick') step('gs-pick',3,'憑直覺點牌，點到選滿為止，沒有對錯。懶得選就按「一鍵快速抽牌」。','Tap cards by instinct until you have enough — there\'s no wrong choice. Or tap "Quick Draw".');
+  if(id==='s-reading'){
+    const h=document.getElementById('rd-howto'); if(h&&S.guided) h.open=true;
+    if(S.guided){ toast(L('第 4 步：先看「關鍵結論」，看不懂就點「怎麼看這一頁」 ✦','Step 4: read the "Key Verdict" first; tap "Read this" if confused ✦')); S.guided=false; }
+  }
+}
+showGuideCardIfNew();
 
 // ── 管理後台（僅站主）：網址加 #admin 貼一次 STATS_TOKEN，鑰匙只存在
 //    這台裝置的 localStorage（不在原始碼、不上傳），設定頁就會出現管理區塊。
