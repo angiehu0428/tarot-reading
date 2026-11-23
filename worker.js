@@ -434,6 +434,8 @@ async function handleWebhook(request, env) {
     return new Response('OK');
   }
 
+  // 永久記號「這個 email 付過錢」（不設期限）：訂閱到期、退款後就不算「第一次來」，不送新手體驗（見 handleAuthVerify）
+  await env.TAROT_KV.put(`paidever:${email}`, '1');
   if (refunded || ended) {
     // 退款 / 訂閱結束 → 移除存取
     await env.TAROT_KV.delete(`email:${email}`);
@@ -656,6 +658,16 @@ async function accessRecord(env, e) {
 // 跟好友帳號一樣沒有每日免費次數：解牌、追問每次扣 1 點，用完回 402（前端跳訂閱視窗，不要就看內建解讀）。
 // 一個 email 只送一次：帳本用去重鍵 'trial'；用過付費同步（KV 有 hist:）的老用戶不算第一次，不送。
 const TRIAL_CREDITS = 3;
+// 全站每天最多送幾個新手體驗（AuthGate 原子計數，不像 KV 會被同時的請求蓋掉）：有人狂開信箱刷，最多也只燒 3×這麼多次
+const TRIAL_DAILY_GRANTS = 200;
+async function trialAllowedToday(env) {
+  const r = await gate(env, `trialgrants:${new Date().toISOString().slice(0, 10)}`, { op: 'hit', cap: TRIAL_DAILY_GRANTS, windowMs: 24 * 60 * 60 * 1000 });
+  return !!r.allowed;
+}
+// 付過錢（paidever:，2026-11-23 起 webhook 記）或同步過占卜記錄（hist:）的都不是第一次來
+async function usedBefore(env, e) {
+  return !!((await env.TAROT_KV.get(`paidever:${e}`)) || (await env.TAROT_KV.get(`hist:${e}`)));
+}
 async function grantTrial(env, e) {
   // 先入帳再寫記錄：寫記錄失敗的話下次登入會重來，帳本靠去重鍵不會重複加
   const r = await ledger(env, e, 'credit_add', { n: TRIAL_CREDITS, idem: 'trial' });
@@ -818,9 +830,12 @@ async function handleAuthVerify(request, env) {
     if (r.credits) friendCredits = r.credits;
   }
   let record = await accessRecord(env, e);
-  // 第一次來（沒付費、沒好友碼、也沒體驗過）→ 送新手體驗。付費同步過的老用戶（訂閱到期）不算第一次
+  // 第一次來（沒付費、沒好友碼、也沒體驗過）→ 送新手體驗。付過錢或同步過記錄的老用戶（訂閱到期）不算第一次
   let trialCredits;
-  if (!record && !(await env.TAROT_KV.get(`hist:${e}`))) {
+  if (!record && !(await usedBefore(env, e))) {
+    if (!(await trialAllowedToday(env))) {
+      return json({ error: '今天的免費體驗名額送完了，明天再來試試 🙏 / Today\'s free trials are all taken — please try again tomorrow', trialFull: true }, 429, request);
+    }
     trialCredits = await grantTrial(env, e);
     record = await accessRecord(env, e);
   }

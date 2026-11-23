@@ -589,3 +589,33 @@ test('新手體驗受全站每日上限管：額滿回 429、預扣的點數退�
   assert.equal(net.gemini, before);
   assert.equal(await balOf(e, NEWBIE), 3);
 });
+
+test('付過錢的（webhook 記 paidever:）訂閱到期後不算第一次：就算沒同步過記錄也不送', async () => {
+  const kv = fakeKV(); const net = fakeNet(); const e = env(kv);
+  const EX = 'ex@example.com';
+  assert.equal(await webhook(e, { email: EX, sale_id: 's1', subscription_id: 'sub1' }), 200);
+  assert.equal(kv.m.get(`paidever:${EX}`), '1');
+  assert.equal(await webhook(e, { email: EX, sale_id: 's1', subscription_id: 'sub1', subscription_ended_at: '2026-11-01' }), 200);
+  assert.equal(kv.m.get(`email:${EX}`), undefined);
+  await call(e, '/auth/start', { email: EX });
+  const v = await call(e, '/auth/verify', { email: EX, code: codeFrom(net.emails.at(-1)) });
+  assert.equal(v.status, 403); assert.equal(v.data.lapsed, true);
+  assert.equal(await balOf(e, EX), 0); assert.equal(kv.m.get(`trial:${EX}`), undefined);
+});
+
+test('新手體驗每天全站最多送 200 個：同時湧入也不會超送，超過的回 429 trialFull、不開帳號', async () => {
+  const kv = fakeKV(); const net = fakeNet(); const e = env(kv);
+  const day = new Date().toISOString().slice(0, 10);
+  // 先把今天的計數灌到 199
+  const g = e.AUTH_GATE.get(e.AUTH_GATE.idFromName(`trialgrants:${day}`));
+  for (let i = 0; i < 199; i++) await g.fetch('https://auth-gate/', { method: 'POST', body: JSON.stringify({ op: 'hit', cap: 200, windowMs: 86400000 }) });
+  const ems = ['p1@example.com', 'p2@example.com', 'p3@example.com'];
+  for (const em of ems) await call(e, '/auth/start', { email: em }, null, '1.1.1.' + em[1]);
+  const codes = ems.map(em => codeFrom(net.emails.filter(m => m.to[0] === em).at(-1)));
+  const rs = await Promise.all(ems.map((em, i) => call(e, '/auth/verify', { email: em, code: codes[i] })));
+  assert.equal(rs.filter(r => r.status === 200).length, 1);
+  const full = rs.filter(r => r.status === 429);
+  assert.equal(full.length, 2); assert.ok(full.every(r => r.data.trialFull));
+  let total = 0; for (const em of ems) total += await balOf(e, em);
+  assert.equal(total, 3);
+});
