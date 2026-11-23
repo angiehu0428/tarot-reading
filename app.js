@@ -110,6 +110,9 @@ const CREDIT_PACKS = [
   // {url:'https://huisangie.gumroad.com/l/tarotcredits100?wanted=true', label:'⚡ 100 點 · US$5'},
 ];
 let CREDITS = null; // null=尚未載入；數字=剩餘點數
+// 帳號種類：'trial'＝新手體驗（第一次登入送 3 次）、'friend'＝好友碼；都只能用點數，沒有每日免費次數。付費會員＝''
+function getPlan(){ try{ return localStorage.getItem('tr_plan')||''; }catch(e){ return ''; } }
+function setPlan(p){ try{ if(p) localStorage.setItem('tr_plan',p); else localStorage.removeItem('tr_plan'); }catch(e){} }
 async function fetchCredits(){
   if(!isVerified()||!WORKER_URL) return;
   try{
@@ -117,6 +120,7 @@ async function fetchCredits(){
     if(r.status===401){ sessionLost(); return; }
     if(!r.ok) return;
     const d=await r.json();
+    setPlan(d.plan||'');
     if(typeof d.balance==='number'){ CREDITS=d.balance; renderCreditUI(); }
   }catch(e){}
 }
@@ -127,6 +131,12 @@ function renderCreditUI(){
   const el=document.getElementById('credit-row'); if(!el) return;
   if(!isVerified()||CREDITS===null){ el.style.display='none'; return; }
   el.style.display='block';
+  if(getPlan()){ // 新手體驗、好友碼：只有點數，沒有每日免費次數
+    el.innerHTML=`
+    <div style="font-family:'Cinzel',serif;font-size:.8rem;color:var(--gold);letter-spacing:.1em;margin:14px 0 6px">🎁 ${getPlan()==='trial'?L('免費體驗','Free trial'):L('好友體驗','Friend readings')}</div>
+    <p class="hint" style="margin:0 0 8px">${L('AI 解讀還剩','AI answers left')}：<strong style="color:var(--gold)">${CREDITS}</strong> ${L('次（解牌、追問每次用 1 次）。用完可以訂閱繼續用。','(each reading or follow-up uses 1). Subscribe to keep going once they run out.')}</p>`;
+    return;
+  }
   el.innerHTML=`
     <div style="font-family:'Cinzel',serif;font-size:.8rem;color:var(--gold);letter-spacing:.1em;margin:14px 0 6px">⚡ ${L('AI 點數','AI Credits')}</div>
     <p class="hint" style="margin:0 0 8px">${L(`免費額度用完後（每次占卜追問 ${CHAT_LIMIT} 次／每日 30 次 AI 解牌），每次呼叫扣 1 點，額度重置前也能盡情問下去。`,`After the free quotas (${CHAT_LIMIT} follow-ups per reading / 30 AI calls per day), each extra call uses 1 credit.`)}
@@ -206,7 +216,7 @@ Object.assign(T, {
   'set.buy.launchnote':{zh:'限時新開張：一次付清、不需每月續訂（僅到 6/30）',en:'Limited launch deal: pay once, no monthly renewal (until Jun 30)'},
   'set.buy.fx':{zh:'※ 全部以美金（USD）計價。非美國地區看到的當地幣別（如 NT$）為即時換算僅供參考；信用卡實際以美金扣款，部分發卡銀行可能另收一筆外幣交易手續費。',en:'※ All prices are in USD. Local-currency amounts shown outside the US (e.g. NT$) are real-time conversions for reference only; your card is charged in USD, and some banks may add a foreign-transaction fee.'},
   'set.buy.note':{zh:'以購買 / 訂閱時填寫的 email 驗證解鎖',en:'Unlock by verifying with your checkout email'},
-  'set.buy.label':{zh:'已訂閱？輸入訂閱時的 Email，我們會寄一組驗證碼給你',en:'Already subscribed? Enter your checkout email and we\'ll send you a code'},
+  'set.buy.label':{zh:'第一次來？填 Email 收驗證碼，送你 3 次免費 AI 解讀。已訂閱的請填訂閱時的 Email',en:'First time? Enter your email for a code and get 3 free AI readings. Subscribers: use your checkout email'},
   'set.buy.verify':{zh:'寄驗證碼',en:'Send code'},
   'set.friend.toggle':{zh:'🎁 有好友碼？',en:'🎁 Have a friend code?'},
   'set.friend.label':{zh:'輸入好友碼和你的 Email（填在上面那格），兌換後會寄驗證碼給你',en:'Enter the friend code and your email (in the box above) — we\'ll send you a sign-in code'},
@@ -260,10 +270,14 @@ Object.assign(T, {
   'set.font.head':{zh:'✦ 字級大小（看不清楚可調大）',en:'✦ Text size (make it bigger if hard to read)'},
   'font.lv0':{zh:'標準',en:'Normal'},'font.lv1':{zh:'大',en:'Large'},'font.lv2':{zh:'特大',en:'X-Large'},'font.lv3':{zh:'超大',en:'XX-Large'},
   'font.btn.title':{zh:'字級大小（點我放大）',en:'Text size (tap to enlarge)'},
-  'ann.title':{zh:'✦ 新功能：新手教學、好友碼 🔮',en:'✦ New: Beginner Guide, Friend Codes 🔮'},
-  'ann.body':{zh:'🙏 <strong style="color:var(--gold)">這陣子更新了十件事：</strong><br><br><strong>✦ 新 新手教學</strong><br>首頁「📖 第一次玩？看教學」三步講完怎麼占卜，還能「帶我走一次」；解讀頁多了「看不懂？怎麼看這一頁」，講清楚位置、正位逆位、先看哪裡 ✦<br><br><strong>✦ 新 好友碼</strong><br>拿到朋友給的好友碼，到「設定」按「🎁 有好友碼？」就能免費用 AI 解讀 ✦<br><br><strong>✦ 新「複製牌（不含解讀）」</strong><br>只複製問題、牌陣和抽到的每一張牌（都標正位或逆位），不含解讀。解讀頁牌面下方、占卜記錄每一筆、專案裡每一筆點開後都有 ✦<br><br><strong>✦ 新 專案裡可以繼續追問</strong><br>專案裡每一筆會寫還可以追問幾次，點開能看之前的追問，按「繼續追問」接著問；事後加入專案的也一樣 ✦<br><br><strong>① 單獨占卜可以事後「加入專案」</strong><br>占完才想到要歸到某個專案也可以：在解讀頁最下面或「占卜記錄」按「加入專案」，選一個專案或當場開新的。牌、解讀和追問原樣放進去，不用重抽；之後在那個專案占卜，AI 會參考這一筆。放錯了，進專案按那一筆右上角的「移出專案」就好，占卜本身還留在占卜記錄 ✦<br><br><strong>② 上方多了「⌂ 首頁」</strong><br>看完長長的解讀不用滑到最底，左上角一按就回首頁 ✦<br><br><strong>③ 追問失敗可以「重送」</strong><br>AI 出錯或連線斷掉時，錯誤訊息下面有一顆「↻ 重送」，按了就用同一句再問一次，不用複製貼上（失敗的那次照樣不扣次數）✦<br><br><strong>④ 「複製牌＋解讀」</strong><br>整體解讀下面和頁面最底下都有，一次複製問題、抽到的牌、整體解讀和所有追問；每則追問回答也可以單獨複製 ✦<br><br><strong>⑤ 單牌解析更對題</strong><br>問公司、上班、離職這類職場問題，主題判斷比以前準，單牌解析多半會聚焦在「事業」的牌義，比較不會被當成感情題 ✦<br><br><strong>⑥ 訂閱改用 Email 驗證碼登入</strong><br>解鎖 AI 解牌要輸入信箱收到的 6 位數驗證碼，別人光知道你的 Email 用不了你的額度（剛付款完自動回到本站的不用輸入）。同一台裝置驗證一次，通常半年內不用再驗；清除瀏覽器資料後要再驗一次 ✦<br><br>💬 有任何問題都歡迎隨時回報 🙏',en:'🙏 <strong style="color:var(--gold)">Ten recent updates:</strong><br><br><strong>✦ New: Beginner guide</strong><br>"📖 New to tarot?" on the home page explains a reading in three steps, with "Walk me through it"; the reading page now has "Not sure what you\'re looking at?" covering positions, upright/reversed and where to start ✦<br><br><strong>✦ New: Friend codes</strong><br>Got a friend code? Settings → "🎁 Have a friend code?" for free AI readings ✦<br><br><strong>New: Copy cards only</strong><br>Copies just your question, the spread and every card drawn (each marked upright or reversed), without the reading. It is under the cards on the reading page, on every History entry, and on every project entry once opened ✦<br><br><strong>New: follow-ups inside projects</strong><br>Each project entry says how many follow-ups are left; open it to see earlier follow-ups and tap "Continue asking" to carry on — readings added to a project later too ✦<br><br><strong>1. Add a reading to a project afterwards</strong><br>Did a reading on its own and want it in a project after all? Tap "Add to Project" at the bottom of the reading or in History, then pick a project or start a new one. The cards, reading and follow-ups move in as they are — no redraw — and later readings in that project take it into account. Wrong project? Open it and tap "Remove" on that entry; the reading itself stays in History ✦<br><br><strong>2. "⌂ Home" at the top</strong><br>No more scrolling to the bottom of a long reading: the top-left button takes you straight home ✦<br><br><strong>3. Resend a failed follow-up</strong><br>If the AI errors or the connection drops, the error message now has a "↻ Resend" button that asks the same question again — no copy and paste (failed attempts still don\'t count) ✦<br><br><strong>4. Copy cards + reading</strong><br>Under the overall reading and at the bottom of the page: copies your question, the cards, the overall reading and every follow-up in one go. Each follow-up answer can also be copied on its own ✦<br><br><strong>5. Card-by-card meanings stay on topic</strong><br>Workplace questions (a company, a job, resigning) are recognised better, so the card-by-card reading usually focuses on the "career" meanings rather than treating them as love questions ✦<br><br><strong>6. Subscribers sign in with an emailed code</strong><br>Unlocking AI readings now needs the 6-digit code sent to your inbox, so knowing your email is not enough to use your quota (no code needed when you return straight from checkout). Verify once per device and you usually stay signed in for about 6 months; clearing your browser data means verifying again ✦<br><br>💬 Reports and feature wishes are always welcome 🙏'},
+  'ann.title':{zh:'✦ 新功能：免費試 3 次 AI、新手教學 🔮',en:'✦ New: 3 Free AI Readings, Beginner Guide 🔮'},
+  'ann.body':{zh:'🙏 <strong style="color:var(--gold)">這陣子更新了十一件事：</strong><br><br><strong>✦ 新 免費試 3 次 AI 解讀</strong><br>還沒訂閱的，到「設定」填 Email、貼上信裡的驗證碼，就送你 3 次 AI 解讀（解牌、追問每次用 1 次），不用付錢 ✦<br><br><strong>✦ 新 新手教學</strong><br>首頁「📖 第一次玩？看教學」三步講完怎麼占卜，還能「帶我走一次」；解讀頁多了「看不懂？怎麼看這一頁」，講清楚位置、正位逆位、先看哪裡 ✦<br><br><strong>✦ 新 好友碼</strong><br>拿到朋友給的好友碼，到「設定」按「🎁 有好友碼？」就能免費用 AI 解讀 ✦<br><br><strong>✦ 新「複製牌（不含解讀）」</strong><br>只複製問題、牌陣和抽到的每一張牌（都標正位或逆位），不含解讀。解讀頁牌面下方、占卜記錄每一筆、專案裡每一筆點開後都有 ✦<br><br><strong>✦ 新 專案裡可以繼續追問</strong><br>專案裡每一筆會寫還可以追問幾次，點開能看之前的追問，按「繼續追問」接著問；事後加入專案的也一樣 ✦<br><br><strong>① 單獨占卜可以事後「加入專案」</strong><br>占完才想到要歸到某個專案也可以：在解讀頁最下面或「占卜記錄」按「加入專案」，選一個專案或當場開新的。牌、解讀和追問原樣放進去，不用重抽；之後在那個專案占卜，AI 會參考這一筆。放錯了，進專案按那一筆右上角的「移出專案」就好，占卜本身還留在占卜記錄 ✦<br><br><strong>② 上方多了「⌂ 首頁」</strong><br>看完長長的解讀不用滑到最底，左上角一按就回首頁 ✦<br><br><strong>③ 追問失敗可以「重送」</strong><br>AI 出錯或連線斷掉時，錯誤訊息下面有一顆「↻ 重送」，按了就用同一句再問一次，不用複製貼上（失敗的那次照樣不扣次數）✦<br><br><strong>④ 「複製牌＋解讀」</strong><br>整體解讀下面和頁面最底下都有，一次複製問題、抽到的牌、整體解讀和所有追問；每則追問回答也可以單獨複製 ✦<br><br><strong>⑤ 單牌解析更對題</strong><br>問公司、上班、離職這類職場問題，主題判斷比以前準，單牌解析多半會聚焦在「事業」的牌義，比較不會被當成感情題 ✦<br><br><strong>⑥ 訂閱改用 Email 驗證碼登入</strong><br>解鎖 AI 解牌要輸入信箱收到的 6 位數驗證碼，別人光知道你的 Email 用不了你的額度（剛付款完自動回到本站的不用輸入）。同一台裝置驗證一次，通常半年內不用再驗；清除瀏覽器資料後要再驗一次 ✦<br><br>💬 有任何問題都歡迎隨時回報 🙏',en:'🙏 <strong style="color:var(--gold)">Eleven recent updates:</strong><br><br><strong>✦ New: 3 free AI readings</strong><br>Not subscribed? Open Settings, enter your email and paste the code we send you to get 3 AI readings free (each reading or follow-up uses 1) ✦<br><br><strong>✦ New: Beginner guide</strong><br>"📖 New to tarot?" on the home page explains a reading in three steps, with "Walk me through it"; the reading page now has "Not sure what you\'re looking at?" covering positions, upright/reversed and where to start ✦<br><br><strong>✦ New: Friend codes</strong><br>Got a friend code? Settings → "🎁 Have a friend code?" for free AI readings ✦<br><br><strong>New: Copy cards only</strong><br>Copies just your question, the spread and every card drawn (each marked upright or reversed), without the reading. It is under the cards on the reading page, on every History entry, and on every project entry once opened ✦<br><br><strong>New: follow-ups inside projects</strong><br>Each project entry says how many follow-ups are left; open it to see earlier follow-ups and tap "Continue asking" to carry on — readings added to a project later too ✦<br><br><strong>1. Add a reading to a project afterwards</strong><br>Did a reading on its own and want it in a project after all? Tap "Add to Project" at the bottom of the reading or in History, then pick a project or start a new one. The cards, reading and follow-ups move in as they are — no redraw — and later readings in that project take it into account. Wrong project? Open it and tap "Remove" on that entry; the reading itself stays in History ✦<br><br><strong>2. "⌂ Home" at the top</strong><br>No more scrolling to the bottom of a long reading: the top-left button takes you straight home ✦<br><br><strong>3. Resend a failed follow-up</strong><br>If the AI errors or the connection drops, the error message now has a "↻ Resend" button that asks the same question again — no copy and paste (failed attempts still don\'t count) ✦<br><br><strong>4. Copy cards + reading</strong><br>Under the overall reading and at the bottom of the page: copies your question, the cards, the overall reading and every follow-up in one go. Each follow-up answer can also be copied on its own ✦<br><br><strong>5. Card-by-card meanings stay on topic</strong><br>Workplace questions (a company, a job, resigning) are recognised better, so the card-by-card reading usually focuses on the "career" meanings rather than treating them as love questions ✦<br><br><strong>6. Subscribers sign in with an emailed code</strong><br>Unlocking AI readings now needs the 6-digit code sent to your inbox, so knowing your email is not enough to use your quota (no code needed when you return straight from checkout). Verify once per device and you usually stay signed in for about 6 months; clearing your browser data means verifying again ✦<br><br>💬 Reports and feature wishes are always welcome 🙏'},
   'ann.feedback':{zh:'有問題或想許願新功能？點此回報 →',en:'Found a bug or have a feature wish? Tell us →'},
   'ann.ok':{zh:'我知道了',en:'Got it'},
+  'pw.title':{zh:'✦ 免費的 AI 解讀用完了',en:'✦ Your free AI readings are used up'},
+  'pw.body':{zh:'喜歡 AI 幫你解牌、陪你追問的話，可以訂閱繼續用。先不要也沒關係，下面一樣有一般的牌義解讀。',en:'Enjoyed having AI read your cards and answer follow-ups? Subscribe to keep going. No worries if not — the standard card-meaning reading is right below.'},
+  'pw.cap':{zh:'每月自動續扣，可隨時取消。請用跟這裡一樣的 Email 結帳',en:'Auto-renews monthly, cancel anytime. Check out with the same email you use here'},
+  'pw.no':{zh:'先不要，看一般解牌',en:'Not now — show the standard reading'},
   'report.title':{zh:'🐞 回報問題',en:'🐞 Report a Problem'},
   'report.desc':{zh:'遇到問題或有建議嗎？把情況描述寄到下面這個信箱，我會盡快處理 🙏',en:'Hit a problem or have a suggestion? Email the details to the address below and I\'ll get on it 🙏'},
   'report.copy':{zh:'複製',en:'Copy'},
@@ -1393,8 +1407,34 @@ function cardFaceHTML(card,rev){
 // ══════════════════════════════════════════
 //  READING
 // ══════════════════════════════════════════
+// 免費次數（新手體驗／好友碼）用完：worker 回 402 → 跳訂閱視窗；按「先不要」就照一般解牌看
+function noCreditsError(data){
+  CREDITS=0; renderCreditUI();
+  const e=new Error(extractErrMsg(data && data.error, L('AI 點數不足','Not enough credits')));
+  e.noCredits=true; e.creditOnly=!!(data && (data.trial||data.friend));
+  return e;
+}
+function openPaywall(){ const m=document.getElementById('paywall-modal'); if(m) m.classList.add('on'); }
+function closePaywall(){ const m=document.getElementById('paywall-modal'); if(m) m.classList.remove('on'); resetViewport(); }
+function openTrialSignup(){
+  openSettings();
+  const inp=document.getElementById('unlock-input'); if(inp){ inp.scrollIntoView({block:'center'}); if(!inp.value) inp.focus(); }
+  const bar=document.getElementById('unlock-status-bar');
+  if(bar && !localStorage.getItem('tr_pending_email')){ bar.style.display='block'; bar.className='api-status api-none';
+    bar.textContent=L('🎁 填你的 Email，按「寄驗證碼」，把信裡的 6 位數貼回來就送你 3 次免費 AI 解讀','🎁 Enter your email, tap "Send code", and paste the 6 digits from the email to get 3 free AI readings'); }
+}
 function unlockCtaHtml(){
   if(!GUMROAD_URL) return '';
+  // 還沒登入的新訪客：先講「免費送 3 次」，填 Email 就能用
+  if(!isVerified() && !getApiKey()) return `
+      <div style="margin-top:22px;padding:16px;background:rgba(212,175,55,.07);border:1px solid rgba(212,175,55,.25);border-radius:12px;text-align:center">
+        <div style="font-family:'Cinzel',serif;font-size:.78rem;color:var(--gold);letter-spacing:.1em;margin-bottom:8px">${L('🎁 免費試 3 次 AI 解讀','🎁 Try 3 free AI readings')}</div>
+        <p class="hint" style="margin:0 0 12px;font-size:.82rem">${L(`上面是一般的牌義解讀。想看 AI 針對「${S.q}」的完整分析、還能追問的話，填 Email 收驗證碼就送你 3 次，不用付錢。`,`Above is the standard card-meaning reading. For an AI reading of "${S.q}" with follow-up questions, enter your email for a code and get 3 free — no payment needed.`)}</p>
+        <div style="display:flex;justify-content:center;gap:10px;flex-wrap:wrap">
+          <button class="btn btn-sm" onclick="openTrialSignup()">${L('✦ 填 Email 免費試用','✦ Try it free with your email')}</button>
+          <button class="btn btn-sm btn-ghost" onclick="openSettings()">${L('已訂閱？驗證 Email','Subscribed? Verify')}</button>
+        </div>
+      </div>`;
   return `
       <div style="margin-top:22px;padding:16px;background:rgba(212,175,55,.07);border:1px solid rgba(212,175,55,.25);border-radius:12px;text-align:center">
         <div style="font-family:'Cinzel',serif;font-size:.78rem;color:var(--gold);letter-spacing:.1em;margin-bottom:8px">${L('✦ 解鎖 AI 深度解牌','✦ Unlock AI Deep Reading')}</div>
@@ -1575,6 +1615,13 @@ function runAIReading(){
       return;
     }
     const fb=fbRender();
+    if(err && err.noCredits){
+      // 免費次數用完：照一般解牌顯示，跳訂閱視窗問要不要（不要就關掉看下面的解讀）
+      document.getElementById('interp-main').innerHTML=`${fb}`;
+      autoSaveDraw();
+      openPaywall();
+      return;
+    }
     document.getElementById('interp-main').innerHTML=`${fb}${unlockCtaHtml()}${retryBarHtml()}
       <div style="font-size:.72rem;color:var(--red);margin-top:10px;opacity:.7">${L('（AI 暫時無法連線：','(AI temporarily unavailable: ')}${friendlyApiErr(err.message)}）
         <a href="javascript:void(0)" onclick="reportProblem('ai-fail')" style="color:rgba(212,175,55,.7);margin-left:6px">${L('回報問題','Report')}</a></div>`;
@@ -2077,6 +2124,12 @@ ${refCtx}
         if(typeof updateApiStatus==='function') updateApiStatus();
         throw new Error(L('訂閱已到期或未生效，請續訂以繼續使用 AI 解牌','Your subscription has lapsed — please resubscribe to keep using AI readings'));
       }
+      // 免費次數（新手體驗／好友碼）用完
+      if(resp.status===402 && !key) throw noCreditsError(data);
+      if(resp.status===402 && key){
+        useOwnKey=true;
+        toast(L('免費次數用完了，已改用你的 API Key 🔑','Free readings used up — switched to your own API key 🔑'));
+      } else
       // 訂閱額度已滿(429)且用戶有自備 API Key → 自動改用自備 key，不中斷體驗
       if(resp.status===429 && key){
         useOwnKey=true;
@@ -2090,7 +2143,7 @@ ${refCtx}
         }));
         data=await resp.json().catch(()=>({}));
         if(!resp.ok){
-          if(resp.status===402){ CREDITS=0; renderCreditUI(); }
+          if(resp.status===402) throw noCreditsError(data);
           throw new Error(extractErrMsg(data.error, `Worker ${resp.status}`));
         }
         creditUpdateFrom(data);
@@ -2780,7 +2833,7 @@ async function sendChat(resendText){
       if(!r.ok){
         if(r.status===401){ sessionLost(); throw new Error(L('登入已失效，請到「設定」重新驗證 Email','Session expired — please re-verify your email in Settings')); }
         if(r.status===403){ localStorage.removeItem('tr_verified_email'); if(typeof updateApiStatus==='function') updateApiStatus(); throw new Error(L('訂閱已到期或未生效，請續訂以繼續使用 AI 解牌','Your subscription has lapsed — please resubscribe to keep using AI readings')); }
-        if(r.status===402){ CREDITS=0; renderCreditUI(); updateChatRemaining(); throw new Error(data.friend ? extractErrMsg(data.error, 'No credits') : L('AI 點數不足，可到「設定」儲值 ⚡','Not enough credits — top up in Settings ⚡')); }
+        if(r.status===402){ CREDITS=0; renderCreditUI(); updateChatRemaining(); if(data.friend||data.trial){ openPaywall(); throw new Error(extractErrMsg(data.error, 'No credits')); } throw new Error(L('AI 點數不足，可到「設定」儲值 ⚡','Not enough credits — top up in Settings ⚡')); }
         if(r.status===429 && key){ ownK=true; toast(L('今日訂閱額度已滿，已自動改用你的 API Key 🔑','Daily subscription limit reached — switched to your own API key 🔑')); }
         else throw new Error(extractErrMsg(data.error, `Worker ${r.status}`));
       } else {
@@ -3172,7 +3225,7 @@ async function verifyEmail(sentMsg){
       // worker 不會說這個 email 有沒有購買記錄（防掃描），所以提示要同時講到兩種情況
       localStorage.setItem('tr_pending_email',email);
       showUnlockCodeStep(true);
-      ubar.textContent=(typeof sentMsg==='string'&&sentMsg)?sentMsg:L('✉ 如果 '+email+' 有購買記錄，驗證碼已寄出，請貼到下面（10 分鐘內有效）。沒收到：翻翻垃圾郵件、確認是 Gumroad 購買時填的 Email，1 分鐘後可再寄','✉ If '+email+' has a purchase, a code is on its way — paste it below (valid 10 min). Nothing arrived? Check spam, make sure it\'s your Gumroad checkout email, and resend after a minute');
+      ubar.textContent=(typeof sentMsg==='string'&&sentMsg)?sentMsg:L('✉ 驗證碼已寄到 '+email+'，貼到下面（10 分鐘內有效）。第一次來的會送你 3 次免費 AI 解讀；已訂閱的請用 Gumroad 購買時填的 Email。沒收到：翻翻垃圾郵件，1 分鐘後可再寄','✉ A code was sent to '+email+' — paste it below (valid 10 min). First time here? You get 3 free AI readings. Subscribers: use your Gumroad checkout email. Nothing arrived? Check spam and resend after a minute');
     } else {
       showUnlockCodeStep(false);
       ubar.textContent='✗ '+extractErrMsg(d.error, L('寄不出驗證碼，請稍後再試','Could not send the code, please try later'));
@@ -3223,11 +3276,13 @@ async function verifyCode(){
     const r=await fetch(WORKER_URL+'/auth/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,code})});
     const d=await r.json().catch(()=>({}));
     if(r.ok && d.token){
-      onLoggedIn(email, d.token);
+      onLoggedIn(email, d.token, d.plan);
       localStorage.removeItem('tr_pending_email');
       showUnlockCodeStep(false);
       ubar.className='api-status api-ok';ubar.textContent=L('✓ 驗證成功！已解鎖 AI 解牌','✓ Verified! AI reading unlocked');
-      toast(d.friendCredits ? L('🎁 好友碼兌換成功！你有 '+d.friendCredits+' 次 AI 解讀','🎁 Friend code redeemed! You have '+d.friendCredits+' AI answers') : L('✦ 驗證成功！AI 解牌已解鎖','✦ Verified! AI reading unlocked'));closeSettings();
+      toast(d.friendCredits ? L('🎁 好友碼兌換成功！你有 '+d.friendCredits+' 次 AI 解讀','🎁 Friend code redeemed! You have '+d.friendCredits+' AI answers')
+        : d.trialCredits ? L('🎁 歡迎！送你 '+d.trialCredits+' 次免費 AI 解讀（解牌、追問每次用 1 次）','🎁 Welcome! Here are '+d.trialCredits+' free AI readings (each reading or follow-up uses 1)')
+        : L('✦ 驗證成功！AI 解牌已解鎖','✦ Verified! AI reading unlocked'));closeSettings();
       maybeRunAIAfterUnlock(); // 解鎖後立即解析當前這次抽牌
       // 驗證後拉回雲端歷史並合併，再推回（跨裝置同步）
       syncPull().then(merged=>{ if(merged){ toast(L('☁ 已同步雲端歷史記錄','☁ Cloud history synced')); redrawAfterSync(); } syncPush(); });
@@ -3245,9 +3300,10 @@ async function verifyCode(){
   }catch(e){ubar.textContent=L('✗ 無法連線，請稍後再試：','✗ Connection failed, please try again: ')+e.message.slice(0,60);}
 }
 // 拿到 token 後的共同收尾（驗證碼登入、Gumroad 購後轉址都走這裡）
-function onLoggedIn(email, token){
+function onLoggedIn(email, token, plan){
   localStorage.setItem('tr_verified_email',email);
   localStorage.setItem('tr_session',token);
+  setPlan(plan||'');
   updateApiStatus();
   fetchCredits();
 }
@@ -3257,6 +3313,7 @@ function clearVerifiedEmail(){
   localStorage.removeItem('tr_verified_email');
   localStorage.removeItem('tr_session');
   localStorage.removeItem('tr_pending_email');
+  setPlan('');
   document.getElementById('unlock-input').value='';
   showUnlockCodeStep(false);
   updateApiStatus();toast(L('已清除驗證','Verification cleared'));
@@ -3269,6 +3326,7 @@ async function revalidateAccess(){
   try{
     const r=await fetch(WORKER_URL+'/check',{method:'POST',headers:authHeaders(),body:'{}'});
     const d=await r.json();
+    if(d&&d.verified) setPlan(d.plan||''); // 新手體驗後訂閱了 → 換回付費會員顯示
     if(d&&d.needLogin){
       // token 失效（半年到期/被清除）→ 保留 email，請用戶重新驗證一次
       sessionLost();
@@ -3582,7 +3640,7 @@ async function submitReport(){
 }
 // 一次性公告（沒看過的人會看到一次，關閉後不再跳；要發新公告換新的 ANNOUNCE_ID 即可）
 // 注意：App 內瀏覽器（LINE/FB）可能每次清除儲存，這類用戶每次開啟仍會視為「第一次」看到一次
-const ANNOUNCE_ID = '2026-11-22-beginner-guide';
+const ANNOUNCE_ID = '2026-11-23-free-trial';
 const ANNOUNCE_EXPIRES = new Date('2027-02-28T00:00:00'); // 到期日：讓第一次來的訪客持續看得到
 // 儲存三層備援：localStorage（跨次）→ sessionStorage（LINE/FB 等 App 內瀏覽器常清 localStorage）
 // → 記憶體（隱私模式下兩者都可能不可用），確保同一次瀏覽絕不重複跳出
@@ -3741,6 +3799,9 @@ function toggleAiInfo(){
 //  更新紀錄 CHANGELOG（新項目加在最上面；中英務必同步）
 // ══════════════════════════════════════════
 const CHANGELOG = [
+  { date:'2026-11-23',
+    zh:['第一次來的人免費試 3 次 AI 解讀：填 Email、貼上驗證碼就送（解牌、追問每次用 1 次）。用完會問要不要訂閱，不要的話照樣看一般牌義解讀'],
+    en:['First-timers get 3 free AI readings: enter your email and paste the code (each reading or follow-up uses 1). When they run out we\'ll ask if you\'d like to subscribe; if not, you still get the standard card-meaning reading'] },
   { date:'2026-11-22',
     zh:['新手教學：首頁「📖 第一次玩？看教學」三步講完怎麼占卜，按「帶我走一次」會在每一步上面提示要做什麼；第一次來的人會自動看到','解讀頁多了「看不懂？怎麼看這一頁」：位置是什麼、正位逆位是什麼、先看「關鍵結論」'],
     en:['Beginner guide: "📖 New to tarot?" on the home page explains a reading in three steps; "Walk me through it" shows a hint at each step. First-time visitors see it automatically','The reading page now has "Not sure what you\'re looking at?": what positions mean, upright vs reversed, and to start with the "Key Verdict"'] },

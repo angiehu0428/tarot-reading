@@ -43,7 +43,7 @@ async function geminiFetch(url, init = {}) {
 }
 
 // 改 worker 時一起改，才能從 /version 確認 Cloudflare 真的部署了新版本
-const WORKER_VERSION = '2026.11.15a';
+const WORKER_VERSION = '2026.11.23a';
 
 const ALLOWED_ORIGINS = [
   'https://angiehu0428.github.io',
@@ -462,7 +462,8 @@ async function handleCredits(request, env) {
   const s = await requirePaidSession(request, env);
   if (s.error) return s.error;
   const r = await ledger(env, s.email, 'credit_get');
-  return json({ balance: r.bal }, 200, request);
+  const plan = creditOnlyPlan(s.record);
+  return json({ balance: r.bal, ...(plan ? { plan } : {}) }, 200, request);
 }
 
 // ── Credit manual adjust (private; for support/testing) ──────
@@ -646,8 +647,25 @@ function gateMissing(env, request) {
 function normEmail(v) { return String(v || '').toLowerCase().trim().slice(0, 254); }
 // 能不能登入、用 AI：付費記錄（email:）優先；沒有（從沒付過、或訂閱到期被 webhook 刪掉）就看好友記錄（friend:）。
 // 兩個分開存，訂閱到期不會連好友兌換來的點數都用不了。
+// 第三順位：新手體驗（trial:，第一次登入自動送 TRIAL_CREDITS 次，見 grantTrial）
 async function accessRecord(env, e) {
-  return (await env.TAROT_KV.get(`email:${e}`)) || (await env.TAROT_KV.get(`friend:${e}`));
+  return (await env.TAROT_KV.get(`email:${e}`)) || (await env.TAROT_KV.get(`friend:${e}`)) || (await env.TAROT_KV.get(`trial:${e}`));
+}
+// ── 新手體驗（Angie 2026-11-23：「開放給第一次用的人三次AI解析次數」）──
+// 沒有任何記錄的 email 也能收驗證碼；驗證碼對了（確定 email 是她的）就開 KV `trial:<email>`（能登入）＋帳本加 3 點。
+// 跟好友帳號一樣沒有每日免費次數：解牌、追問每次扣 1 點，用完回 402（前端跳訂閱視窗，不要就看內建解讀）。
+// 一個 email 只送一次：帳本用去重鍵 'trial'；用過付費同步（KV 有 hist:）的老用戶不算第一次，不送。
+const TRIAL_CREDITS = 3;
+async function grantTrial(env, e) {
+  // 先入帳再寫記錄：寫記錄失敗的話下次登入會重來，帳本靠去重鍵不會重複加
+  const r = await ledger(env, e, 'credit_add', { n: TRIAL_CREDITS, idem: 'trial' });
+  await env.TAROT_KV.put(`trial:${e}`, JSON.stringify({ verified: true, plan: 'trial', date: new Date().toISOString() }));
+  return r.dup ? 0 : TRIAL_CREDITS;
+}
+// 只能用點數的帳號（好友碼、新手體驗）：沒有每日免費次數
+function creditOnlyPlan(record) {
+  const p = (safeJson(record) || {}).plan;
+  return p === 'friend' || p === 'trial' ? p : null;
 }
 // 點數一律走帳本（AuthGate `credit:<email>`，見 credit_* 操作）。KV `credits:<email>` 已停用
 const CREDIT_HOLD_MS = 10 * 60 * 1000; // AI 呼叫預扣的點數，這麼久沒結果就自動退回
@@ -743,8 +761,8 @@ async function sendLoginCode(env, email, code) {
   return { ok: false, reason: 'unconfigured' };
 }
 
-// 回應不分「有沒有付費記錄」，免得被拿來掃哪些 email 是付費用戶
-const START_GENERIC = { sent: true, message: '如果這個 Email 有購買記錄，驗證碼已寄出（10 分鐘內有效）/ If this email has a purchase, a code is on its way (valid 10 min)' };
+// 回應不分「有沒有付費記錄」，免得被拿來掃哪些 email 是付費用戶（2026-11-23 起新手也收得到碼，所以人人都寄）
+const START_GENERIC = { sent: true, message: '驗證碼已寄出（10 分鐘內有效）/ A code is on its way (valid 10 min)' };
 
 async function handleAuthStart(request, env) {
   const missing = gateMissing(env, request); if (missing) return missing;
@@ -754,8 +772,7 @@ async function handleAuthStart(request, env) {
   if (!(await ipAllow(env, request, 'start', AUTH_IP_HOURLY_CAP))) {
     return json({ error: '嘗試太多次，請一小時後再試 / Too many attempts, please try again in an hour', rateLimited: true }, 429, request);
   }
-  const record = await accessRecord(env, e);
-  if (!record) return json(START_GENERIC, 200, request);
+  // 沒有記錄的也寄：可能是第一次來的人，驗證後送新手體驗（見 handleAuthVerify）
   const failed = await startOtp(env, e);
   if (failed && !failed.cooldown) return json(failed, 503, request);
   return json(START_GENERIC, 200, request); // 冷卻中也回一樣的內容（不透露有沒有付費）
@@ -800,10 +817,17 @@ async function handleAuthVerify(request, env) {
     }
     if (r.credits) friendCredits = r.credits;
   }
-  const record = await accessRecord(env, e);
-  if (!record) return json({ error: 'no purchase', verified: false }, 403, request);
+  let record = await accessRecord(env, e);
+  // 第一次來（沒付費、沒好友碼、也沒體驗過）→ 送新手體驗。付費同步過的老用戶（訂閱到期）不算第一次
+  let trialCredits;
+  if (!record && !(await env.TAROT_KV.get(`hist:${e}`))) {
+    trialCredits = await grantTrial(env, e);
+    record = await accessRecord(env, e);
+  }
+  if (!record) return json({ error: '這個 Email 的訂閱已到期，續訂後就能繼續用 AI 解牌 / This email\'s subscription has lapsed — resubscribe to keep using AI readings', verified: false, lapsed: true }, 403, request);
   const token = await issueSession(env, e);
-  return json({ ok: true, verified: true, token, email: e, ...(friendCredits ? { friendCredits } : {}) }, 200, request);
+  const plan = creditOnlyPlan(record);
+  return json({ ok: true, verified: true, token, email: e, ...(plan ? { plan } : {}), ...(friendCredits ? { friendCredits } : {}), ...(trialCredits ? { trialCredits } : {}) }, 200, request);
 }
 
 async function handleAuthLogout(request, env) {
@@ -816,7 +840,7 @@ async function handleAuthLogout(request, env) {
 async function handleCheck(request, env) {
   const { email, sale_id } = await request.json().catch(() => ({}));
   const s = await readSession(request, env);
-  if (s) return json({ verified: !!s.record, email: s.email }, 200, request);
+  if (s) { const plan = creditOnlyPlan(s.record); return json({ verified: !!s.record, email: s.email, ...(plan ? { plan } : {}) }, 200, request); }
 
   // Gumroad 購後轉址（?email=&sale_id=）：sale_id 當一次性兌換碼——webhook 收到這筆購買時
   // 存進 AuthGate（30 分鐘、只能兌一次），兌掉就作廢，網址歷史裡留著也沒用
@@ -1157,9 +1181,10 @@ async function handleGemini(request, env) {
   const s = await requirePaidSession(request, env);
   if (s.error) return s.error;
   const e = s.email;
-  // 好友帳號（好友碼兌換來的、而且沒有付費記錄）沒有每日免費次數：每次都扣點
-  const friendOnly = (safeJson(s.record) || {}).plan === 'friend';
-  const spend = !!spendAsked || friendOnly;
+  // 好友帳號、新手體驗（都沒有付費記錄）沒有每日免費次數：每次都扣點
+  const creditOnly = creditOnlyPlan(s.record);
+  const friendOnly = creditOnly === 'friend', trialOnly = creditOnly === 'trial';
+  const spend = !!spendAsked || !!creditOnly;
   if (!geminiBody) return json({ error: '缺少請求內容' }, 400, request);
   // 扣點的呼叫：先在帳本預扣 1 點（同時來幾個都各扣各的，扣不到就 402），成功才確認、失敗退回
   let hold = null;
@@ -1169,13 +1194,15 @@ async function handleGemini(request, env) {
     if (r.none) {
       return json({ error: friendOnly
         ? '好友體驗的次數用完了 🙏 想繼續的話，可以在「設定」訂閱或購買 AI 點數 / Your free friend readings are used up — subscribe or buy credits in Settings to continue'
-        : 'Credit 點數不足 / Not enough credits', noCredits: true, friend: friendOnly, balance: 0 }, 402, request);
+        : trialOnly
+        ? '免費的 3 次 AI 解讀用完了 🙏 想繼續的話可以訂閱 / Your 3 free AI readings are used up — subscribe to continue'
+        : 'Credit 點數不足 / Not enough credits', noCredits: true, friend: friendOnly, trial: trialOnly, balance: 0 }, 402, request);
     }
     hold = { owner, bal: r.bal };
   }
   let settled = false;
   try {
-    const res = await geminiCall(request, env, s, geminiBody, spend, hold);
+    const res = await geminiCall(request, env, s, geminiBody, spend, hold, trialOnly);
     settled = true;
     return res;
   } finally {
@@ -1183,14 +1210,15 @@ async function handleGemini(request, env) {
   }
 }
 
-async function geminiCall(request, env, s, geminiBody, spend, hold) {
+async function geminiCall(request, env, s, geminiBody, spend, hold, trialOnly = false) {
   const e = s.email;
   const refund = async () => { if (hold) await ledger(env, e, 'credit_refund', { owner: hold.owner }); };
 
-  // 全站成本總閘（扣點呼叫已付費，不受總閘限制）
+  // 全站成本總閘（扣點呼叫已付費，不受總閘限制；新手體驗的點數是送的，照樣受總閘管，防有人狂開信箱刷）
   const dk = todayKey();
   const used = parseInt((await env.TAROT_KV.get(dk)) || '0', 10);
-  if (!spend && used >= DAILY_CAP) {
+  if ((!spend || trialOnly) && used >= DAILY_CAP) {
+    await refund();
     return json({ error: '今日 AI 解牌已額滿，請明天再來 / Today\'s AI readings are full, please try again tomorrow.', capped: true }, 429, request);
   }
   // 單一用戶每日上限（防狂刷；扣點呼叫不受限）
