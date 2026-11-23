@@ -128,8 +128,9 @@ test('/check 與 /auth/start 都不透露「這個 email 有沒有付費」', as
   const b = await call(e, '/auth/start', { email: 'nobody@example.com' });
   const c = await call(e, '/auth/start', { email: PAID }); // 冷卻中
   assert.equal(a.status, 200); assert.deepEqual(a.data, b.data); assert.deepEqual(a.data, c.data);
-  assert.equal(net.emails.length, 1); // 只有付費的那封真的寄、冷卻中不重寄
-  assert.deepEqual(net.emails[0].to, [PAID]);
+  // 2026-11-23 起新手也能收碼（送 3 次體驗），所以兩個都寄；冷卻中不重寄
+  assert.equal(net.emails.length, 2);
+  assert.deepEqual(net.emails.map(m => m.to[0]).sort(), ['nobody@example.com', PAID].sort());
 });
 
 test('驗證碼登入：寄碼 → 錯碼被擋 → 對碼拿 token → 付費端點通（email 以 token 為準）', async () => {
@@ -517,4 +518,116 @@ test('沒有 sale_id 的點數包通知：不入帳，購買、退款每一則�
     // 錯往外丟＝Workers 回 500（不會回 200 讓 Gumroad 以為處理好了）
     await assert.rejects(worker.fetch(new Request(W + '/webhook', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ seller_id: SELLER, ...n }).toString() }), e), /KV down/);
   } finally { kv.put = put; }
+});
+
+// ── 新手體驗：第一次登入送 3 次 ──
+const NEWBIE = 'newbie@example.com';
+test('新手體驗：沒有任何記錄的 email 驗證後送 3 點、plan=trial；3 次用完回 402（trial）不再打 Gemini', async () => {
+  const kv = fakeKV(); const net = fakeNet(); const e = env(kv);
+  await call(e, '/auth/start', { email: NEWBIE });
+  assert.equal(await balOf(e, NEWBIE), 0); // 只寄碼還沒驗證：什麼都沒給
+  assert.equal(kv.m.get(`trial:${NEWBIE}`), undefined);
+  const v = await call(e, '/auth/verify', { email: NEWBIE, code: codeFrom(net.emails.at(-1)) });
+  assert.equal(v.status, 200, JSON.stringify(v.data));
+  assert.equal(v.data.trialCredits, 3); assert.equal(v.data.plan, 'trial');
+  assert.equal(JSON.parse(kv.m.get(`trial:${NEWBIE}`)).plan, 'trial');
+  const tok = v.data.token;
+  assert.deepEqual((await call(e, '/credits', {}, tok)).data, { balance: 3, plan: 'trial' });
+  assert.equal((await call(e, '/check', {}, tok)).data.plan, 'trial');
+  for (let i = 2; i >= 0; i--) {
+    const g = await call(e, '/gemini', ASK, tok);
+    assert.equal(g.status, 200); assert.equal(g.data.__creditBalance, i);
+  }
+  const before = net.gemini;
+  const over = await call(e, '/gemini', ASK, tok);
+  assert.equal(over.status, 402); assert.equal(over.data.trial, true); assert.equal(over.data.friend, false);
+  assert.match(over.data.error, /免費的 3 次/);
+  assert.equal(net.gemini, before);
+});
+
+test('新手體驗一個 email 只送一次：再登入、同時驗兩次都不會多送', async () => {
+  const kv = fakeKV(); const net = fakeNet(); const e = env(kv);
+  await login(e, net, NEWBIE);
+  assert.equal(await balOf(e, NEWBIE), 3);
+  e.AUTH_GATE.objs.get(`email:${NEWBIE}`)?.store.delete('cooldownUntil');
+  const v2 = await call(e, '/auth/start', { email: NEWBIE });
+  assert.equal(v2.status, 200);
+  const again = await call(e, '/auth/verify', { email: NEWBIE, code: codeFrom(net.emails.at(-1)) });
+  assert.equal(again.status, 200); assert.equal(again.data.trialCredits, undefined); assert.equal(again.data.plan, 'trial');
+  assert.equal(await balOf(e, NEWBIE), 3);
+  // 記錄寫到一半不見（KV 被清）：重來一次帳本靠去重鍵也不會再加
+  kv.m.delete(`trial:${NEWBIE}`);
+  e.AUTH_GATE.objs.get(`email:${NEWBIE}`)?.store.delete('cooldownUntil');
+  await call(e, '/auth/start', { email: NEWBIE });
+  const redo = await call(e, '/auth/verify', { email: NEWBIE, code: codeFrom(net.emails.at(-1)) });
+  assert.equal(redo.status, 200); assert.equal(redo.data.trialCredits, undefined);
+  assert.equal(await balOf(e, NEWBIE), 3);
+});
+
+test('付費會員登入不送體驗；訂閱到期的老用戶（有雲端記錄）不算第一次：403、不送點', async () => {
+  const kv = fakeKV(); const net = fakeNet(); const e = env(kv);
+  await seedPaid(kv);
+  const s = await call(e, '/auth/start', { email: PAID });
+  const v = await call(e, '/auth/verify', { email: PAID, code: codeFrom(net.emails.at(-1)) });
+  assert.equal(v.status, 200); assert.equal(v.data.trialCredits, undefined); assert.equal(v.data.plan, undefined);
+  assert.equal(kv.m.get(`trial:${PAID}`), undefined); assert.equal(await balOf(e, PAID), 0);
+  const OLD = 'lapsed@example.com';
+  await kv.put(`hist:${OLD}`, JSON.stringify({ readings: [], full: [] }));
+  await call(e, '/auth/start', { email: OLD });
+  const o = await call(e, '/auth/verify', { email: OLD, code: codeFrom(net.emails.at(-1)) });
+  assert.equal(o.status, 403); assert.equal(o.data.lapsed, true); assert.equal(o.data.token, undefined);
+  assert.equal(await balOf(e, OLD), 0); assert.equal(kv.m.get(`trial:${OLD}`), undefined);
+});
+
+test('新手體驗受全站每日上限管：額滿回 429、預扣的點數退回', async () => {
+  const kv = fakeKV(); const net = fakeNet(); const e = env(kv);
+  const tok = await login(e, net, NEWBIE);
+  await kv.put('count:' + new Date().toISOString().slice(0, 10), '2000');
+  const before = net.gemini;
+  const g = await call(e, '/gemini', ASK, tok);
+  assert.equal(g.status, 429); assert.equal(g.data.capped, true);
+  assert.equal(net.gemini, before);
+  assert.equal(await balOf(e, NEWBIE), 3);
+});
+
+test('付過錢的（webhook 記 paidever:）訂閱到期後不算第一次：就算沒同步過記錄也不送', async () => {
+  const kv = fakeKV(); const net = fakeNet(); const e = env(kv);
+  const EX = 'ex@example.com';
+  assert.equal(await webhook(e, { email: EX, sale_id: 's1', subscription_id: 'sub1' }), 200);
+  assert.equal(kv.m.get(`paidever:${EX}`), '1');
+  assert.equal(await webhook(e, { email: EX, sale_id: 's1', subscription_id: 'sub1', subscription_ended_at: '2026-11-01' }), 200);
+  assert.equal(kv.m.get(`email:${EX}`), undefined);
+  await call(e, '/auth/start', { email: EX });
+  const v = await call(e, '/auth/verify', { email: EX, code: codeFrom(net.emails.at(-1)) });
+  assert.equal(v.status, 403); assert.equal(v.data.lapsed, true);
+  assert.equal(await balOf(e, EX), 0); assert.equal(kv.m.get(`trial:${EX}`), undefined);
+});
+
+test('新手體驗每天全站最多送 200 個：同時湧入也不會超送，超過的回 429 trialFull、不開帳號', async () => {
+  const kv = fakeKV(); const net = fakeNet(); const e = env(kv);
+  const day = new Date().toISOString().slice(0, 10);
+  // 先把今天的計數灌到 199
+  const g = e.AUTH_GATE.get(e.AUTH_GATE.idFromName(`trialgrants:${day}`));
+  for (let i = 0; i < 199; i++) await g.fetch('https://auth-gate/', { method: 'POST', body: JSON.stringify({ op: 'hit', cap: 200, windowMs: 86400000 }) });
+  const ems = ['p1@example.com', 'p2@example.com', 'p3@example.com'];
+  for (const em of ems) await call(e, '/auth/start', { email: em }, null, '1.1.1.' + em[1]);
+  const codes = ems.map(em => codeFrom(net.emails.filter(m => m.to[0] === em).at(-1)));
+  const rs = await Promise.all(ems.map((em, i) => call(e, '/auth/verify', { email: em, code: codes[i] })));
+  assert.equal(rs.filter(r => r.status === 200).length, 1);
+  const full = rs.filter(r => r.status === 429);
+  assert.equal(full.length, 2); assert.ok(full.every(r => r.data.trialFull));
+  let total = 0; for (const em of ems) total += await balOf(e, em);
+  assert.equal(total, 3);
+});
+
+test('新手體驗每天全站最多用 600 次 AI：攢點數也卡得住，額滿回 429、預扣退回', async () => {
+  const kv = fakeKV(); const net = fakeNet(); const e = env(kv);
+  const tok = await login(e, net, NEWBIE);
+  const day = new Date().toISOString().slice(0, 10);
+  const g = e.AUTH_GATE.get(e.AUTH_GATE.idFromName(`trialcalls:${day}`));
+  for (let i = 0; i < 600; i++) await g.fetch('https://auth-gate/', { method: 'POST', body: JSON.stringify({ op: 'hit', cap: 600, windowMs: 86400000 }) });
+  const before = net.gemini;
+  const r = await call(e, '/gemini', ASK, tok);
+  assert.equal(r.status, 429); assert.equal(r.data.capped, true);
+  assert.equal(net.gemini, before); assert.equal(await balOf(e, NEWBIE), 3);
 });
