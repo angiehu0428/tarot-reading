@@ -2150,7 +2150,7 @@ ${refCtx}
       } else {
         throw new Error(extractErrMsg(data.error, `Worker ${resp.status}`));
       }
-    }
+    } else creditUpdateFrom(data); // 新手／好友帳號每次都扣點：解牌完就更新剩幾次
   }
   if(useOwnKey){
     const cleanKey=key.split('').filter(c=>c.charCodeAt(0)>=32&&c.charCodeAt(0)<=126).join('');

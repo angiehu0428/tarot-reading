@@ -619,3 +619,15 @@ test('新手體驗每天全站最多送 200 個：同時湧入也不會超送，
   let total = 0; for (const em of ems) total += await balOf(e, em);
   assert.equal(total, 3);
 });
+
+test('新手體驗每天全站最多用 600 次 AI：攢點數也卡得住，額滿回 429、預扣退回', async () => {
+  const kv = fakeKV(); const net = fakeNet(); const e = env(kv);
+  const tok = await login(e, net, NEWBIE);
+  const day = new Date().toISOString().slice(0, 10);
+  const g = e.AUTH_GATE.get(e.AUTH_GATE.idFromName(`trialcalls:${day}`));
+  for (let i = 0; i < 600; i++) await g.fetch('https://auth-gate/', { method: 'POST', body: JSON.stringify({ op: 'hit', cap: 600, windowMs: 86400000 }) });
+  const before = net.gemini;
+  const r = await call(e, '/gemini', ASK, tok);
+  assert.equal(r.status, 429); assert.equal(r.data.capped, true);
+  assert.equal(net.gemini, before); assert.equal(await balOf(e, NEWBIE), 3);
+});

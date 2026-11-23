@@ -665,6 +665,12 @@ async function trialAllowedToday(env) {
   return !!r.allowed;
 }
 // 付過錢（paidever:，2026-11-23 起 webhook 記）或同步過占卜記錄（hist:）的都不是第一次來
+// 新手體驗每天全站最多用幾次 AI（原子計數；點數不會過期，攢好幾天一起用也卡在這裡）。算的是嘗試次數，失敗不退，寧可保守
+const TRIAL_DAILY_CALLS = 600;
+async function trialCallAllowedToday(env) {
+  const r = await gate(env, `trialcalls:${new Date().toISOString().slice(0, 10)}`, { op: 'hit', cap: TRIAL_DAILY_CALLS, windowMs: 24 * 60 * 60 * 1000 });
+  return !!r.allowed;
+}
 async function usedBefore(env, e) {
   return !!((await env.TAROT_KV.get(`paidever:${e}`)) || (await env.TAROT_KV.get(`hist:${e}`)));
 }
@@ -1232,7 +1238,7 @@ async function geminiCall(request, env, s, geminiBody, spend, hold, trialOnly = 
   // 全站成本總閘（扣點呼叫已付費，不受總閘限制；新手體驗的點數是送的，照樣受總閘管，防有人狂開信箱刷）
   const dk = todayKey();
   const used = parseInt((await env.TAROT_KV.get(dk)) || '0', 10);
-  if ((!spend || trialOnly) && used >= DAILY_CAP) {
+  if (((!spend || trialOnly) && used >= DAILY_CAP) || (trialOnly && !(await trialCallAllowedToday(env)))) {
     await refund();
     return json({ error: '今日 AI 解牌已額滿，請明天再來 / Today\'s AI readings are full, please try again tomorrow.', capped: true }, 429, request);
   }
